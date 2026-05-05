@@ -1,0 +1,625 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "LEADSWHATS API",
+        "version": "1.0.0",
+        "description": "API inicial do LEADSWHATS com autenticação por token e bootstrap de domínio."
+    },
+    "servers": [
+        {
+            "url": "http://localhost:8000",
+            "description": "Local"
+        }
+    ],
+    "tags": [
+        {
+            "name": "Auth",
+            "description": "Autenticação e sessão"
+        },
+        {
+            "name": "Bootstrap",
+            "description": "Visão inicial da conta/empresa"
+        },
+        {
+            "name": "Webhook",
+            "description": "Ingestao passiva WhatsApp"
+        },
+        {
+            "name": "Dashboard",
+            "description": "Metricas operacionais"
+        },
+        {
+            "name": "Lead Source",
+            "description": "Classificação e reclassificação de origem"
+        }
+    ],
+    "components": {
+        "securitySchemes": {
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "Token"
+            }
+        },
+        "schemas": {
+            "LoginRequest": {
+                "type": "object",
+                "required": [
+                    "email",
+                    "password"
+                ],
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "example": "gestor@empresa.local"
+                    },
+                    "password": {
+                        "type": "string",
+                        "example": "12345678"
+                    },
+                    "device_name": {
+                        "type": "string",
+                        "example": "web"
+                    }
+                }
+            },
+            "LoginResponse": {
+                "type": "object",
+                "properties": {
+                    "token": {
+                        "type": "string"
+                    },
+                    "token_type": {
+                        "type": "string",
+                        "example": "Bearer"
+                    },
+                    "expires_in_seconds": {
+                        "type": "integer",
+                        "example": 2592000
+                    },
+                    "user": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer",
+                                "example": 2
+                            },
+                            "name": {
+                                "type": "string",
+                                "example": "Gestor Demo"
+                            },
+                            "email": {
+                                "type": "string",
+                                "example": "gestor@empresa.local"
+                            },
+                            "role": {
+                                "type": "string",
+                                "enum": [
+                                    "admin",
+                                    "gestor",
+                                    "sdr"
+                                ]
+                            },
+                            "company_id": {
+                                "type": "integer",
+                                "example": 1
+                            }
+                        }
+                    }
+                }
+            },
+            "AuthMeResponse": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "email": {
+                        "type": "string"
+                    },
+                    "role": {
+                        "type": "string",
+                        "enum": [
+                            "admin",
+                            "gestor",
+                            "sdr"
+                        ]
+                    },
+                    "company_id": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "OverviewResponse": {
+                "type": "object",
+                "properties": {
+                    "company": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "slug": {
+                                "type": "string"
+                            },
+                            "timezone": {
+                                "type": "string"
+                            },
+                            "work_start": {
+                                "type": "string",
+                                "example": "08:00"
+                            },
+                            "work_end": {
+                                "type": "string",
+                                "example": "18:00"
+                            }
+                        }
+                    },
+                    "counts": {
+                        "type": "object",
+                        "properties": {
+                            "users": {
+                                "type": "integer"
+                            },
+                            "leads": {
+                                "type": "integer"
+                            },
+                            "conversations": {
+                                "type": "integer"
+                            },
+                            "messages": {
+                                "type": "integer"
+                            },
+                            "pipelines": {
+                                "type": "integer"
+                            },
+                            "kanban_columns": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                }
+            },
+            "ErrorResponse": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string"
+                    }
+                }
+            },
+            "WebhookWhatsappRequest": {
+                "type": "object",
+                "required": [
+                    "company_slug",
+                    "phone",
+                    "direction"
+                ],
+                "properties": {
+                    "company_slug": {
+                        "type": "string",
+                        "example": "empresa-demo"
+                    },
+                    "phone": {
+                        "type": "string",
+                        "example": "(11) 98888-1111"
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": [
+                            "inbound",
+                            "outbound"
+                        ]
+                    },
+                    "channel": {
+                        "type": "string",
+                        "enum": [
+                            "text",
+                            "audio"
+                        ],
+                        "example": "text"
+                    },
+                    "body": {
+                        "type": "string",
+                        "example": "Ola, vi no Instagram"
+                    },
+                    "audio_transcript": {
+                        "type": "string"
+                    },
+                    "source": {
+                        "type": "string",
+                        "example": "instagram"
+                    },
+                    "lead_name": {
+                        "type": "string"
+                    },
+                    "external_message_id": {
+                        "type": "string"
+                    },
+                    "sent_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "owner_user_id": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "WebhookWhatsappResponse": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "example": "Mensagem ingerida com sucesso."
+                    },
+                    "data": {
+                        "type": "object",
+                        "properties": {
+                            "lead_id": {
+                                "type": "integer"
+                            },
+                            "conversation_id": {
+                                "type": "integer"
+                            },
+                            "classification": {
+                                "type": "string",
+                                "enum": [
+                                    "lead_novo",
+                                    "lead_repetido",
+                                    "lead_existente"
+                                ]
+                            },
+                            "is_rescue": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                }
+            },
+            "DashboardSummaryResponse": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "example": "2026-05-05"
+                    },
+                    "metrics": {
+                        "type": "object",
+                        "properties": {
+                            "new_leads_today": {
+                                "type": "integer"
+                            },
+                            "repeat_leads_today": {
+                                "type": "integer"
+                            },
+                            "avg_first_response_seconds": {
+                                "type": "integer"
+                            },
+                            "vacuum_24h_open": {
+                                "type": "integer"
+                            },
+                            "rescues_today": {
+                                "type": "integer"
+                            },
+                            "active_conversations": {
+                                "type": "integer"
+                            }
+                        }
+                    }
+                }
+            },
+            "UnknownLead": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "phone_e164": {
+                        "type": "string"
+                    },
+                    "source": {
+                        "type": "string"
+                    },
+                    "source_method": {
+                        "type": "string"
+                    },
+                    "last_inbound_at": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    },
+    "paths": {
+        "/api/v1/auth/login": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Faz login e retorna token bearer",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Login efetuado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LoginResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Credenciais inválidas"
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/me": {
+            "get": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Retorna usuário autenticado",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Usuário autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AuthMeResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Não autenticado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/logout": {
+            "post": {
+                "tags": [
+                    "Auth"
+                ],
+                "summary": "Invalida token atual",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Logout efetuado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Logout realizado com sucesso."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/bootstrap/overview": {
+            "get": {
+                "tags": [
+                    "Bootstrap"
+                ],
+                "summary": "Retorna resumo da empresa e contagens iniciais",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Resumo carregado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OverviewResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Perfil sem acesso",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/webhooks/whatsapp": {
+            "post": {
+                "tags": [
+                    "Webhook"
+                ],
+                "summary": "Ingestao passiva de mensagem WhatsApp",
+                "parameters": [
+                    {
+                        "name": "X-Webhook-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "example": "leadswhats-dev-token"
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WebhookWhatsappRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Mensagem processada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WebhookWhatsappResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Token invalido"
+                    },
+                    "404": {
+                        "description": "Empresa nao encontrada"
+                    }
+                }
+            }
+        },
+        "/api/v1/dashboard/summary": {
+            "get": {
+                "tags": [
+                    "Dashboard"
+                ],
+                "summary": "Resumo de metricas do dia",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Resumo carregado",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DashboardSummaryResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/leads/sources/unknown": {
+            "get": {
+                "tags": [
+                    "Lead Source"
+                ],
+                "summary": "Lista leads com origem desconhecida",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Lista carregada"
+                    }
+                }
+            }
+        },
+        "/api/v1/leads/{leadId}/source": {
+            "patch": {
+                "tags": [
+                    "Lead Source"
+                ],
+                "summary": "Classifica/Reclassifica origem do lead",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "leadId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "source"
+                                ],
+                                "properties": {
+                                    "source": {
+                                        "type": "string",
+                                        "example": "instagram"
+                                    },
+                                    "reason": {
+                                        "type": "string",
+                                        "example": "informado pelo cliente"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Origem atualizada"
+                    }
+                }
+            }
+        }
+    }
+}
