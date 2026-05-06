@@ -56,7 +56,7 @@ class WhatsappIngestionService
             ->where("phone_e164", $phone)
             ->first();
 
-        $classification = $this->leadClassifier->classify($existingLead, $direction, $sentAt);
+        $classification = $this->leadClassifier->classify($existingLead, $direction, $sentAt, $company->id);
         $lead = $existingLead;
 
         if (!$existingLead) {
