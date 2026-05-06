@@ -13,12 +13,14 @@ class Message extends Model
         'company_id',
         'lead_id',
         'conversation_id',
+        'provider',
         'direction',
         'channel',
         'body',
         'audio_transcript',
         'sent_at',
         'external_message_id',
+        'raw_payload',
         'is_rescue',
         'metadata',
     ];
@@ -27,6 +29,7 @@ class Message extends Model
     {
         return [
             'sent_at' => 'datetime',
+            'raw_payload' => 'array',
             'is_rescue' => 'boolean',
             'metadata' => 'array',
         ];

@@ -241,7 +241,8 @@
                         "type": "string"
                     },
                     "external_message_id": {
-                        "type": "string"
+                        "type": "string",
+                        "example": "wamid.1234567890"
                     },
                     "sent_at": {
                         "type": "string",
@@ -249,6 +250,10 @@
                     },
                     "owner_user_id": {
                         "type": "integer"
+                    },
+                    "provider": {
+                        "type": "string",
+                        "example": "whatsapp-cloud"
                     }
                 }
             },
@@ -278,6 +283,10 @@
                             },
                             "is_rescue": {
                                 "type": "boolean"
+                            },
+                            "duplicated": {
+                                "type": "boolean",
+                                "example": false
                             }
                         }
                     }
@@ -485,7 +494,7 @@
                 "tags": [
                     "Webhook"
                 ],
-                "summary": "Ingestao passiva de mensagem WhatsApp",
+                "summary": "Ingestão passiva de mensagem WhatsApp (idempotente)",
                 "parameters": [
                     {
                         "name": "X-Webhook-Token",
@@ -524,7 +533,8 @@
                     "404": {
                         "description": "Empresa nao encontrada"
                     }
-                }
+                },
+                "description": "Se external_message_id + provider + company já tiver sido processado, retorna sucesso idempotente sem duplicar mensagem, lead, conversa ou métricas."
             }
         },
         "/api/v1/dashboard/summary": {

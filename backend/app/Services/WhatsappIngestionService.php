@@ -15,8 +15,30 @@ class WhatsappIngestionService
     {
         $direction = $payload['direction'];
         $phone = $this->normalizePhone($payload['phone']);
+        $provider = strtolower(trim($payload['provider'] ?? 'whatsapp')) ?: 'whatsapp';
         $source = strtolower(trim($payload['source'] ?? 'desconhecido')) ?: 'desconhecido';
+        $externalMessageId = isset($payload['external_message_id']) && trim((string) $payload['external_message_id']) !== ''
+            ? trim((string) $payload['external_message_id'])
+            : null;
         $sentAt = isset($payload['sent_at']) ? Carbon::parse($payload['sent_at']) : now();
+
+        if ($externalMessageId) {
+            $existingMessage = Message::query()
+                ->where('company_id', $company->id)
+                ->where('provider', $provider)
+                ->where('external_message_id', $externalMessageId)
+                ->first();
+
+            if ($existingMessage) {
+                return [
+                    'lead_id' => $existingMessage->lead_id,
+                    'conversation_id' => $existingMessage->conversation_id,
+                    'classification' => $existingMessage->metadata['classification'] ?? 'lead_existente',
+                    'is_rescue' => (bool) $existingMessage->is_rescue,
+                    'duplicated' => true,
+                ];
+            }
+        }
 
         $lead = Lead::where('company_id', $company->id)
             ->where('phone_e164', $phone)
@@ -101,12 +123,14 @@ class WhatsappIngestionService
             'company_id' => $company->id,
             'lead_id' => $lead->id,
             'conversation_id' => $conversation->id,
+            'provider' => $provider,
             'direction' => $direction,
             'channel' => $payload['channel'] ?? 'text',
             'body' => $payload['body'] ?? null,
             'audio_transcript' => $payload['audio_transcript'] ?? null,
             'sent_at' => $sentAt,
-            'external_message_id' => $payload['external_message_id'] ?? null,
+            'external_message_id' => $externalMessageId,
+            'raw_payload' => $payload['raw_payload'] ?? null,
             'is_rescue' => $isRescue,
             'metadata' => [
                 'classification' => $classification,
@@ -124,6 +148,7 @@ class WhatsappIngestionService
             'conversation_id' => $conversation->id,
             'classification' => $classification,
             'is_rescue' => $isRescue,
+            'duplicated' => false,
         ];
     }
 

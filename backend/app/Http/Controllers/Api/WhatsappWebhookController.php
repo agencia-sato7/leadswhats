@@ -23,6 +23,7 @@ class WhatsappWebhookController extends Controller
             'company_slug' => ['required', 'string'],
             'phone' => ['required', 'string'],
             'direction' => ['required', 'in:inbound,outbound'],
+            'provider' => ['nullable', 'string', 'max:60'],
             'channel' => ['nullable', 'in:text,audio'],
             'body' => ['nullable', 'string'],
             'audio_transcript' => ['nullable', 'string'],
@@ -39,10 +40,12 @@ class WhatsappWebhookController extends Controller
             return response()->json(['message' => 'Empresa não encontrada.'], 404);
         }
 
+        $validated['raw_payload'] = $request->all();
+
         $result = $service->ingest($company, $validated);
 
         return response()->json([
-            'message' => 'Mensagem ingerida com sucesso.',
+            'message' => $result['duplicated'] ? 'Mensagem já processada (idempotente).' : 'Mensagem ingerida com sucesso.',
             'data' => $result,
         ]);
     }
