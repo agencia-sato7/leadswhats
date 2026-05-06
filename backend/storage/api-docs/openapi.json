@@ -319,6 +319,12 @@
                             },
                             "active_conversations": {
                                 "type": "integer"
+                            },
+                            "unknown_source_leads": {
+                                "type": "integer"
+                            },
+                            "manual_classifications_today": {
+                                "type": "integer"
                             }
                         }
                     }
@@ -349,6 +355,106 @@
                     },
                     "created_at": {
                         "type": "string"
+                    }
+                }
+            },
+            "UnknownLeadsResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/UnknownLead"
+                        }
+                    }
+                }
+            },
+            "RecentSourceLead": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "phone_e164": {
+                        "type": "string"
+                    },
+                    "source": {
+                        "type": "string"
+                    },
+                    "source_method": {
+                        "type": "string"
+                    },
+                    "source_updated_at": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "name": {
+                        "type": "string",
+                        "nullable": true
+                    }
+                }
+            },
+            "RecentSourceLeadsResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/RecentSourceLead"
+                        }
+                    }
+                }
+            },
+            "LeadSourceUpdateRequest": {
+                "type": "object",
+                "required": [
+                    "source"
+                ],
+                "properties": {
+                    "source": {
+                        "type": "string",
+                        "enum": [
+                            "instagram",
+                            "facebook",
+                            "google",
+                            "tiktok",
+                            "youtube",
+                            "site",
+                            "indicacao",
+                            "desconhecido"
+                        ],
+                        "example": "instagram"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "example": "informado pelo cliente"
+                    }
+                }
+            },
+            "LeadSourceUpdateResponse": {
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "example": "Origem atualizada com sucesso."
+                    },
+                    "lead": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "source": {
+                                "type": "string"
+                            },
+                            "source_method": {
+                                "type": "string"
+                            },
+                            "source_updated_at": {
+                                "type": "string",
+                                "nullable": true
+                            }
+                        }
                     }
                 }
             }
@@ -476,8 +582,18 @@
                             }
                         }
                     },
+                    "401": {
+                        "description": "Não autenticado (token ausente/inválido)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
                     "403": {
-                        "description": "Perfil sem acesso",
+                        "description": "Perfil sem acesso (somente admin, gestor e sdr)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -523,6 +639,30 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/WebhookWhatsappResponse"
+                                },
+                                "examples": {
+                                    "processed": {
+                                        "summary": "Evento novo processado",
+                                        "value": {
+                                            "message": "Mensagem ingerida com sucesso.",
+                                            "data": {
+                                                "lead_id": 123,
+                                                "conversation_id": 456,
+                                                "classification": "lead_novo",
+                                                "is_rescue": false,
+                                                "duplicated": false
+                                            }
+                                        }
+                                    },
+                                    "duplicated": {
+                                        "summary": "Evento duplicado (idempotente)",
+                                        "value": {
+                                            "message": "Mensagem duplicada recebida; evento ja processado anteriormente.",
+                                            "data": {
+                                                "duplicated": true
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -534,7 +674,7 @@
                         "description": "Empresa nao encontrada"
                     }
                 },
-                "description": "Se external_message_id + provider + company já tiver sido processado, retorna sucesso idempotente sem duplicar mensagem, lead, conversa ou métricas."
+                "description": "Endpoint de ingestao passiva (somente leitura de eventos). A chave idempotente prioritaria e company + provider + external_message_id. Se external_message_id nao for enviado, o sistema aplica fallback por hash deterministico do conteudo do evento. Replays da mesma mensagem retornam sucesso estavel e nao duplicam message, lead, conversation nem metricas. Quando aplicavel, classificacao e efeitos derivados respeitam configuracoes comerciais da empresa (timezone, expediente, almoco, dias uteis, janela de lead repetido e threshold de vacuo/resgate)."
             }
         },
         "/api/v1/dashboard/summary": {
@@ -558,8 +698,29 @@
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "description": "Não autenticado (token ausente/inválido)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Perfil sem acesso (somente admin, gestor e sdr)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
                     }
-                }
+                },
+                "description": "Métricas operacionais do dia para a empresa autenticada. Os cálculos refletem regras comerciais por tenant, incluindo timezone, expediente, intervalo de almoço, dias úteis, janela de lead repetido e threshold de vácuo/resgate."
             }
         },
         "/api/v1/leads/sources/unknown": {
@@ -575,7 +736,34 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Lista carregada"
+                        "description": "Lista carregada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UnknownLeadsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Não autenticado (token ausente/inválido)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Acesso negado para este perfil (SDR não pode classificar/reclassificar origem)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -606,27 +794,97 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "type": "object",
-                                "required": [
-                                    "source"
-                                ],
-                                "properties": {
-                                    "source": {
-                                        "type": "string",
-                                        "example": "instagram"
-                                    },
-                                    "reason": {
-                                        "type": "string",
-                                        "example": "informado pelo cliente"
-                                    }
-                                }
+                                "$ref": "#/components/schemas/LeadSourceUpdateRequest"
                             }
                         }
                     }
                 },
                 "responses": {
                     "200": {
-                        "description": "Origem atualizada"
+                        "description": "Origem atualizada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LeadSourceUpdateResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Não autenticado (token ausente/inválido)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Acesso negado para este perfil (SDR não pode classificar/reclassificar)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Lead não encontrado para a empresa autenticada (isolamento entre empresas)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Classificação/reclassificação manual de origem do lead. Permitido para perfis admin e gestor. Perfil sdr não possui permissão."
+            }
+        },
+        "/api/v1/leads/sources/recent": {
+            "get": {
+                "tags": [
+                    "Lead Source"
+                ],
+                "summary": "Lista leads com origem recentemente classificada",
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Lista carregada",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecentSourceLeadsResponse"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Não autenticado (token ausente/inválido)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Acesso negado para este perfil (SDR não pode classificar/reclassificar origem)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorResponse"
+                                }
+                            }
+                        }
                     }
                 }
             }
