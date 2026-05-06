@@ -17,27 +17,49 @@ class RescueDetectorServiceTest extends TestCase
     public function test_uses_company_rescue_threshold_hours(): void
     {
         $company = Company::create([
-            "name" => "Empresa D",
-            "slug" => "empresa-d",
+            'name' => 'Empresa D',
+            'slug' => 'empresa-d',
         ]);
 
         CompanyBusinessSetting::create([
-            "company_id" => $company->id,
-            "rescue_threshold_hours" => 48,
+            'company_id' => $company->id,
+            'rescue_threshold_hours' => 48,
         ]);
 
         $lead = Lead::create([
-            "company_id" => $company->id,
-            "name" => "Lead D",
-            "phone_e164" => "+5511999990009",
-            "source" => "desconhecido",
-            "last_inbound_at" => Carbon::parse("2026-05-01 10:00:00"),
-            "last_outbound_at" => Carbon::parse("2026-05-02 10:00:00"),
+            'company_id' => $company->id,
+            'name' => 'Lead D',
+            'phone_e164' => '+5511999990009',
+            'source' => 'desconhecido',
+            'last_inbound_at' => Carbon::parse('2026-05-01 10:00:00'),
+            'last_outbound_at' => Carbon::parse('2026-05-02 10:00:00'),
         ]);
 
         $service = app(RescueDetectorService::class);
 
-        $this->assertFalse($service->isRescue($lead, Carbon::parse("2026-05-04 09:00:00")));
-        $this->assertTrue($service->isRescue($lead, Carbon::parse("2026-05-04 10:00:00")));
+        $this->assertFalse($service->isRescue($lead, Carbon::parse('2026-05-04 09:00:00')));
+        $this->assertTrue($service->isRescue($lead, Carbon::parse('2026-05-04 10:00:00')));
+    }
+
+    public function test_uses_default_threshold_when_company_has_no_setting(): void
+    {
+        $company = Company::create([
+            'name' => 'Empresa Default',
+            'slug' => 'empresa-default',
+        ]);
+
+        $lead = Lead::create([
+            'company_id' => $company->id,
+            'name' => 'Lead Default',
+            'phone_e164' => '+5511999990013',
+            'source' => 'desconhecido',
+            'last_inbound_at' => Carbon::parse('2026-05-01 10:00:00'),
+            'last_outbound_at' => Carbon::parse('2026-05-02 10:00:00'),
+        ]);
+
+        $service = app(RescueDetectorService::class);
+
+        $this->assertFalse($service->isRescue($lead, Carbon::parse('2026-05-03 09:00:00')));
+        $this->assertTrue($service->isRescue($lead, Carbon::parse('2026-05-03 10:00:00')));
     }
 }
