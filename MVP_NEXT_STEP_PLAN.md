@@ -36,7 +36,7 @@ Riscos:
 
 ---
 
-## PR 2 — Configurações comerciais por empresa (fonte única de regra)
+## ~~PR 2 — Configurações comerciais por empresa (fonte única de regra)~~ ✅
 Objetivo: centralizar horários/regras comerciais por tenant e remover hardcodes.
 
 Escopo:
@@ -64,7 +64,7 @@ Riscos:
 
 ---
 
-## PR 3 — Refatoração das regras atuais para Services (limpeza de domínio)
+## ~~PR 3 — Refatoração das regras atuais para Services (limpeza de domínio)~~ ✅
 Objetivo: deixar controllers magros e regras versionáveis/testáveis.
 
 Escopo:
@@ -154,8 +154,8 @@ Riscos:
 
 ## Sequência final
 1. ~~PR 1 Idempotência~~ ✅
-2. PR 2 Config por empresa
-3. PR 3 Refatoração para services
+2. ~~PR 2 Config por empresa~~ ✅
+3. ~~PR 3 Refatoração para services~~ ✅
 4. PR 4 Testes automatizados
 5. PR 5 OpenAPI/Docs finais
 
