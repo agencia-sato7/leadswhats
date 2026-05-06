@@ -6,6 +6,7 @@
 # Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/*.tsbuildinfo
 
 # Backend runtime
 backend/storage/logs/*.log

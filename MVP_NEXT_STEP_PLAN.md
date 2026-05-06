@@ -7,7 +7,7 @@ Fortalecer o núcleo do webhook e das regras de negócio antes de implementar IA
 
 ## Ordem recomendada (PRs pequenos)
 
-## PR 1 — Idempotência do webhook (base de confiabilidade)
+## ~~PR 1 — Idempotência do webhook (base de confiabilidade)~~ ✅
 Objetivo: garantir que reentrega/replay do webhook não duplique efeitos.
 
 Escopo:
@@ -153,7 +153,7 @@ Riscos:
 ---
 
 ## Sequência final
-1. PR 1 Idempotência
+1. ~~PR 1 Idempotência~~ ✅
 2. PR 2 Config por empresa
 3. PR 3 Refatoração para services
 4. PR 4 Testes automatizados
