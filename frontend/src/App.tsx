@@ -1,13 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   classifyLeadSource,
   getDashboardSummary,
+  getLeadStageHistory,
   getOverview,
+  getPipelineKanban,
+  getPipelines,
   getRecentLeads,
+  getTasksChecklist,
   getUnknownLeads,
   login,
+  moveLeadStage,
 } from './api';
-import type { AuthUser, DashboardSummaryResponse, LeadSourceItem, OverviewResponse } from './types';
+import type {
+  AuthUser,
+  ChecklistTaskItem,
+  DashboardSummaryResponse,
+  LeadSourceItem,
+  LeadStageHistoryItem,
+  OverviewResponse,
+  PipelineKanban,
+  PipelineListItem,
+} from './types';
 
 type Session = {
   token: string;
@@ -16,6 +30,7 @@ type Session = {
 
 const STORAGE_KEY = 'leadswhats_session';
 const QUICK_SOURCES = ['instagram', 'google', 'facebook', 'indicacao', 'outro'];
+const CHECKLIST_DEFAULT_MESSAGE = 'Olá! Passando para saber se posso te ajudar com mais alguma informação.';
 
 function formatSeconds(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -33,8 +48,24 @@ export function App() {
   const [dashboard, setDashboard] = useState<DashboardSummaryResponse | null>(null);
   const [unknownLeads, setUnknownLeads] = useState<LeadSourceItem[]>([]);
   const [recentLeads, setRecentLeads] = useState<LeadSourceItem[]>([]);
+  const [checklistItems, setChecklistItems] = useState<ChecklistTaskItem[]>([]);
+  const [checklistLoading, setChecklistLoading] = useState(false);
+  const [checklistError, setChecklistError] = useState<string | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
+  const [pipelines, setPipelines] = useState<PipelineListItem[]>([]);
+  const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(null);
+  const [kanban, setKanban] = useState<PipelineKanban | null>(null);
+  const [stageHistoryByLead, setStageHistoryByLead] = useState<Record<number, LeadStageHistoryItem[]>>({});
+  const [historyLoadingLeadId, setHistoryLoadingLeadId] = useState<number | null>(null);
+  const [draggingCard, setDraggingCard] = useState<{ leadId: number; fromColumnId: number } | null>(null);
+  const [dragOverColumnId, setDragOverColumnId] = useState<number | null>(null);
+  const [pressedCardId, setPressedCardId] = useState<number | null>(null);
+
   const [loading, setLoading] = useState(false);
+  const [kanbanLoading, setKanbanLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [kanbanError, setKanbanError] = useState<string | null>(null);
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -48,15 +79,35 @@ export function App() {
   }, []);
 
   const canManageSource = session?.user.role === 'gestor' || session?.user.role === 'admin';
+  const canMoveStage = canManageSource;
+
+  const columnNameById = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const column of kanban?.columns ?? []) {
+      map[column.id] = column.name;
+    }
+    return map;
+  }, [kanban]);
 
   async function refreshData(token: string) {
-    const [overviewData, dashboardData] = await Promise.all([
+    const [overviewData, dashboardData, pipelineData, checklistData] = await Promise.all([
       getOverview(token),
       getDashboardSummary(token),
+      getPipelines(token),
+      getTasksChecklist(token),
     ]);
 
     setOverview(overviewData);
     setDashboard(dashboardData);
+    setPipelines(pipelineData);
+    setChecklistItems(checklistData);
+
+    if (pipelineData.length === 0) {
+      setSelectedPipelineId(null);
+      setKanban(null);
+    } else if (!selectedPipelineId || !pipelineData.some((p) => p.id === selectedPipelineId)) {
+      setSelectedPipelineId(pipelineData[0].id);
+    }
 
     if (canManageSource) {
       const [unknownData, recentData] = await Promise.all([
@@ -71,19 +122,49 @@ export function App() {
     }
   }
 
+  async function refreshKanban(token: string, pipelineId: number) {
+    setKanbanLoading(true);
+    setKanbanError(null);
+    try {
+      const kanbanData = await getPipelineKanban(token, pipelineId);
+      setKanban(kanbanData);
+      setStageHistoryByLead({});
+      setDraggingCard(null);
+      setDragOverColumnId(null);
+    } catch (err) {
+      setKanban(null);
+      setKanbanError('Não foi possível carregar o Kanban.');
+      console.error(err);
+    } finally {
+      setKanbanLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!session) return;
 
     setLoading(true);
     setError(null);
+    setChecklistLoading(true);
+    setChecklistError(null);
 
     refreshData(session.token)
       .catch((err) => {
         setError('Falha ao carregar dados da API.');
+        setChecklistError('Não foi possível carregar o checklist.');
         console.error(err);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setChecklistLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
+
+  useEffect(() => {
+    if (!session || !selectedPipelineId) return;
+    refreshKanban(session.token, selectedPipelineId).catch((err) => console.error(err));
+  }, [session, selectedPipelineId]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -108,6 +189,13 @@ export function App() {
     setDashboard(null);
     setUnknownLeads([]);
     setRecentLeads([]);
+    setChecklistItems([]);
+    setPipelines([]);
+    setSelectedPipelineId(null);
+    setKanban(null);
+    setStageHistoryByLead({});
+    setDraggingCard(null);
+    setDragOverColumnId(null);
     localStorage.removeItem(STORAGE_KEY);
   }
 
@@ -122,6 +210,87 @@ export function App() {
       setError('Não foi possível classificar a origem do lead.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function copyText(text: string, successMessage: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback(successMessage);
+    } catch {
+      setCopyFeedback('Não foi possível copiar agora.');
+    } finally {
+      setTimeout(() => setCopyFeedback(null), 1800);
+    }
+  }
+
+  async function handleMoveLeadToColumn(leadId: number, fromColumnId: number, targetColumnId: number) {
+    if (!session || !canMoveStage) return;
+    if (!targetColumnId || targetColumnId === fromColumnId) return;
+
+    setKanbanLoading(true);
+    setKanbanError(null);
+    try {
+      await moveLeadStage(session.token, leadId, targetColumnId, 'Movido manualmente pelo operador');
+      if (selectedPipelineId) {
+        await refreshKanban(session.token, selectedPipelineId);
+      }
+    } catch (err) {
+      setKanbanError('Não foi possível mover o card.');
+      console.error(err);
+    } finally {
+      setKanbanLoading(false);
+      setDraggingCard(null);
+      setDragOverColumnId(null);
+    }
+  }
+
+  function handleCardDragStart(leadId: number, fromColumnId: number) {
+    if (!canMoveStage) return;
+    setDraggingCard({ leadId, fromColumnId });
+  }
+
+  function handleColumnDragOver(event: React.DragEvent<HTMLDivElement>, columnId: number) {
+    if (!canMoveStage || !draggingCard) return;
+    event.preventDefault();
+    if (draggingCard.fromColumnId !== columnId) {
+      setDragOverColumnId(columnId);
+    }
+  }
+
+  async function handleColumnDrop(event: React.DragEvent<HTMLDivElement>, targetColumnId: number) {
+    event.preventDefault();
+    if (!canMoveStage || !draggingCard) return;
+    await handleMoveLeadToColumn(draggingCard.leadId, draggingCard.fromColumnId, targetColumnId);
+  }
+
+  function handleDragEnd() {
+    setDraggingCard(null);
+    setDragOverColumnId(null);
+    setPressedCardId(null);
+  }
+
+  async function handleToggleHistory(leadId: number) {
+    if (!session) return;
+
+    if (stageHistoryByLead[leadId]) {
+      setStageHistoryByLead((prev) => {
+        const next = { ...prev };
+        delete next[leadId];
+        return next;
+      });
+      return;
+    }
+
+    setHistoryLoadingLeadId(leadId);
+    try {
+      const history = await getLeadStageHistory(session.token, leadId);
+      setStageHistoryByLead((prev) => ({ ...prev, [leadId]: history }));
+    } catch (err) {
+      setKanbanError('Não foi possível carregar o histórico da etapa.');
+      console.error(err);
+    } finally {
+      setHistoryLoadingLeadId(null);
     }
   }
 
@@ -141,7 +310,7 @@ export function App() {
   }
 
   return (
-    <main style={{ maxWidth: 1050, margin: '20px auto', fontFamily: 'system-ui', padding: 16 }}>
+    <main style={{ maxWidth: 1200, margin: '20px auto', fontFamily: 'system-ui', padding: 16 }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ marginBottom: 0 }}>LEADSWHATS</h1>
@@ -176,6 +345,167 @@ export function App() {
           </ul>
         </section>
       ) : null}
+
+      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16 }}>
+        <h2 style={{ marginTop: 0 }}>Checklist do Dia</h2>
+        {checklistLoading ? <p>Carregando checklist...</p> : null}
+        {checklistError ? <p style={{ color: 'crimson' }}>{checklistError}</p> : null}
+        {copyFeedback ? <p style={{ color: '#1b7f3b' }}>{copyFeedback}</p> : null}
+
+        {!checklistLoading && !checklistError && checklistItems.length === 0 ? (
+          <p>Nenhuma tarefa operacional pendente no momento.</p>
+        ) : null}
+
+        {!checklistLoading && !checklistError && checklistItems.length > 0 ? (
+          <div style={{ display: 'grid', gap: 10 }}>
+            {checklistItems.map((item) => (
+              <div key={`${item.lead_id}-${item.conversation_id}-${item.task_type}`} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 10 }}>
+                <p style={{ margin: 0 }}><strong>{item.lead_name || item.phone}</strong></p>
+                <small style={{ display: 'block' }}>Telefone: {item.phone}</small>
+                <small style={{ display: 'block' }}>Source: {item.source}</small>
+                <small style={{ display: 'block' }}>Etapa atual: {item.current_stage || 'Sem etapa'}</small>
+                <small style={{ display: 'block' }}>Tarefa: {item.task_label}</small>
+                <small style={{ display: 'block' }}>Horas desde última mensagem: {item.hours_since_last_message}</small>
+                <small style={{ display: 'block', marginBottom: 8 }}>Prioridade: <strong>{item.priority}</strong></small>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={() => void copyText(item.phone, 'Telefone copiado!')}>Copiar telefone</button>
+                  <button onClick={() => void copyText(CHECKLIST_DEFAULT_MESSAGE, 'Mensagem padrão copiada!')}>Copiar mensagem padrão</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
+
+      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16 }}>
+        <h2 style={{ marginTop: 0 }}>Kanban</h2>
+        {!canMoveStage ? (
+          <p style={{ marginTop: 0 }}>
+            Você está em perfil <strong>SDR</strong>: pode visualizar o Kanban, mas não pode mover cards.
+          </p>
+        ) : null}
+
+        {pipelines.length === 0 ? <p>Nenhum pipeline disponível para esta empresa.</p> : null}
+
+        {pipelines.length > 1 ? (
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            Pipeline:
+            <select
+              style={{ marginLeft: 8 }}
+              value={selectedPipelineId ?? ''}
+              onChange={(e) => setSelectedPipelineId(Number(e.target.value))}
+            >
+              {pipelines.map((pipeline) => (
+                <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        {pipelines.length === 1 && selectedPipelineId ? (
+          <p style={{ marginTop: 0 }}><strong>Pipeline:</strong> {pipelines[0].name}</p>
+        ) : null}
+
+        {kanbanLoading ? <p>Carregando Kanban...</p> : null}
+        {kanbanError ? <p style={{ color: 'crimson' }}>{kanbanError}</p> : null}
+
+        {!kanbanLoading && !kanbanError && kanban && kanban.columns.length === 0 ? (
+          <p>Kanban vazio: este pipeline ainda não possui colunas.</p>
+        ) : null}
+
+        {!kanbanLoading && !kanbanError && kanban && kanban.columns.length > 0 ? (
+          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', alignItems: 'flex-start', paddingBottom: 8 }}>
+            {kanban.columns.map((column) => (
+              <div
+                key={column.id}
+                onDragOver={(event) => handleColumnDragOver(event, column.id)}
+                onDrop={(event) => {
+                  void handleColumnDrop(event, column.id);
+                }}
+                onDragLeave={() => {
+                  if (dragOverColumnId === column.id) {
+                    setDragOverColumnId(null);
+                  }
+                }}
+                style={{
+                  minWidth: 280,
+                  maxWidth: 320,
+                  border: dragOverColumnId === column.id ? '2px dashed #2f7cf6' : '1px solid #ddd',
+                  borderRadius: 8,
+                  padding: 10,
+                  background: dragOverColumnId === column.id ? '#eef5ff' : '#fafafa',
+                }}
+              >
+                <h3 style={{ marginTop: 0, marginBottom: 8 }}>{column.name}</h3>
+                <small style={{ display: 'block', marginBottom: 10 }}>Etapa atual: {column.name}</small>
+
+                {column.cards.length === 0 ? <p style={{ margin: 0 }}>Sem cards nesta coluna.</p> : null}
+
+                {column.cards.map((card) => {
+                  const history = stageHistoryByLead[card.lead_id];
+                  return (
+                    <div
+                      key={card.lead_id}
+                      draggable={canMoveStage}
+                      onDragStart={() => handleCardDragStart(card.lead_id, column.id)}
+                      onDragEnd={handleDragEnd}
+                      onMouseDown={() => {
+                        if (canMoveStage) setPressedCardId(card.lead_id);
+                      }}
+                      onMouseUp={() => setPressedCardId(null)}
+                      onMouseLeave={() => setPressedCardId(null)}
+                      style={{
+                        border: '1px solid #ccc',
+                        borderRadius: 8,
+                        padding: 10,
+                        marginBottom: 8,
+                        background: '#fff',
+                        cursor: canMoveStage
+                          ? (draggingCard?.leadId === card.lead_id || pressedCardId === card.lead_id ? 'grabbing' : 'grab')
+                          : 'default',
+                        transform: draggingCard?.leadId === card.lead_id || pressedCardId === card.lead_id ? 'scale(0.99)' : 'scale(1)',
+                        boxShadow: draggingCard?.leadId === card.lead_id || pressedCardId === card.lead_id
+                          ? '0 2px 10px rgba(0,0,0,0.15)'
+                          : '0 1px 4px rgba(0,0,0,0.06)',
+                        transition: 'transform 120ms ease, box-shadow 120ms ease',
+                      }}
+                    >
+                      <p style={{ margin: 0 }}><strong>{card.name || card.phone}</strong></p>
+                      <small style={{ display: 'block' }}>Telefone: {card.phone}</small>
+                      <small style={{ display: 'block' }}>Source: {card.source}</small>
+                      <small style={{ display: 'block' }}>Classificação: {card.classification}</small>
+                      <small style={{ display: 'block' }}>Última mensagem: {card.last_message_at || 'Sem registro'}</small>
+                      <small style={{ display: 'block', marginBottom: 8 }}>Etapa atual: {column.name}</small>
+                      {canMoveStage ? <small style={{ display: 'block', marginBottom: 8, color: '#555' }}>☰ Arrastar para mover</small> : null}
+
+                      <button onClick={() => handleToggleHistory(card.lead_id)} disabled={historyLoadingLeadId === card.lead_id}>
+                        {history ? 'Ocultar histórico' : 'Ver histórico'}
+                      </button>
+
+                      {historyLoadingLeadId === card.lead_id ? <p>Carregando histórico...</p> : null}
+
+                      {history ? (
+                        <div style={{ marginTop: 8 }}>
+                          {history.length === 0 ? <small>Sem histórico de etapa.</small> : null}
+                          {history.slice(0, 5).map((item) => (
+                            <div key={item.id} style={{ borderTop: '1px solid #eee', marginTop: 6, paddingTop: 6 }}>
+                              <small style={{ display: 'block' }}>
+                                {item.from_column_name || 'Sem etapa'} → {item.to_column_name || columnNameById[item.to_column_id] || 'Etapa'}
+                              </small>
+                              <small style={{ display: 'block' }}>Quando: {item.moved_at}</small>
+                              {item.reason ? <small style={{ display: 'block' }}>Motivo: {item.reason}</small> : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
 
       {!canManageSource ? (
         <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12 }}>

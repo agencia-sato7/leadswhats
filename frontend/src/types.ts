@@ -58,3 +58,73 @@ export type LeadSourceItem = {
   created_at?: string;
   updated_at?: string;
 };
+
+export type PipelineListItem = {
+  id: number;
+  name: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type KanbanCard = {
+  lead_id: number;
+  name: string | null;
+  phone: string;
+  source: string;
+  classification: string;
+  last_message_at: string | null;
+};
+
+export type KanbanColumn = {
+  id: number;
+  name: string;
+  position: number;
+  rule: string | null;
+  cards: KanbanCard[];
+};
+
+export type PipelineKanban = {
+  id: number;
+  name: string;
+  columns: KanbanColumn[];
+};
+
+export type LeadStageHistoryItem = {
+  id: number;
+  lead_id: number;
+  from_column_id: number | null;
+  from_column_name: string | null;
+  to_column_id: number;
+  to_column_name: string | null;
+  moved_by_user_id: number | null;
+  move_source: string;
+  reason: string | null;
+  moved_at: string;
+};
+
+export type MoveLeadStageResponse = {
+  message: string;
+  data: {
+    lead_id: number;
+    kanban_column_id: number;
+    moved_by_user_id: number;
+    movement_type: string;
+    history_created: boolean;
+  };
+};
+
+export type ChecklistTaskItem = {
+  lead_id: number;
+  conversation_id: number;
+  lead_name: string | null;
+  phone: string;
+  source: string;
+  current_stage: string | null;
+  last_message_at: string;
+  last_message_direction: 'inbound' | 'outbound';
+  hours_since_last_message: number;
+  task_type: string;
+  task_label: string;
+  priority: 'medium' | 'high';
+};

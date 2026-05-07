@@ -1,8 +1,13 @@
 import type {
+  ChecklistTaskItem,
   DashboardSummaryResponse,
+  LeadStageHistoryItem,
   LeadSourceItem,
   LoginResponse,
+  MoveLeadStageResponse,
   OverviewResponse,
+  PipelineKanban,
+  PipelineListItem,
 } from './types';
 
 const API_BASE = 'http://localhost:8000/api/v1';
@@ -65,4 +70,47 @@ export function classifyLeadSource(token: string, leadId: number, source: string
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify({ source, reason }),
   });
+}
+
+export async function getPipelines(token: string): Promise<PipelineListItem[]> {
+  const data = await request<{ data: PipelineListItem[] }>('/pipelines', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  return data.data;
+}
+
+export async function getPipelineKanban(token: string, pipelineId: number): Promise<PipelineKanban> {
+  const data = await request<{ data: PipelineKanban }>(`/pipelines/${pipelineId}/kanban`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  return data.data;
+}
+
+export function moveLeadStage(token: string, leadId: number, kanbanColumnId: number, reason?: string): Promise<MoveLeadStageResponse> {
+  return request<MoveLeadStageResponse>(`/leads/${leadId}/stage`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      kanban_column_id: kanbanColumnId,
+      reason: reason ?? 'Movido manualmente pelo operador',
+    }),
+  });
+}
+
+export async function getLeadStageHistory(token: string, leadId: number): Promise<LeadStageHistoryItem[]> {
+  const data = await request<{ data: LeadStageHistoryItem[] }>(`/leads/${leadId}/stage-history`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  return data.data;
+}
+
+export async function getTasksChecklist(token: string): Promise<ChecklistTaskItem[]> {
+  const data = await request<{ data: ChecklistTaskItem[] }>('/tasks/checklist', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  return data.data;
 }
