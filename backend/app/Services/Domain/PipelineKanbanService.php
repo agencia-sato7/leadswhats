@@ -41,6 +41,7 @@ class PipelineKanbanService
             ->where("company_id", $companyId)
             ->where("pipeline_id", $pipeline->id)
             ->orderBy("position")
+            ->orderBy("id")
             ->get(["id", "name", "position", "rule_prompt"]);
 
         $columnIds = $columns->pluck("id")->all();

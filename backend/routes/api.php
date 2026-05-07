@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\LeadStageHistoryController;
 use App\Http\Controllers\Api\LeadSourceController;
 use App\Http\Controllers\Api\LeadStageController;
+use App\Http\Controllers\Api\KanbanColumnController;
 use App\Http\Controllers\Api\PipelineController;
 use App\Http\Controllers\Api\WhatsappWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +35,15 @@ Route::prefix('v1')->group(function () {
             ->middleware('role:admin,gestor,sdr');
 
         Route::patch('/leads/{leadId}/stage', [LeadStageController::class, 'update'])
+            ->middleware('role:admin,gestor');
+
+        Route::post('/pipelines/{pipelineId}/columns', [KanbanColumnController::class, 'store'])
+            ->middleware('role:admin,gestor');
+
+        Route::patch('/kanban-columns/{columnId}', [KanbanColumnController::class, 'update'])
+            ->middleware('role:admin,gestor');
+
+        Route::delete('/kanban-columns/{columnId}', [KanbanColumnController::class, 'destroy'])
             ->middleware('role:admin,gestor');
 
         // Classificação de origem é uma operação de gestão.

@@ -670,6 +670,79 @@
             "$ref": "#/components/schemas/LeadStageUpdateData"
           }
         }
+      },
+      "KanbanColumnUpsertRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "position"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Em negociação"
+          },
+          "position": {
+            "type": "integer",
+            "example": 2
+          },
+          "rule": {
+            "type": "string",
+            "nullable": true,
+            "example": "Cliente demonstrou interesse e pediu detalhes"
+          }
+        }
+      },
+      "KanbanColumnPatchRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Em negociação"
+          },
+          "position": {
+            "type": "integer",
+            "example": 2
+          },
+          "rule": {
+            "type": "string",
+            "nullable": true,
+            "example": "Cliente demonstrou interesse e pediu detalhes"
+          }
+        }
+      },
+      "KanbanColumnCrudItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "pipeline_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "rule": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "KanbanColumnCrudResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Kanban column created successfully."
+          },
+          "data": {
+            "$ref": "#/components/schemas/KanbanColumnCrudItem"
+          }
+        }
       }
     }
   },
@@ -1426,6 +1499,273 @@
           }
         },
         "description": "Movimentação manual de lead entre colunas do Kanban. Permitido para perfis admin e gestor. Repetir a mesma movimentação não cria histórico duplicado."
+      }
+    },
+    "/api/v1/pipelines/{pipelineId}/columns": {
+      "post": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Cria coluna no pipeline",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KanbanColumnUpsertRequest"
+              },
+              "example": {
+                "name": "Em negociação",
+                "position": 2,
+                "rule": "Cliente demonstrou interesse e pediu detalhes"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Coluna criada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KanbanColumnCrudResponse"
+                },
+                "example": {
+                  "message": "Kanban column created successfully.",
+                  "data": {
+                    "id": 10,
+                    "pipeline_id": 1,
+                    "name": "Em negociação",
+                    "position": 2,
+                    "rule": "Cliente demonstrou interesse e pediu detalhes"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pipeline não encontrado para a empresa autenticada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Payload inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/kanban-columns/{columnId}": {
+      "patch": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Edita coluna do Kanban",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "columnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KanbanColumnPatchRequest"
+              },
+              "example": {
+                "name": "Em negociação avançada",
+                "position": 3,
+                "rule": "Cliente solicitou proposta"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Coluna atualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KanbanColumnCrudResponse"
+                },
+                "example": {
+                  "message": "Kanban column updated successfully.",
+                  "data": {
+                    "id": 10,
+                    "pipeline_id": 1,
+                    "name": "Em negociação avançada",
+                    "position": 3,
+                    "rule": "Cliente solicitou proposta"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Coluna não encontrada para a empresa autenticada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Payload inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Remove coluna do Kanban",
+        "description": "Remove coluna vazia. Se houver cards/leads associados na coluna, retorna 422.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "columnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Coluna removida com sucesso (sem conteúdo)"
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Coluna não encontrada para a empresa autenticada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Não é possível remover coluna com cards/leads associados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
