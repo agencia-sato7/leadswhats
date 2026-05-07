@@ -33,6 +33,384 @@ class PipelineKanbanApiTest extends TestCase
             ->assertUnauthorized();
     }
 
+    public function test_unauthenticated_user_gets_401_when_moving_lead_stage(): void
+    {
+        $this->patchJson("/api/v1/leads/999999/stage", [
+            "kanban_column_id" => 1,
+            "reason" => "Movido manualmente pelo gestor",
+        ])->assertUnauthorized();
+    }
+
+    public function test_gestor_can_move_lead_stage_with_history_and_kanban_reflection(): void
+    {
+        $company = Company::create(["name" => "Empresa A", "slug" => "empresa-a"]);
+
+        $gestor = User::create([
+            "company_id" => $company->id,
+            "name" => "Gestor A",
+            "email" => "gestor.stage.move@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "gestor",
+            "active" => true,
+        ]);
+
+        $pipeline = Pipeline::create([
+            "company_id" => $company->id,
+            "name" => "Pipeline Comercial",
+            "is_default" => true,
+        ]);
+
+        $columnOne = KanbanColumn::create([
+            "company_id" => $company->id,
+            "pipeline_id" => $pipeline->id,
+            "name" => "Novo Contato",
+            "position" => 1,
+        ]);
+
+        $columnTwo = KanbanColumn::create([
+            "company_id" => $company->id,
+            "pipeline_id" => $pipeline->id,
+            "name" => "Negociação",
+            "position" => 2,
+        ]);
+
+        $lead = Lead::create([
+            "company_id" => $company->id,
+            "name" => "Lead Movimentação",
+            "phone_e164" => "+5511991111111",
+            "source" => "instagram",
+        ]);
+
+        LeadStageHistory::create([
+            "company_id" => $company->id,
+            "lead_id" => $lead->id,
+            "from_column_id" => null,
+            "to_column_id" => $columnOne->id,
+            "moved_by_user_id" => $gestor->id,
+            "move_source" => "manual",
+            "reason" => "Entrada inicial",
+            "moved_at" => Carbon::parse("2026-05-06 09:00:00"),
+        ]);
+
+        Conversation::create([
+            "company_id" => $company->id,
+            "lead_id" => $lead->id,
+            "status" => "active",
+            "started_at" => Carbon::parse("2026-05-06 09:00:00"),
+            "last_message_at" => Carbon::parse("2026-05-06 09:30:00"),
+        ]);
+
+        $token = $this->postJson("/api/v1/auth/login", [
+            "email" => $gestor->email,
+            "password" => "12345678",
+        ])->json("token");
+
+        $moveResponse = $this->withHeaders(["Authorization" => "Bearer " . $token])
+            ->patchJson("/api/v1/leads/" . $lead->id . "/stage", [
+                "kanban_column_id" => $columnTwo->id,
+                "reason" => "Movido manualmente pelo gestor",
+            ]);
+
+        $moveResponse->assertOk()
+            ->assertJsonPath("message", "Lead stage updated successfully.")
+            ->assertJsonPath("data.lead_id", $lead->id)
+            ->assertJsonPath("data.kanban_column_id", $columnTwo->id)
+            ->assertJsonPath("data.moved_by_user_id", $gestor->id)
+            ->assertJsonPath("data.movement_type", "manual")
+            ->assertJsonPath("data.history_created", true);
+
+        $this->assertDatabaseHas("lead_stage_histories", [
+            "company_id" => $company->id,
+            "lead_id" => $lead->id,
+            "from_column_id" => $columnOne->id,
+            "to_column_id" => $columnTwo->id,
+            "moved_by_user_id" => $gestor->id,
+            "move_source" => "manual",
+            "reason" => "Movido manualmente pelo gestor",
+        ]);
+
+        $historyResponse = $this->withHeaders(["Authorization" => "Bearer " . $token])
+            ->getJson("/api/v1/leads/" . $lead->id . "/stage-history");
+
+        $historyResponse->assertOk()
+            ->assertJsonPath("data.0.lead_id", $lead->id)
+            ->assertJsonPath("data.0.from_column_id", $columnOne->id)
+            ->assertJsonPath("data.0.to_column_id", $columnTwo->id);
+
+        $kanbanResponse = $this->withHeaders(["Authorization" => "Bearer " . $token])
+            ->getJson("/api/v1/pipelines/" . $pipeline->id . "/kanban");
+
+        $kanbanResponse->assertOk()
+            ->assertJsonCount(0, "data.columns.0.cards")
+            ->assertJsonCount(1, "data.columns.1.cards")
+            ->assertJsonPath("data.columns.1.cards.0.lead_id", $lead->id);
+    }
+
+    public function test_admin_can_move_lead_stage_successfully(): void
+    {
+        $company = Company::create(["name" => "Empresa A", "slug" => "empresa-a"]);
+
+        $admin = User::create([
+            "company_id" => $company->id,
+            "name" => "Admin A",
+            "email" => "admin.stage.move@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "admin",
+            "active" => true,
+        ]);
+
+        $pipeline = Pipeline::create([
+            "company_id" => $company->id,
+            "name" => "Pipeline Comercial",
+            "is_default" => true,
+        ]);
+
+        $column = KanbanColumn::create([
+            "company_id" => $company->id,
+            "pipeline_id" => $pipeline->id,
+            "name" => "Novo Contato",
+            "position" => 1,
+        ]);
+
+        $lead = Lead::create([
+            "company_id" => $company->id,
+            "name" => "Lead Admin",
+            "phone_e164" => "+5511992222222",
+            "source" => "google",
+        ]);
+
+        $token = $this->postJson("/api/v1/auth/login", [
+            "email" => $admin->email,
+            "password" => "12345678",
+        ])->json("token");
+
+        $this->withHeaders(["Authorization" => "Bearer " . $token])
+            ->patchJson("/api/v1/leads/" . $lead->id . "/stage", [
+                "kanban_column_id" => $column->id,
+                "reason" => "Movido manualmente pelo gestor",
+            ])
+            ->assertOk()
+            ->assertJsonPath("data.lead_id", $lead->id)
+            ->assertJsonPath("data.kanban_column_id", $column->id);
+    }
+
+    public function test_sdr_cannot_move_lead_stage(): void
+    {
+        $company = Company::create(["name" => "Empresa A", "slug" => "empresa-a"]);
+
+        $sdr = User::create([
+            "company_id" => $company->id,
+            "name" => "SDR A",
+            "email" => "sdr.stage.move@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "sdr",
+            "active" => true,
+        ]);
+
+        $pipeline = Pipeline::create([
+            "company_id" => $company->id,
+            "name" => "Pipeline Comercial",
+            "is_default" => true,
+        ]);
+
+        $column = KanbanColumn::create([
+            "company_id" => $company->id,
+            "pipeline_id" => $pipeline->id,
+            "name" => "Novo Contato",
+            "position" => 1,
+        ]);
+
+        $lead = Lead::create([
+            "company_id" => $company->id,
+            "name" => "Lead SDR",
+            "phone_e164" => "+5511993333333",
+            "source" => "site",
+        ]);
+
+        $token = $this->postJson("/api/v1/auth/login", [
+            "email" => $sdr->email,
+            "password" => "12345678",
+        ])->json("token");
+
+        $this->withHeaders(["Authorization" => "Bearer " . $token])
+            ->patchJson("/api/v1/leads/" . $lead->id . "/stage", [
+                "kanban_column_id" => $column->id,
+                "reason" => "Sem permissão",
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_user_cannot_move_lead_from_another_company(): void
+    {
+        $companyA = Company::create(["name" => "Empresa A", "slug" => "empresa-a"]);
+        $companyB = Company::create(["name" => "Empresa B", "slug" => "empresa-b"]);
+
+        $gestorA = User::create([
+            "company_id" => $companyA->id,
+            "name" => "Gestor A",
+            "email" => "gestor.stage.other.tenant@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "gestor",
+            "active" => true,
+        ]);
+
+        $pipelineA = Pipeline::create([
+            "company_id" => $companyA->id,
+            "name" => "Pipeline A",
+            "is_default" => true,
+        ]);
+
+        $columnA = KanbanColumn::create([
+            "company_id" => $companyA->id,
+            "pipeline_id" => $pipelineA->id,
+            "name" => "Coluna A",
+            "position" => 1,
+        ]);
+
+        $leadB = Lead::create([
+            "company_id" => $companyB->id,
+            "name" => "Lead B",
+            "phone_e164" => "+5511994444444",
+            "source" => "google",
+        ]);
+
+        $token = $this->postJson("/api/v1/auth/login", [
+            "email" => $gestorA->email,
+            "password" => "12345678",
+        ])->json("token");
+
+        $this->withHeaders(["Authorization" => "Bearer " . $token])
+            ->patchJson("/api/v1/leads/" . $leadB->id . "/stage", [
+                "kanban_column_id" => $columnA->id,
+                "reason" => "Movimento indevido",
+            ])
+            ->assertNotFound();
+    }
+
+    public function test_user_cannot_move_lead_to_column_from_another_company(): void
+    {
+        $companyA = Company::create(["name" => "Empresa A", "slug" => "empresa-a"]);
+        $companyB = Company::create(["name" => "Empresa B", "slug" => "empresa-b"]);
+
+        $gestorA = User::create([
+            "company_id" => $companyA->id,
+            "name" => "Gestor A",
+            "email" => "gestor.stage.column.other.tenant@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "gestor",
+            "active" => true,
+        ]);
+
+        $pipelineA = Pipeline::create([
+            "company_id" => $companyA->id,
+            "name" => "Pipeline A",
+            "is_default" => true,
+        ]);
+
+        $pipelineB = Pipeline::create([
+            "company_id" => $companyB->id,
+            "name" => "Pipeline B",
+            "is_default" => true,
+        ]);
+
+        $columnB = KanbanColumn::create([
+            "company_id" => $companyB->id,
+            "pipeline_id" => $pipelineB->id,
+            "name" => "Coluna B",
+            "position" => 1,
+        ]);
+
+        $leadA = Lead::create([
+            "company_id" => $companyA->id,
+            "name" => "Lead A",
+            "phone_e164" => "+5511995555555",
+            "source" => "google",
+        ]);
+
+        // Keep an in-tenant column to ensure tenant A has a valid pipeline context.
+        KanbanColumn::create([
+            "company_id" => $companyA->id,
+            "pipeline_id" => $pipelineA->id,
+            "name" => "Coluna A",
+            "position" => 1,
+        ]);
+
+        $token = $this->postJson("/api/v1/auth/login", [
+            "email" => $gestorA->email,
+            "password" => "12345678",
+        ])->json("token");
+
+        $this->withHeaders(["Authorization" => "Bearer " . $token])
+            ->patchJson("/api/v1/leads/" . $leadA->id . "/stage", [
+                "kanban_column_id" => $columnB->id,
+                "reason" => "Movimento indevido",
+            ])
+            ->assertNotFound();
+    }
+
+    public function test_repeating_same_movement_does_not_create_duplicate_history(): void
+    {
+        $company = Company::create(["name" => "Empresa A", "slug" => "empresa-a"]);
+
+        $gestor = User::create([
+            "company_id" => $company->id,
+            "name" => "Gestor A",
+            "email" => "gestor.stage.idempotent@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "gestor",
+            "active" => true,
+        ]);
+
+        $pipeline = Pipeline::create([
+            "company_id" => $company->id,
+            "name" => "Pipeline A",
+            "is_default" => true,
+        ]);
+
+        $column = KanbanColumn::create([
+            "company_id" => $company->id,
+            "pipeline_id" => $pipeline->id,
+            "name" => "Novo Contato",
+            "position" => 1,
+        ]);
+
+        $lead = Lead::create([
+            "company_id" => $company->id,
+            "name" => "Lead Idempotente",
+            "phone_e164" => "+5511996666666",
+            "source" => "instagram",
+        ]);
+
+        $token = $this->postJson("/api/v1/auth/login", [
+            "email" => $gestor->email,
+            "password" => "12345678",
+        ])->json("token");
+
+        $this->withHeaders(["Authorization" => "Bearer " . $token])
+            ->patchJson("/api/v1/leads/" . $lead->id . "/stage", [
+                "kanban_column_id" => $column->id,
+                "reason" => "Primeira movimentação",
+            ])
+            ->assertOk()
+            ->assertJsonPath("data.history_created", true);
+
+        $this->withHeaders(["Authorization" => "Bearer " . $token])
+            ->patchJson("/api/v1/leads/" . $lead->id . "/stage", [
+                "kanban_column_id" => $column->id,
+                "reason" => "Repetição",
+            ])
+            ->assertOk()
+            ->assertJsonPath("data.history_created", false);
+
+        $this->assertSame(
+            1,
+            LeadStageHistory::query()
+                ->where("company_id", $company->id)
+                ->where("lead_id", $lead->id)
+                ->count()
+        );
+    }
+
     public function test_gestor_lists_only_company_pipelines(): void
     {
         $companyA = Company::create(["name" => "Empresa A", "slug" => "empresa-a"]);

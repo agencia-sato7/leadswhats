@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\BootstrapController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\LeadStageHistoryController;
 use App\Http\Controllers\Api\LeadSourceController;
+use App\Http\Controllers\Api\LeadStageController;
 use App\Http\Controllers\Api\PipelineController;
 use App\Http\Controllers\Api\WhatsappWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -31,6 +32,9 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/leads/{leadId}/stage-history', [LeadStageHistoryController::class, 'index'])
             ->middleware('role:admin,gestor,sdr');
+
+        Route::patch('/leads/{leadId}/stage', [LeadStageController::class, 'update'])
+            ->middleware('role:admin,gestor');
 
         // Classificação de origem é uma operação de gestão.
         // Atendimento (SDR) não pode classificar/reclassificar.

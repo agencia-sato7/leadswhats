@@ -619,6 +619,57 @@
             }
           }
         }
+      },
+      "LeadStageUpdateRequest": {
+        "type": "object",
+        "required": [
+          "kanban_column_id"
+        ],
+        "properties": {
+          "kanban_column_id": {
+            "type": "integer",
+            "example": 2
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true,
+            "example": "Movido manualmente pelo gestor"
+          }
+        }
+      },
+      "LeadStageUpdateData": {
+        "type": "object",
+        "properties": {
+          "lead_id": {
+            "type": "integer"
+          },
+          "kanban_column_id": {
+            "type": "integer"
+          },
+          "moved_by_user_id": {
+            "type": "integer"
+          },
+          "movement_type": {
+            "type": "string",
+            "example": "manual"
+          },
+          "history_created": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "LeadStageUpdateResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Lead stage updated successfully."
+          },
+          "data": {
+            "$ref": "#/components/schemas/LeadStageUpdateData"
+          }
+        }
       }
     }
   },
@@ -1275,6 +1326,106 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/leads/{leadId}/stage": {
+      "patch": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Movimenta manualmente o lead para uma coluna do Kanban",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "leadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeadStageUpdateRequest"
+              },
+              "example": {
+                "kanban_column_id": 2,
+                "reason": "Movido manualmente pelo gestor"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Etapa do lead atualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadStageUpdateResponse"
+                },
+                "example": {
+                  "message": "Lead stage updated successfully.",
+                  "data": {
+                    "lead_id": 1,
+                    "kanban_column_id": 2,
+                    "moved_by_user_id": 1,
+                    "movement_type": "manual",
+                    "history_created": true
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil (SDR não pode movimentar etapa)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lead ou coluna não encontrados para a empresa autenticada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Payload inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "description": "Movimentação manual de lead entre colunas do Kanban. Permitido para perfis admin e gestor. Repetir a mesma movimentação não cria histórico duplicado."
       }
     }
   }
