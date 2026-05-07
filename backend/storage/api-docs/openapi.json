@@ -1,893 +1,1281 @@
 {
-    "openapi": "3.0.3",
-    "info": {
-        "title": "LEADSWHATS API",
-        "version": "1.0.0",
-        "description": "API inicial do LEADSWHATS com autenticação por token e bootstrap de domínio."
-    },
-    "servers": [
-        {
-            "url": "http://localhost:8000",
-            "description": "Local"
-        }
-    ],
-    "tags": [
-        {
-            "name": "Auth",
-            "description": "Autenticação e sessão"
-        },
-        {
-            "name": "Bootstrap",
-            "description": "Visão inicial da conta/empresa"
-        },
-        {
-            "name": "Webhook",
-            "description": "Ingestao passiva WhatsApp"
-        },
-        {
-            "name": "Dashboard",
-            "description": "Metricas operacionais"
-        },
-        {
-            "name": "Lead Source",
-            "description": "Classificação e reclassificação de origem"
-        }
-    ],
-    "components": {
-        "securitySchemes": {
-            "BearerAuth": {
-                "type": "http",
-                "scheme": "bearer",
-                "bearerFormat": "Token"
-            }
-        },
-        "schemas": {
-            "LoginRequest": {
-                "type": "object",
-                "required": [
-                    "email",
-                    "password"
-                ],
-                "properties": {
-                    "email": {
-                        "type": "string",
-                        "format": "email",
-                        "example": "gestor@empresa.local"
-                    },
-                    "password": {
-                        "type": "string",
-                        "example": "12345678"
-                    },
-                    "device_name": {
-                        "type": "string",
-                        "example": "web"
-                    }
-                }
-            },
-            "LoginResponse": {
-                "type": "object",
-                "properties": {
-                    "token": {
-                        "type": "string"
-                    },
-                    "token_type": {
-                        "type": "string",
-                        "example": "Bearer"
-                    },
-                    "expires_in_seconds": {
-                        "type": "integer",
-                        "example": 2592000
-                    },
-                    "user": {
-                        "type": "object",
-                        "properties": {
-                            "id": {
-                                "type": "integer",
-                                "example": 2
-                            },
-                            "name": {
-                                "type": "string",
-                                "example": "Gestor Demo"
-                            },
-                            "email": {
-                                "type": "string",
-                                "example": "gestor@empresa.local"
-                            },
-                            "role": {
-                                "type": "string",
-                                "enum": [
-                                    "admin",
-                                    "gestor",
-                                    "sdr"
-                                ]
-                            },
-                            "company_id": {
-                                "type": "integer",
-                                "example": 1
-                            }
-                        }
-                    }
-                }
-            },
-            "AuthMeResponse": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "integer"
-                    },
-                    "name": {
-                        "type": "string"
-                    },
-                    "email": {
-                        "type": "string"
-                    },
-                    "role": {
-                        "type": "string",
-                        "enum": [
-                            "admin",
-                            "gestor",
-                            "sdr"
-                        ]
-                    },
-                    "company_id": {
-                        "type": "integer"
-                    }
-                }
-            },
-            "OverviewResponse": {
-                "type": "object",
-                "properties": {
-                    "company": {
-                        "type": "object",
-                        "properties": {
-                            "id": {
-                                "type": "integer"
-                            },
-                            "name": {
-                                "type": "string"
-                            },
-                            "slug": {
-                                "type": "string"
-                            },
-                            "timezone": {
-                                "type": "string"
-                            },
-                            "work_start": {
-                                "type": "string",
-                                "example": "08:00"
-                            },
-                            "work_end": {
-                                "type": "string",
-                                "example": "18:00"
-                            }
-                        }
-                    },
-                    "counts": {
-                        "type": "object",
-                        "properties": {
-                            "users": {
-                                "type": "integer"
-                            },
-                            "leads": {
-                                "type": "integer"
-                            },
-                            "conversations": {
-                                "type": "integer"
-                            },
-                            "messages": {
-                                "type": "integer"
-                            },
-                            "pipelines": {
-                                "type": "integer"
-                            },
-                            "kanban_columns": {
-                                "type": "integer"
-                            }
-                        }
-                    }
-                }
-            },
-            "ErrorResponse": {
-                "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string"
-                    }
-                }
-            },
-            "WebhookWhatsappRequest": {
-                "type": "object",
-                "required": [
-                    "company_slug",
-                    "phone",
-                    "direction"
-                ],
-                "properties": {
-                    "company_slug": {
-                        "type": "string",
-                        "example": "empresa-demo"
-                    },
-                    "phone": {
-                        "type": "string",
-                        "example": "(11) 98888-1111"
-                    },
-                    "direction": {
-                        "type": "string",
-                        "enum": [
-                            "inbound",
-                            "outbound"
-                        ]
-                    },
-                    "channel": {
-                        "type": "string",
-                        "enum": [
-                            "text",
-                            "audio"
-                        ],
-                        "example": "text"
-                    },
-                    "body": {
-                        "type": "string",
-                        "example": "Ola, vi no Instagram"
-                    },
-                    "audio_transcript": {
-                        "type": "string"
-                    },
-                    "source": {
-                        "type": "string",
-                        "example": "instagram"
-                    },
-                    "lead_name": {
-                        "type": "string"
-                    },
-                    "external_message_id": {
-                        "type": "string",
-                        "example": "wamid.1234567890"
-                    },
-                    "sent_at": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "owner_user_id": {
-                        "type": "integer"
-                    },
-                    "provider": {
-                        "type": "string",
-                        "example": "whatsapp-cloud"
-                    }
-                }
-            },
-            "WebhookWhatsappResponse": {
-                "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string",
-                        "example": "Mensagem ingerida com sucesso."
-                    },
-                    "data": {
-                        "type": "object",
-                        "properties": {
-                            "lead_id": {
-                                "type": "integer"
-                            },
-                            "conversation_id": {
-                                "type": "integer"
-                            },
-                            "classification": {
-                                "type": "string",
-                                "enum": [
-                                    "lead_novo",
-                                    "lead_repetido",
-                                    "lead_existente"
-                                ]
-                            },
-                            "is_rescue": {
-                                "type": "boolean"
-                            },
-                            "duplicated": {
-                                "type": "boolean",
-                                "example": false
-                            }
-                        }
-                    }
-                }
-            },
-            "DashboardSummaryResponse": {
-                "type": "object",
-                "properties": {
-                    "date": {
-                        "type": "string",
-                        "example": "2026-05-05"
-                    },
-                    "metrics": {
-                        "type": "object",
-                        "properties": {
-                            "new_leads_today": {
-                                "type": "integer"
-                            },
-                            "repeat_leads_today": {
-                                "type": "integer"
-                            },
-                            "avg_first_response_seconds": {
-                                "type": "integer"
-                            },
-                            "vacuum_24h_open": {
-                                "type": "integer"
-                            },
-                            "rescues_today": {
-                                "type": "integer"
-                            },
-                            "active_conversations": {
-                                "type": "integer"
-                            },
-                            "unknown_source_leads": {
-                                "type": "integer"
-                            },
-                            "manual_classifications_today": {
-                                "type": "integer"
-                            }
-                        }
-                    }
-                }
-            },
-            "UnknownLead": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "integer"
-                    },
-                    "name": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "phone_e164": {
-                        "type": "string"
-                    },
-                    "source": {
-                        "type": "string"
-                    },
-                    "source_method": {
-                        "type": "string"
-                    },
-                    "last_inbound_at": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "created_at": {
-                        "type": "string"
-                    }
-                }
-            },
-            "UnknownLeadsResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/UnknownLead"
-                        }
-                    }
-                }
-            },
-            "RecentSourceLead": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "integer"
-                    },
-                    "phone_e164": {
-                        "type": "string"
-                    },
-                    "source": {
-                        "type": "string"
-                    },
-                    "source_method": {
-                        "type": "string"
-                    },
-                    "source_updated_at": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "name": {
-                        "type": "string",
-                        "nullable": true
-                    }
-                }
-            },
-            "RecentSourceLeadsResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/RecentSourceLead"
-                        }
-                    }
-                }
-            },
-            "LeadSourceUpdateRequest": {
-                "type": "object",
-                "required": [
-                    "source"
-                ],
-                "properties": {
-                    "source": {
-                        "type": "string",
-                        "enum": [
-                            "instagram",
-                            "facebook",
-                            "google",
-                            "tiktok",
-                            "youtube",
-                            "site",
-                            "indicacao",
-                            "desconhecido"
-                        ],
-                        "example": "instagram"
-                    },
-                    "reason": {
-                        "type": "string",
-                        "example": "informado pelo cliente"
-                    }
-                }
-            },
-            "LeadSourceUpdateResponse": {
-                "type": "object",
-                "properties": {
-                    "message": {
-                        "type": "string",
-                        "example": "Origem atualizada com sucesso."
-                    },
-                    "lead": {
-                        "type": "object",
-                        "properties": {
-                            "id": {
-                                "type": "integer"
-                            },
-                            "source": {
-                                "type": "string"
-                            },
-                            "source_method": {
-                                "type": "string"
-                            },
-                            "source_updated_at": {
-                                "type": "string",
-                                "nullable": true
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    },
-    "paths": {
-        "/api/v1/auth/login": {
-            "post": {
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "Faz login e retorna token bearer",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/LoginRequest"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Login efetuado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/LoginResponse"
-                                }
-                            }
-                        }
-                    },
-                    "422": {
-                        "description": "Credenciais inválidas"
-                    }
-                }
-            }
-        },
-        "/api/v1/auth/me": {
-            "get": {
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "Retorna usuário autenticado",
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Usuário autenticado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/AuthMeResponse"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Não autenticado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/auth/logout": {
-            "post": {
-                "tags": [
-                    "Auth"
-                ],
-                "summary": "Invalida token atual",
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Logout efetuado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "message": {
-                                            "type": "string",
-                                            "example": "Logout realizado com sucesso."
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/bootstrap/overview": {
-            "get": {
-                "tags": [
-                    "Bootstrap"
-                ],
-                "summary": "Retorna resumo da empresa e contagens iniciais",
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Resumo carregado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/OverviewResponse"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Não autenticado (token ausente/inválido)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Perfil sem acesso (somente admin, gestor e sdr)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/webhooks/whatsapp": {
-            "post": {
-                "tags": [
-                    "Webhook"
-                ],
-                "summary": "Ingestão passiva de mensagem WhatsApp (idempotente)",
-                "parameters": [
-                    {
-                        "name": "X-Webhook-Token",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        },
-                        "example": "leadswhats-dev-token"
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/WebhookWhatsappRequest"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Mensagem processada",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/WebhookWhatsappResponse"
-                                },
-                                "examples": {
-                                    "processed": {
-                                        "summary": "Evento novo processado",
-                                        "value": {
-                                            "message": "Mensagem ingerida com sucesso.",
-                                            "data": {
-                                                "lead_id": 123,
-                                                "conversation_id": 456,
-                                                "classification": "lead_novo",
-                                                "is_rescue": false,
-                                                "duplicated": false
-                                            }
-                                        }
-                                    },
-                                    "duplicated": {
-                                        "summary": "Evento duplicado (idempotente)",
-                                        "value": {
-                                            "message": "Mensagem duplicada recebida; evento ja processado anteriormente.",
-                                            "data": {
-                                                "duplicated": true
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Token invalido"
-                    },
-                    "404": {
-                        "description": "Empresa nao encontrada"
-                    }
-                },
-                "description": "Endpoint de ingestao passiva (somente leitura de eventos). A chave idempotente prioritaria e company + provider + external_message_id. Se external_message_id nao for enviado, o sistema aplica fallback por hash deterministico do conteudo do evento. Replays da mesma mensagem retornam sucesso estavel e nao duplicam message, lead, conversation nem metricas. Quando aplicavel, classificacao e efeitos derivados respeitam configuracoes comerciais da empresa (timezone, expediente, almoco, dias uteis, janela de lead repetido e threshold de vacuo/resgate)."
-            }
-        },
-        "/api/v1/dashboard/summary": {
-            "get": {
-                "tags": [
-                    "Dashboard"
-                ],
-                "summary": "Resumo de metricas do dia",
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Resumo carregado",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/DashboardSummaryResponse"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Não autenticado (token ausente/inválido)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Perfil sem acesso (somente admin, gestor e sdr)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                },
-                "description": "Métricas operacionais do dia para a empresa autenticada. Os cálculos refletem regras comerciais por tenant, incluindo timezone, expediente, intervalo de almoço, dias úteis, janela de lead repetido e threshold de vácuo/resgate."
-            }
-        },
-        "/api/v1/leads/sources/unknown": {
-            "get": {
-                "tags": [
-                    "Lead Source"
-                ],
-                "summary": "Lista leads com origem desconhecida",
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Lista carregada",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/UnknownLeadsResponse"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Não autenticado (token ausente/inválido)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Acesso negado para este perfil (SDR não pode classificar/reclassificar origem)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/leads/{leadId}/source": {
-            "patch": {
-                "tags": [
-                    "Lead Source"
-                ],
-                "summary": "Classifica/Reclassifica origem do lead",
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "parameters": [
-                    {
-                        "name": "leadId",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "integer"
-                        }
-                    }
-                ],
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/LeadSourceUpdateRequest"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "200": {
-                        "description": "Origem atualizada",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/LeadSourceUpdateResponse"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Não autenticado (token ausente/inválido)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Acesso negado para este perfil (SDR não pode classificar/reclassificar)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Lead não encontrado para a empresa autenticada (isolamento entre empresas)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                },
-                "description": "Classificação/reclassificação manual de origem do lead. Permitido para perfis admin e gestor. Perfil sdr não possui permissão."
-            }
-        },
-        "/api/v1/leads/sources/recent": {
-            "get": {
-                "tags": [
-                    "Lead Source"
-                ],
-                "summary": "Lista leads com origem recentemente classificada",
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Lista carregada",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/RecentSourceLeadsResponse"
-                                }
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Não autenticado (token ausente/inválido)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    },
-                    "403": {
-                        "description": "Acesso negado para este perfil (SDR não pode classificar/reclassificar origem)",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ErrorResponse"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+  "openapi": "3.0.3",
+  "info": {
+    "title": "LEADSWHATS API",
+    "version": "1.0.0",
+    "description": "API inicial do LEADSWHATS com autenticação por token e bootstrap de domínio."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local"
     }
+  ],
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Autenticação e sessão"
+    },
+    {
+      "name": "Bootstrap",
+      "description": "Visão inicial da conta/empresa"
+    },
+    {
+      "name": "Webhook",
+      "description": "Ingestao passiva WhatsApp"
+    },
+    {
+      "name": "Dashboard",
+      "description": "Metricas operacionais"
+    },
+    {
+      "name": "Lead Source",
+      "description": "Classificação e reclassificação de origem"
+    },
+    {
+      "name": "Pipelines",
+      "description": "Leitura de pipelines, Kanban e histórico de etapas"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Token"
+      }
+    },
+    "schemas": {
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "gestor@empresa.local"
+          },
+          "password": {
+            "type": "string",
+            "example": "12345678"
+          },
+          "device_name": {
+            "type": "string",
+            "example": "web"
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string",
+            "example": "Bearer"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "example": 2592000
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "example": 2
+              },
+              "name": {
+                "type": "string",
+                "example": "Gestor Demo"
+              },
+              "email": {
+                "type": "string",
+                "example": "gestor@empresa.local"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "admin",
+                  "gestor",
+                  "sdr"
+                ]
+              },
+              "company_id": {
+                "type": "integer",
+                "example": 1
+              }
+            }
+          }
+        }
+      },
+      "AuthMeResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "gestor",
+              "sdr"
+            ]
+          },
+          "company_id": {
+            "type": "integer"
+          }
+        }
+      },
+      "OverviewResponse": {
+        "type": "object",
+        "properties": {
+          "company": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "slug": {
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "work_start": {
+                "type": "string",
+                "example": "08:00"
+              },
+              "work_end": {
+                "type": "string",
+                "example": "18:00"
+              }
+            }
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "users": {
+                "type": "integer"
+              },
+              "leads": {
+                "type": "integer"
+              },
+              "conversations": {
+                "type": "integer"
+              },
+              "messages": {
+                "type": "integer"
+              },
+              "pipelines": {
+                "type": "integer"
+              },
+              "kanban_columns": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "WebhookWhatsappRequest": {
+        "type": "object",
+        "required": [
+          "company_slug",
+          "phone",
+          "direction"
+        ],
+        "properties": {
+          "company_slug": {
+            "type": "string",
+            "example": "empresa-demo"
+          },
+          "phone": {
+            "type": "string",
+            "example": "(11) 98888-1111"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "inbound",
+              "outbound"
+            ]
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "text",
+              "audio"
+            ],
+            "example": "text"
+          },
+          "body": {
+            "type": "string",
+            "example": "Ola, vi no Instagram"
+          },
+          "audio_transcript": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "example": "instagram"
+          },
+          "lead_name": {
+            "type": "string"
+          },
+          "external_message_id": {
+            "type": "string",
+            "example": "wamid.1234567890"
+          },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "owner_user_id": {
+            "type": "integer"
+          },
+          "provider": {
+            "type": "string",
+            "example": "whatsapp-cloud"
+          }
+        }
+      },
+      "WebhookWhatsappResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Mensagem ingerida com sucesso."
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "lead_id": {
+                "type": "integer"
+              },
+              "conversation_id": {
+                "type": "integer"
+              },
+              "classification": {
+                "type": "string",
+                "enum": [
+                  "lead_novo",
+                  "lead_repetido",
+                  "lead_existente"
+                ]
+              },
+              "is_rescue": {
+                "type": "boolean"
+              },
+              "duplicated": {
+                "type": "boolean",
+                "example": false
+              }
+            }
+          }
+        }
+      },
+      "DashboardSummaryResponse": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-05-05"
+          },
+          "metrics": {
+            "type": "object",
+            "properties": {
+              "new_leads_today": {
+                "type": "integer"
+              },
+              "repeat_leads_today": {
+                "type": "integer"
+              },
+              "avg_first_response_seconds": {
+                "type": "integer"
+              },
+              "vacuum_24h_open": {
+                "type": "integer"
+              },
+              "rescues_today": {
+                "type": "integer"
+              },
+              "active_conversations": {
+                "type": "integer"
+              },
+              "unknown_source_leads": {
+                "type": "integer"
+              },
+              "manual_classifications_today": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "UnknownLead": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone_e164": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "source_method": {
+            "type": "string"
+          },
+          "last_inbound_at": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string"
+          }
+        }
+      },
+      "UnknownLeadsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnknownLead"
+            }
+          }
+        }
+      },
+      "RecentSourceLead": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "phone_e164": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "source_method": {
+            "type": "string"
+          },
+          "source_updated_at": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "RecentSourceLeadsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecentSourceLead"
+            }
+          }
+        }
+      },
+      "LeadSourceUpdateRequest": {
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "instagram",
+              "facebook",
+              "google",
+              "tiktok",
+              "youtube",
+              "site",
+              "indicacao",
+              "desconhecido"
+            ],
+            "example": "instagram"
+          },
+          "reason": {
+            "type": "string",
+            "example": "informado pelo cliente"
+          }
+        }
+      },
+      "LeadSourceUpdateResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Origem atualizada com sucesso."
+          },
+          "lead": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "source": {
+                "type": "string"
+              },
+              "source_method": {
+                "type": "string"
+              },
+              "source_updated_at": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          }
+        }
+      },
+      "PipelineListItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "PipelineListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PipelineListItem"
+            }
+          }
+        }
+      },
+      "KanbanCard": {
+        "type": "object",
+        "properties": {
+          "lead_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "lead_novo",
+              "lead_repetido",
+              "lead_existente"
+            ]
+          },
+          "last_message_at": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "KanbanColumnResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "rule": {
+            "type": "string",
+            "nullable": true
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KanbanCard"
+            }
+          }
+        }
+      },
+      "PipelineKanbanResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "columns": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/KanbanColumnResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "LeadStageHistoryItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "lead_id": {
+            "type": "integer"
+          },
+          "from_column_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "from_column_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "to_column_id": {
+            "type": "integer"
+          },
+          "to_column_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "moved_by_user_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "move_source": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "moved_at": {
+            "type": "string"
+          }
+        }
+      },
+      "LeadStageHistoryResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeadStageHistoryItem"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Faz login e retorna token bearer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login efetuado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Credenciais inválidas"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Retorna usuário autenticado",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usuário autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthMeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Invalida token atual",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Logout efetuado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Logout realizado com sucesso."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/bootstrap/overview": {
+      "get": {
+        "tags": [
+          "Bootstrap"
+        ],
+        "summary": "Retorna resumo da empresa e contagens iniciais",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumo carregado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Perfil sem acesso (somente admin, gestor e sdr)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/whatsapp": {
+      "post": {
+        "tags": [
+          "Webhook"
+        ],
+        "summary": "Ingestão passiva de mensagem WhatsApp (idempotente)",
+        "parameters": [
+          {
+            "name": "X-Webhook-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "leadswhats-dev-token"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookWhatsappRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mensagem processada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookWhatsappResponse"
+                },
+                "examples": {
+                  "processed": {
+                    "summary": "Evento novo processado",
+                    "value": {
+                      "message": "Mensagem ingerida com sucesso.",
+                      "data": {
+                        "lead_id": 123,
+                        "conversation_id": 456,
+                        "classification": "lead_novo",
+                        "is_rescue": false,
+                        "duplicated": false
+                      }
+                    }
+                  },
+                  "duplicated": {
+                    "summary": "Evento duplicado (idempotente)",
+                    "value": {
+                      "message": "Mensagem duplicada recebida; evento ja processado anteriormente.",
+                      "data": {
+                        "duplicated": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token invalido"
+          },
+          "404": {
+            "description": "Empresa nao encontrada"
+          }
+        },
+        "description": "Endpoint de ingestao passiva (somente leitura de eventos). A chave idempotente prioritaria e company + provider + external_message_id. Se external_message_id nao for enviado, o sistema aplica fallback por hash deterministico do conteudo do evento. Replays da mesma mensagem retornam sucesso estavel e nao duplicam message, lead, conversation nem metricas. Quando aplicavel, classificacao e efeitos derivados respeitam configuracoes comerciais da empresa (timezone, expediente, almoco, dias uteis, janela de lead repetido e threshold de vacuo/resgate)."
+      }
+    },
+    "/api/v1/dashboard/summary": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Resumo de metricas do dia",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumo carregado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSummaryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Perfil sem acesso (somente admin, gestor e sdr)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "description": "Métricas operacionais do dia para a empresa autenticada. Os cálculos refletem regras comerciais por tenant, incluindo timezone, expediente, intervalo de almoço, dias úteis, janela de lead repetido e threshold de vácuo/resgate."
+      }
+    },
+    "/api/v1/leads/sources/unknown": {
+      "get": {
+        "tags": [
+          "Lead Source"
+        ],
+        "summary": "Lista leads com origem desconhecida",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista carregada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnknownLeadsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil (SDR não pode classificar/reclassificar origem)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{leadId}/source": {
+      "patch": {
+        "tags": [
+          "Lead Source"
+        ],
+        "summary": "Classifica/Reclassifica origem do lead",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "leadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeadSourceUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Origem atualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadSourceUpdateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil (SDR não pode classificar/reclassificar)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lead não encontrado para a empresa autenticada (isolamento entre empresas)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "description": "Classificação/reclassificação manual de origem do lead. Permitido para perfis admin e gestor. Perfil sdr não possui permissão."
+      }
+    },
+    "/api/v1/leads/sources/recent": {
+      "get": {
+        "tags": [
+          "Lead Source"
+        ],
+        "summary": "Lista leads com origem recentemente classificada",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista carregada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentSourceLeadsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil (SDR não pode classificar/reclassificar origem)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pipelines": {
+      "get": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Lista pipelines da empresa autenticada",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pipelines carregados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineListResponse"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": 1,
+                      "name": "Pipeline A",
+                      "is_default": true,
+                      "created_at": "2026-05-06T10:00:00.000000Z",
+                      "updated_at": "2026-05-06T10:00:00.000000Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Perfil sem acesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pipelines/{pipelineId}/kanban": {
+      "get": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Retorna o Kanban de um pipeline",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "pipelineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Kanban carregado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineKanbanResponse"
+                },
+                "example": {
+                  "data": {
+                    "id": 1,
+                    "name": "Pipeline Comercial",
+                    "columns": [
+                      {
+                        "id": 10,
+                        "name": "Novo Contato",
+                        "position": 1,
+                        "rule": null,
+                        "cards": [
+                          {
+                            "lead_id": 123,
+                            "name": "Maria",
+                            "phone": "+5511999999999",
+                            "source": "instagram",
+                            "classification": "lead_novo",
+                            "last_message_at": "2026-05-06 09:30:00"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Perfil sem acesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Pipeline não encontrado para a empresa autenticada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{leadId}/stage-history": {
+      "get": {
+        "tags": [
+          "Pipelines"
+        ],
+        "summary": "Retorna histórico de etapas de um lead",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "leadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Histórico carregado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadStageHistoryResponse"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": 1,
+                      "lead_id": 123,
+                      "from_column_id": null,
+                      "from_column_name": null,
+                      "to_column_id": 10,
+                      "to_column_name": "Novo Contato",
+                      "moved_by_user_id": 7,
+                      "move_source": "manual",
+                      "reason": "Primeiro contato",
+                      "moved_at": "2026-05-06 09:10:00"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Perfil sem acesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lead não encontrado para a empresa autenticada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }

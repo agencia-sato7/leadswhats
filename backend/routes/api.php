@@ -3,7 +3,9 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BootstrapController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\LeadStageHistoryController;
 use App\Http\Controllers\Api\LeadSourceController;
+use App\Http\Controllers\Api\PipelineController;
 use App\Http\Controllers\Api\WhatsappWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -19,6 +21,15 @@ Route::prefix('v1')->group(function () {
             ->middleware('role:admin,gestor,sdr');
 
         Route::get('/dashboard/summary', [DashboardController::class, 'summary'])
+            ->middleware('role:admin,gestor,sdr');
+
+        Route::get('/pipelines', [PipelineController::class, 'index'])
+            ->middleware('role:admin,gestor,sdr');
+
+        Route::get('/pipelines/{pipelineId}/kanban', [PipelineController::class, 'kanban'])
+            ->middleware('role:admin,gestor,sdr');
+
+        Route::get('/leads/{leadId}/stage-history', [LeadStageHistoryController::class, 'index'])
             ->middleware('role:admin,gestor,sdr');
 
         // Classificação de origem é uma operação de gestão.
