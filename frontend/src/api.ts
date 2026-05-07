@@ -1,4 +1,6 @@
 import type {
+  ContactItem,
+  ContactsResponse,
   ChecklistTaskItem,
   DashboardSummaryResponse,
   LeadStageHistoryItem,
@@ -113,4 +115,30 @@ export async function getTasksChecklist(token: string): Promise<ChecklistTaskIte
   });
 
   return data.data;
+}
+
+export async function getContacts(
+  token: string,
+  params: {
+    search?: string;
+    source?: string;
+    classification?: 'lead_novo' | 'lead_repetido' | '';
+    stage_id?: number | '';
+    page?: number;
+    per_page?: number;
+  },
+): Promise<ContactsResponse> {
+  const query = new URLSearchParams();
+
+  if (params.search) query.set('search', params.search);
+  if (params.source) query.set('source', params.source);
+  if (params.classification) query.set('classification', params.classification);
+  if (params.stage_id) query.set('stage_id', String(params.stage_id));
+  if (params.page) query.set('page', String(params.page));
+  if (params.per_page) query.set('per_page', String(params.per_page));
+
+  const path = query.size > 0 ? `/contacts?${query.toString()}` : '/contacts';
+  return request<{ data: ContactItem[]; meta: ContactsResponse['meta'] }>(path, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }

@@ -45,6 +45,8 @@ export type DashboardSummaryResponse = {
     active_conversations: number;
     unknown_source_leads: number;
     manual_classifications_today: number;
+    open_tasks: number;
+    vacuum_follow_up_tasks: number;
   };
 };
 
@@ -127,4 +129,27 @@ export type ChecklistTaskItem = {
   task_type: string;
   task_label: string;
   priority: 'medium' | 'high';
+};
+
+export type ContactItem = {
+  lead_id: number;
+  name: string | null;
+  phone: string;
+  source: string;
+  source_method: string;
+  classification: 'lead_novo' | 'lead_repetido';
+  current_stage: string | null;
+  last_message_at: string | null;
+  last_message_direction: 'inbound' | 'outbound' | null;
+  created_at: string;
+};
+
+export type ContactsResponse = {
+  data: ContactItem[];
+  meta: {
+    page: number;
+    per_page: number;
+    total: number;
+    last_page: number;
+  };
 };
