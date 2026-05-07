@@ -1228,7 +1228,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Lista pipelines da empresa autenticada (isolamento por company_id). Perfis permitidos: admin, gestor, sdr."
       }
     },
     "/api/v1/pipelines/{pipelineId}/kanban": {
@@ -1317,7 +1318,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Retorna Kanban do pipeline da empresa autenticada (isolamento por company_id). Ordenação: colunas por position asc e, em empate, id asc. Cards seguem regra atual do backend: last_message_at desc, nulls por último e desempate por lead_id asc."
       }
     },
     "/api/v1/leads/{leadId}/stage-history": {
@@ -1398,7 +1400,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Retorna histórico de etapas do lead da empresa autenticada (isolamento por company_id). Perfis permitidos: admin, gestor, sdr."
       }
     },
     "/api/v1/leads/{leadId}/stage": {
@@ -1452,6 +1455,34 @@
                     "moved_by_user_id": 1,
                     "movement_type": "manual",
                     "history_created": true
+                  }
+                },
+                "examples": {
+                  "movement_created": {
+                    "summary": "Movimentação nova com histórico criado",
+                    "value": {
+                      "message": "Lead stage updated successfully.",
+                      "data": {
+                        "lead_id": 1,
+                        "kanban_column_id": 2,
+                        "moved_by_user_id": 1,
+                        "movement_type": "manual",
+                        "history_created": true
+                      }
+                    }
+                  },
+                  "movement_idempotent": {
+                    "summary": "Lead já estava na coluna (idempotente, sem duplicar histórico)",
+                    "value": {
+                      "message": "Lead stage updated successfully.",
+                      "data": {
+                        "lead_id": 1,
+                        "kanban_column_id": 2,
+                        "moved_by_user_id": 1,
+                        "movement_type": "manual",
+                        "history_created": false
+                      }
+                    }
                   }
                 }
               }
@@ -1598,7 +1629,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Cria coluna em pipeline da empresa autenticada (isolamento por company_id). Campo público de contrato: rule (internamente armazenado como rule_prompt)."
       }
     },
     "/api/v1/kanban-columns/{columnId}": {
@@ -1698,14 +1730,15 @@
               }
             }
           }
-        }
+        },
+        "description": "Edita coluna da empresa autenticada (isolamento por company_id). Campo público de contrato: rule (internamente armazenado como rule_prompt)."
       },
       "delete": {
         "tags": [
           "Pipelines"
         ],
         "summary": "Remove coluna do Kanban",
-        "description": "Remove coluna vazia. Se houver cards/leads associados na coluna, retorna 422.",
+        "description": "Remove coluna vazia da empresa autenticada (isolamento por company_id). Retorna 204 sem body quando removida. Se houver cards/leads associados na coluna, retorna 422.",
         "security": [
           {
             "BearerAuth": []
