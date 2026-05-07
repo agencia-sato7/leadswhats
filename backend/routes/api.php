@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\LeadSourceController;
 use App\Http\Controllers\Api\LeadStageController;
 use App\Http\Controllers\Api\KanbanColumnController;
 use App\Http\Controllers\Api\PipelineController;
+use App\Http\Controllers\Api\TaskChecklistController;
 use App\Http\Controllers\Api\WhatsappWebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,6 +24,9 @@ Route::prefix('v1')->group(function () {
             ->middleware('role:admin,gestor,sdr');
 
         Route::get('/dashboard/summary', [DashboardController::class, 'summary'])
+            ->middleware('role:admin,gestor,sdr');
+
+        Route::get('/tasks/checklist', [TaskChecklistController::class, 'index'])
             ->middleware('role:admin,gestor,sdr');
 
         Route::get('/pipelines', [PipelineController::class, 'index'])

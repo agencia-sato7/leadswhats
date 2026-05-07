@@ -743,6 +743,86 @@
             "$ref": "#/components/schemas/KanbanColumnCrudItem"
           }
         }
+      },
+      "ChecklistTaskItem": {
+        "type": "object",
+        "properties": {
+          "lead_id": {
+            "type": "integer"
+          },
+          "conversation_id": {
+            "type": "integer"
+          },
+          "lead_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "current_stage": {
+            "type": "string",
+            "nullable": true
+          },
+          "last_message_at": {
+            "type": "string"
+          },
+          "last_message_direction": {
+            "type": "string",
+            "enum": [
+              "inbound",
+              "outbound"
+            ]
+          },
+          "hours_since_last_message": {
+            "type": "number"
+          },
+          "task_type": {
+            "type": "string",
+            "example": "vacuum_follow_up"
+          },
+          "task_label": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "medium",
+              "high"
+            ]
+          }
+        }
+      },
+      "ChecklistTasksResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChecklistTaskItem"
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "task_types": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "limitations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -1790,6 +1870,78 @@
           },
           "422": {
             "description": "Não é possível remover coluna com cards/leads associados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tasks/checklist": {
+      "get": {
+        "tags": [
+          "Tasks"
+        ],
+        "summary": "Checklist operacional de tarefas pendentes",
+        "description": "Retorna checklist operacional por empresa (isolamento por company_id). Escopo atual inclui task_type vacuum_follow_up com base em rescue_threshold_hours. Regra SDR nesta fase: somente conversas/leads com ownership do próprio SDR.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Checklist carregado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistTasksResponse"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "lead_id": 12,
+                      "conversation_id": 45,
+                      "lead_name": "Maria",
+                      "phone": "+5511999999999",
+                      "source": "google",
+                      "current_stage": "Negociação",
+                      "last_message_at": "2026-05-07T11:00:00.000000Z",
+                      "last_message_direction": "outbound",
+                      "hours_since_last_message": 13,
+                      "task_type": "vacuum_follow_up",
+                      "task_label": "Lead em vácuo - follow-up pendente",
+                      "priority": "medium"
+                    }
+                  ],
+                  "meta": {
+                    "task_types": [
+                      "vacuum_follow_up"
+                    ],
+                    "limitations": [
+                      "waiting_first_response_not_implemented"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Perfil sem acesso",
             "content": {
               "application/json": {
                 "schema": {
