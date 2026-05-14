@@ -153,3 +153,60 @@ export type ContactsResponse = {
     last_page: number;
   };
 };
+
+export type InboxConversationListItem = {
+  conversation_id: number;
+  lead_id: number;
+  lead_name: string | null;
+  phone: string;
+  source: string;
+  current_stage: string | null;
+  owner_user_id: number | null;
+  owner_name: string | null;
+  last_message_body: string | null;
+  last_message_direction: 'inbound' | 'outbound' | null;
+  last_message_at: string | null;
+  unread_count: number;
+  has_open_task: boolean;
+  service_window_open: boolean;
+  service_window_expires_at: string | null;
+};
+
+export type InboxConversationsResponse = {
+  data: InboxConversationListItem[];
+  meta: {
+    page: number;
+    per_page: number;
+    total: number;
+    last_page: number;
+  };
+};
+
+export type InboxMessageItem = {
+  id: number;
+  direction: 'inbound' | 'outbound';
+  body: string | null;
+  sent_at: string;
+  provider: string | null;
+  external_message_id: string | null;
+  created_at: string;
+};
+
+export type InboxConversationDetail = {
+  conversation_id: number;
+  status: string;
+  lead: {
+    lead_id: number;
+    lead_name: string | null;
+    phone: string;
+    source: string;
+    current_stage: string | null;
+  };
+  owner: {
+    owner_user_id: number | null;
+    owner_name: string | null;
+  };
+  service_window_open: boolean;
+  service_window_expires_at: string | null;
+  messages: InboxMessageItem[];
+};

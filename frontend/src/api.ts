@@ -3,6 +3,8 @@ import type {
   ContactsResponse,
   ChecklistTaskItem,
   DashboardSummaryResponse,
+  InboxConversationDetail,
+  InboxConversationsResponse,
   LeadStageHistoryItem,
   LeadSourceItem,
   LoginResponse,
@@ -173,4 +175,39 @@ export async function exportContactsCsv(
   }
 
   return res.blob();
+}
+
+export async function getInboxConversations(
+  token: string,
+  params: {
+    search?: string;
+    owner_user_id?: number | '';
+    source?: string;
+    stage_id?: number | '';
+    service_window_open?: 'true' | 'false' | '';
+    page?: number;
+    per_page?: number;
+  },
+): Promise<InboxConversationsResponse> {
+  const query = new URLSearchParams();
+
+  if (params.search) query.set('search', params.search);
+  if (params.owner_user_id) query.set('owner_user_id', String(params.owner_user_id));
+  if (params.source) query.set('source', params.source);
+  if (params.stage_id) query.set('stage_id', String(params.stage_id));
+  if (params.service_window_open) query.set('service_window_open', params.service_window_open);
+  if (params.page) query.set('page', String(params.page));
+  if (params.per_page) query.set('per_page', String(params.per_page));
+
+  const path = query.size > 0 ? `/inbox/conversations?${query.toString()}` : '/inbox/conversations';
+  return request<InboxConversationsResponse>(path, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function getInboxConversationDetail(token: string, conversationId: number): Promise<InboxConversationDetail> {
+  const data = await request<{ data: InboxConversationDetail }>(`/inbox/conversations/${conversationId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data.data;
 }

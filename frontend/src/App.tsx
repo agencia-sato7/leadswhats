@@ -4,6 +4,8 @@ import {
   exportContactsCsv,
   getContacts,
   getDashboardSummary,
+  getInboxConversationDetail,
+  getInboxConversations,
   getLeadStageHistory,
   getOverview,
   getPipelineKanban,
@@ -20,6 +22,9 @@ import type {
   ContactItem,
   ContactsResponse,
   DashboardSummaryResponse,
+  InboxConversationDetail,
+  InboxConversationListItem,
+  InboxConversationsResponse,
   LeadSourceItem,
   LeadStageHistoryItem,
   OverviewResponse,
@@ -63,13 +68,9 @@ export function App() {
   const [checklistLoading, setChecklistLoading] = useState(false);
   const [checklistError, setChecklistError] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
+
   const [contacts, setContacts] = useState<ContactItem[]>([]);
-  const [contactsMeta, setContactsMeta] = useState<ContactsResponse['meta']>({
-    page: 1,
-    per_page: 10,
-    total: 0,
-    last_page: 1,
-  });
+  const [contactsMeta, setContactsMeta] = useState<ContactsResponse['meta']>({ page: 1, per_page: 10, total: 0, last_page: 1 });
   const [contactsPage, setContactsPage] = useState(1);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [contactsError, setContactsError] = useState<string | null>(null);
@@ -81,6 +82,22 @@ export function App() {
   const [contactsExportLoading, setContactsExportLoading] = useState(false);
   const [contactsExportError, setContactsExportError] = useState<string | null>(null);
   const [contactsExportSuccess, setContactsExportSuccess] = useState<string | null>(null);
+
+  const [inboxConversations, setInboxConversations] = useState<InboxConversationListItem[]>([]);
+  const [inboxMeta, setInboxMeta] = useState<InboxConversationsResponse['meta']>({ page: 1, per_page: 20, total: 0, last_page: 1 });
+  const [inboxPage, setInboxPage] = useState(1);
+  const [inboxLoading, setInboxLoading] = useState(false);
+  const [inboxError, setInboxError] = useState<string | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
+  const [inboxDetail, setInboxDetail] = useState<InboxConversationDetail | null>(null);
+  const [inboxDetailLoading, setInboxDetailLoading] = useState(false);
+  const [inboxDetailError, setInboxDetailError] = useState<string | null>(null);
+  const [inboxSearch, setInboxSearch] = useState('');
+  const [inboxSearchInput, setInboxSearchInput] = useState('');
+  const [inboxOwnerFilter, setInboxOwnerFilter] = useState<number | ''>('');
+  const [inboxSourceFilter, setInboxSourceFilter] = useState('');
+  const [inboxStageFilter, setInboxStageFilter] = useState<number | ''>('');
+  const [inboxServiceWindowFilter, setInboxServiceWindowFilter] = useState<'' | 'true' | 'false'>('');
 
   const [pipelines, setPipelines] = useState<PipelineListItem[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(null);
@@ -112,11 +129,19 @@ export function App() {
 
   const columnNameById = useMemo(() => {
     const map: Record<number, string> = {};
-    for (const column of kanban?.columns ?? []) {
-      map[column.id] = column.name;
-    }
+    for (const column of kanban?.columns ?? []) map[column.id] = column.name;
     return map;
   }, [kanban]);
+
+  const inboxOwnerOptions = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const conv of inboxConversations) {
+      if (conv.owner_user_id && conv.owner_name) map.set(conv.owner_user_id, conv.owner_name);
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [inboxConversations]);
 
   async function refreshData(token: string) {
     const [overviewData, dashboardData, pipelineData, checklistData] = await Promise.all([
@@ -139,10 +164,7 @@ export function App() {
     }
 
     if (canManageSource) {
-      const [unknownData, recentData] = await Promise.all([
-        getUnknownLeads(token),
-        getRecentLeads(token),
-      ]);
+      const [unknownData, recentData] = await Promise.all([getUnknownLeads(token), getRecentLeads(token)]);
       setUnknownLeads(unknownData);
       setRecentLeads(recentData);
     } else {
@@ -192,6 +214,60 @@ export function App() {
     }
   }
 
+  async function refreshInboxConversations(token: string, page = 1) {
+    setInboxLoading(true);
+    setInboxError(null);
+    try {
+      const response = await getInboxConversations(token, {
+        page,
+        per_page: inboxMeta.per_page,
+        search: inboxSearch || undefined,
+        owner_user_id: inboxOwnerFilter,
+        source: inboxSourceFilter || undefined,
+        stage_id: inboxStageFilter,
+        service_window_open: inboxServiceWindowFilter || '',
+      });
+
+      setInboxConversations(response.data);
+      setInboxMeta(response.meta);
+
+      if (response.data.length === 0) {
+        setSelectedConversationId(null);
+        setInboxDetail(null);
+        return;
+      }
+
+      const selectedStillExists = selectedConversationId
+        ? response.data.some((item) => item.conversation_id === selectedConversationId)
+        : false;
+
+      if (!selectedStillExists) {
+        setSelectedConversationId(response.data[0].conversation_id);
+      }
+    } catch (err) {
+      setInboxConversations([]);
+      setInboxError('Não foi possível carregar a inbox de conversas.');
+      console.error(err);
+    } finally {
+      setInboxLoading(false);
+    }
+  }
+
+  async function refreshInboxDetail(token: string, conversationId: number) {
+    setInboxDetailLoading(true);
+    setInboxDetailError(null);
+    try {
+      const detail = await getInboxConversationDetail(token, conversationId);
+      setInboxDetail(detail);
+    } catch (err) {
+      setInboxDetail(null);
+      setInboxDetailError('Não foi possível carregar o histórico da conversa.');
+      console.error(err);
+    } finally {
+      setInboxDetailLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (!session) return;
 
@@ -224,6 +300,17 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, contactsPage, contactSearch, contactSourceFilter, contactClassificationFilter, contactStageFilter]);
 
+  useEffect(() => {
+    if (!session) return;
+    refreshInboxConversations(session.token, inboxPage).catch((err) => console.error(err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, inboxPage, inboxSearch, inboxOwnerFilter, inboxSourceFilter, inboxStageFilter, inboxServiceWindowFilter]);
+
+  useEffect(() => {
+    if (!session || !selectedConversationId) return;
+    refreshInboxDetail(session.token, selectedConversationId).catch((err) => console.error(err));
+  }, [session, selectedConversationId]);
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -252,6 +339,9 @@ export function App() {
     setSelectedPipelineId(null);
     setKanban(null);
     setContacts([]);
+    setInboxConversations([]);
+    setInboxDetail(null);
+    setSelectedConversationId(null);
     setStageHistoryByLead({});
     setDraggingCard(null);
     setDragOverColumnId(null);
@@ -364,6 +454,17 @@ export function App() {
     setContactsPage(nextPage);
   }
 
+  async function applyInboxFilters(event: React.FormEvent) {
+    event.preventDefault();
+    setInboxSearch(inboxSearchInput.trim());
+    setInboxPage(1);
+  }
+
+  function changeInboxPage(nextPage: number) {
+    if (nextPage < 1 || nextPage > inboxMeta.last_page) return;
+    setInboxPage(nextPage);
+  }
+
   async function handleExportContactsCsv() {
     if (!session || !canManageSource) return;
     setContactsExportLoading(true);
@@ -451,14 +552,146 @@ export function App() {
       ) : null}
 
       <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16 }}>
+        <h2 style={{ marginTop: 0 }}>Inbox / Atendimento</h2>
+
+        <form onSubmit={(event) => void applyInboxFilters(event)} style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              value={inboxSearchInput}
+              onChange={(event) => setInboxSearchInput(event.target.value)}
+              placeholder="Buscar conversa por nome ou telefone"
+              style={{ minWidth: 260 }}
+            />
+            <select value={inboxOwnerFilter} onChange={(event) => setInboxOwnerFilter(event.target.value ? Number(event.target.value) : '')}>
+              <option value="">Todos os responsáveis</option>
+              {inboxOwnerOptions.map((owner) => (
+                <option key={owner.id} value={owner.id}>{owner.name}</option>
+              ))}
+            </select>
+            <select value={inboxSourceFilter} onChange={(event) => setInboxSourceFilter(event.target.value)}>
+              <option value="">Todas as origens</option>
+              <option value="instagram">instagram</option>
+              <option value="google">google</option>
+              <option value="facebook">facebook</option>
+              <option value="indicacao">indicacao</option>
+              <option value="desconhecido">desconhecido</option>
+            </select>
+            <select value={inboxStageFilter} onChange={(event) => setInboxStageFilter(event.target.value ? Number(event.target.value) : '')}>
+              <option value="">Todas as etapas</option>
+              {(kanban?.columns ?? []).map((column) => (
+                <option key={column.id} value={column.id}>{column.name}</option>
+              ))}
+            </select>
+            <select value={inboxServiceWindowFilter} onChange={(event) => setInboxServiceWindowFilter(event.target.value as '' | 'true' | 'false')}>
+              <option value="">Janela: todas</option>
+              <option value="true">Janela aberta</option>
+              <option value="false">Janela fechada</option>
+            </select>
+            <button type="submit">Aplicar filtros</button>
+          </div>
+        </form>
+
+        {inboxLoading ? <p>Carregando inbox...</p> : null}
+        {inboxError ? <p style={{ color: 'crimson' }}>{inboxError}</p> : null}
+
+        {!inboxLoading && !inboxError && inboxConversations.length === 0 ? <p>Nenhuma conversa encontrada com os filtros atuais.</p> : null}
+
+        {!inboxLoading && !inboxError && inboxConversations.length > 0 ? (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 12, alignItems: 'start' }}>
+              <aside style={{ border: '1px solid #eee', borderRadius: 8, maxHeight: 520, overflow: 'auto' }}>
+                {inboxConversations.map((conversation) => {
+                  const isSelected = selectedConversationId === conversation.conversation_id;
+                  return (
+                    <button
+                      key={conversation.conversation_id}
+                      type="button"
+                      onClick={() => setSelectedConversationId(conversation.conversation_id)}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        border: 'none',
+                        borderBottom: '1px solid #eee',
+                        background: isSelected ? '#eef5ff' : '#fff',
+                        padding: 10,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <p style={{ margin: 0 }}><strong>{conversation.lead_name || conversation.phone}</strong></p>
+                      <small style={{ display: 'block' }}>{conversation.phone}</small>
+                      <small style={{ display: 'block' }}>Origem: {conversation.source}</small>
+                      <small style={{ display: 'block' }}>
+                        Última: {conversation.last_message_direction || 'sem direção'} · {formatDateTime(conversation.last_message_at)}
+                      </small>
+                    </button>
+                  );
+                })}
+              </aside>
+
+              <div style={{ border: '1px solid #eee', borderRadius: 8, padding: 12, minHeight: 300 }}>
+                {inboxDetailLoading ? <p>Carregando conversa...</p> : null}
+                {inboxDetailError ? <p style={{ color: 'crimson' }}>{inboxDetailError}</p> : null}
+
+                {!inboxDetailLoading && !inboxDetailError && !inboxDetail ? <p>Selecione uma conversa para ver o histórico.</p> : null}
+
+                {!inboxDetailLoading && !inboxDetailError && inboxDetail ? (
+                  <>
+                    <h3 style={{ marginTop: 0 }}>Conversa #{inboxDetail.conversation_id}</h3>
+                    <small style={{ display: 'block' }}><strong>Lead:</strong> {inboxDetail.lead.lead_name || 'Sem nome'}</small>
+                    <small style={{ display: 'block' }}><strong>Telefone:</strong> {inboxDetail.lead.phone}</small>
+                    <small style={{ display: 'block' }}><strong>Origem:</strong> {inboxDetail.lead.source}</small>
+                    <small style={{ display: 'block' }}><strong>Etapa:</strong> {inboxDetail.lead.current_stage || 'Sem etapa'}</small>
+                    <small style={{ display: 'block' }}><strong>Responsável:</strong> {inboxDetail.owner.owner_name || 'Sem responsável'}</small>
+                    <small style={{ display: 'block', marginBottom: 10 }}>
+                      <strong>Janela:</strong> {inboxDetail.service_window_open ? 'Aberta' : 'Fechada'}
+                      {inboxDetail.service_window_expires_at ? ` · expira em ${formatDateTime(inboxDetail.service_window_expires_at)}` : ''}
+                    </small>
+
+                    <div style={{ display: 'grid', gap: 8, maxHeight: 360, overflow: 'auto', paddingRight: 4 }}>
+                      {inboxDetail.messages.map((message) => (
+                        <div
+                          key={message.id}
+                          style={{
+                            border: '1px solid #ddd',
+                            borderRadius: 8,
+                            padding: 8,
+                            background: message.direction === 'inbound' ? '#f4fff4' : '#f5f8ff',
+                          }}
+                        >
+                          <small style={{ display: 'block' }}>
+                            <strong>{message.direction === 'inbound' ? 'Cliente' : 'Time'}</strong> · {formatDateTime(message.sent_at)}
+                          </small>
+                          <p style={{ margin: '6px 0' }}>{message.body || 'Mensagem sem texto'}</p>
+                          <small style={{ display: 'block' }}>provider: {message.provider || 'n/d'} · id externo: {message.external_message_id || 'n/d'}</small>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      <input disabled placeholder="Envio será habilitado na próxima etapa." style={{ width: '100%', padding: 8 }} />
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+              <button onClick={() => changeInboxPage(inboxMeta.page - 1)} disabled={inboxMeta.page <= 1 || inboxLoading}>Anterior</button>
+              <small>Página {inboxMeta.page} de {Math.max(inboxMeta.last_page, 1)}</small>
+              <button onClick={() => changeInboxPage(inboxMeta.page + 1)} disabled={inboxMeta.page >= inboxMeta.last_page || inboxLoading}>Próxima</button>
+              <small style={{ marginLeft: 8 }}>Total: {inboxMeta.total}</small>
+            </div>
+          </>
+        ) : null}
+      </section>
+
+      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16 }}>
         <h2 style={{ marginTop: 0 }}>Checklist do Dia</h2>
         {checklistLoading ? <p>Carregando checklist...</p> : null}
         {checklistError ? <p style={{ color: 'crimson' }}>{checklistError}</p> : null}
         {copyFeedback ? <p style={{ color: '#1b7f3b' }}>{copyFeedback}</p> : null}
 
-        {!checklistLoading && !checklistError && checklistItems.length === 0 ? (
-          <p>Nenhuma tarefa operacional pendente no momento.</p>
-        ) : null}
+        {!checklistLoading && !checklistError && checklistItems.length === 0 ? <p>Nenhuma tarefa operacional pendente no momento.</p> : null}
 
         {!checklistLoading && !checklistError && checklistItems.length > 0 ? (
           <div style={{ display: 'grid', gap: 10 }}>
@@ -483,39 +716,24 @@ export function App() {
 
       <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16 }}>
         <h2 style={{ marginTop: 0 }}>Kanban</h2>
-        {!canMoveStage ? (
-          <p style={{ marginTop: 0 }}>
-            Você está em perfil <strong>SDR</strong>: pode visualizar o Kanban, mas não pode mover cards.
-          </p>
-        ) : null}
+        {!canMoveStage ? <p style={{ marginTop: 0 }}>Você está em perfil <strong>SDR</strong>: pode visualizar o Kanban, mas não pode mover cards.</p> : null}
 
         {pipelines.length === 0 ? <p>Nenhum pipeline disponível para esta empresa.</p> : null}
 
         {pipelines.length > 1 ? (
           <label style={{ display: 'block', marginBottom: 12 }}>
             Pipeline:
-            <select
-              style={{ marginLeft: 8 }}
-              value={selectedPipelineId ?? ''}
-              onChange={(e) => setSelectedPipelineId(Number(e.target.value))}
-            >
-              {pipelines.map((pipeline) => (
-                <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>
-              ))}
+            <select style={{ marginLeft: 8 }} value={selectedPipelineId ?? ''} onChange={(e) => setSelectedPipelineId(Number(e.target.value))}>
+              {pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}
             </select>
           </label>
         ) : null}
 
-        {pipelines.length === 1 && selectedPipelineId ? (
-          <p style={{ marginTop: 0 }}><strong>Pipeline:</strong> {pipelines[0].name}</p>
-        ) : null}
+        {pipelines.length === 1 && selectedPipelineId ? <p style={{ marginTop: 0 }}><strong>Pipeline:</strong> {pipelines[0].name}</p> : null}
 
         {kanbanLoading ? <p>Carregando Kanban...</p> : null}
         {kanbanError ? <p style={{ color: 'crimson' }}>{kanbanError}</p> : null}
-
-        {!kanbanLoading && !kanbanError && kanban && kanban.columns.length === 0 ? (
-          <p>Kanban vazio: este pipeline ainda não possui colunas.</p>
-        ) : null}
+        {!kanbanLoading && !kanbanError && kanban && kanban.columns.length === 0 ? <p>Kanban vazio: este pipeline ainda não possui colunas.</p> : null}
 
         {!kanbanLoading && !kanbanError && kanban && kanban.columns.length > 0 ? (
           <div style={{ display: 'flex', gap: 12, overflowX: 'auto', alignItems: 'flex-start', paddingBottom: 8 }}>
@@ -523,14 +741,8 @@ export function App() {
               <div
                 key={column.id}
                 onDragOver={(event) => handleColumnDragOver(event, column.id)}
-                onDrop={(event) => {
-                  void handleColumnDrop(event, column.id);
-                }}
-                onDragLeave={() => {
-                  if (dragOverColumnId === column.id) {
-                    setDragOverColumnId(null);
-                  }
-                }}
+                onDrop={(event) => { void handleColumnDrop(event, column.id); }}
+                onDragLeave={() => { if (dragOverColumnId === column.id) setDragOverColumnId(null); }}
                 style={{
                   minWidth: 280,
                   maxWidth: 320,
@@ -553,9 +765,7 @@ export function App() {
                       draggable={canMoveStage}
                       onDragStart={() => handleCardDragStart(card.lead_id, column.id)}
                       onDragEnd={handleDragEnd}
-                      onMouseDown={() => {
-                        if (canMoveStage) setPressedCardId(card.lead_id);
-                      }}
+                      onMouseDown={() => { if (canMoveStage) setPressedCardId(card.lead_id); }}
                       onMouseUp={() => setPressedCardId(null)}
                       onMouseLeave={() => setPressedCardId(null)}
                       style={{
@@ -616,12 +826,7 @@ export function App() {
 
         <form onSubmit={(event) => void applyContactsFilters(event)} style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <input
-              value={contactSearchInput}
-              onChange={(event) => setContactSearchInput(event.target.value)}
-              placeholder="Buscar por nome ou telefone"
-              style={{ minWidth: 260 }}
-            />
+            <input value={contactSearchInput} onChange={(event) => setContactSearchInput(event.target.value)} placeholder="Buscar por nome ou telefone" style={{ minWidth: 260 }} />
             <select value={contactSourceFilter} onChange={(event) => setContactSourceFilter(event.target.value)}>
               <option value="">Todas as origens</option>
               <option value="instagram">instagram</option>
@@ -630,24 +835,14 @@ export function App() {
               <option value="indicacao">indicacao</option>
               <option value="desconhecido">desconhecido</option>
             </select>
-            <select
-              value={contactClassificationFilter}
-              onChange={(event) => setContactClassificationFilter(event.target.value as '' | 'lead_novo' | 'lead_repetido')}
-            >
+            <select value={contactClassificationFilter} onChange={(event) => setContactClassificationFilter(event.target.value as '' | 'lead_novo' | 'lead_repetido')}>
               <option value="">Todas as classificações</option>
               <option value="lead_novo">lead_novo</option>
               <option value="lead_repetido">lead_repetido</option>
             </select>
-            <select
-              value={contactStageFilter}
-              onChange={(event) => setContactStageFilter(event.target.value ? Number(event.target.value) : '')}
-            >
+            <select value={contactStageFilter} onChange={(event) => setContactStageFilter(event.target.value ? Number(event.target.value) : '')}>
               <option value="">Todas as etapas</option>
-              {(kanban?.columns ?? []).map((column) => (
-                <option key={column.id} value={column.id}>
-                  {column.name}
-                </option>
-              ))}
+              {(kanban?.columns ?? []).map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
             </select>
             <button type="submit">Aplicar filtros</button>
             {canManageSource ? (
@@ -663,9 +858,7 @@ export function App() {
         {contactsExportError ? <p style={{ color: 'crimson' }}>{contactsExportError}</p> : null}
         {contactsExportSuccess ? <p style={{ color: '#1b7f3b' }}>{contactsExportSuccess}</p> : null}
 
-        {!contactsLoading && !contactsError && contacts.length === 0 ? (
-          <p>Nenhum contato encontrado com os filtros atuais.</p>
-        ) : null}
+        {!contactsLoading && !contactsError && contacts.length === 0 ? <p>Nenhum contato encontrado com os filtros atuais.</p> : null}
 
         {!contactsLoading && !contactsError && contacts.length > 0 ? (
           <>
@@ -685,16 +878,9 @@ export function App() {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-              <button onClick={() => changeContactsPage(contactsMeta.page - 1)} disabled={contactsMeta.page <= 1 || contactsLoading}>
-                Anterior
-              </button>
+              <button onClick={() => changeContactsPage(contactsMeta.page - 1)} disabled={contactsMeta.page <= 1 || contactsLoading}>Anterior</button>
               <small>Página {contactsMeta.page} de {Math.max(contactsMeta.last_page, 1)}</small>
-              <button
-                onClick={() => changeContactsPage(contactsMeta.page + 1)}
-                disabled={contactsMeta.page >= contactsMeta.last_page || contactsLoading}
-              >
-                Próxima
-              </button>
+              <button onClick={() => changeContactsPage(contactsMeta.page + 1)} disabled={contactsMeta.page >= contactsMeta.last_page || contactsLoading}>Próxima</button>
               <small style={{ marginLeft: 8 }}>Total: {contactsMeta.total}</small>
             </div>
           </>
@@ -734,9 +920,7 @@ export function App() {
             {recentLeads.length === 0 ? <p>Nenhum lead recente.</p> : null}
             {recentLeads.map((lead) => (
               <div key={lead.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 10 }}>
-                <p style={{ margin: 0 }}>
-                  <strong>{lead.name || 'Sem nome'}</strong> - {lead.phone_e164}
-                </p>
+                <p style={{ margin: 0 }}><strong>{lead.name || 'Sem nome'}</strong> - {lead.phone_e164}</p>
                 <small>Origem atual: <strong>{lead.source}</strong> ({lead.source_method})</small>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
                   {QUICK_SOURCES.map((source) => (
