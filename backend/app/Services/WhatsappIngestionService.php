@@ -7,6 +7,7 @@ use App\Models\Lead;
 use App\Models\Message;
 use App\Services\Domain\ConversationResolverService;
 use App\Services\Domain\FirstResponseCalculatorService;
+use App\Services\Domain\KanbanInitialPlacementService;
 use App\Services\Domain\LeadClassifierService;
 use App\Services\Domain\LeadSourceService;
 use App\Services\Domain\RescueDetectorService;
@@ -20,6 +21,7 @@ class WhatsappIngestionService
         private readonly FirstResponseCalculatorService $firstResponseCalculator,
         private readonly RescueDetectorService $rescueDetector,
         private readonly LeadSourceService $leadSourceService,
+        private readonly KanbanInitialPlacementService $kanbanInitialPlacementService,
     ) {
     }
 
@@ -76,6 +78,7 @@ class WhatsappIngestionService
             ]);
 
             $this->leadSourceService->applyInitialSource($lead, $source);
+            $this->kanbanInitialPlacementService->placeLeadInInitialColumnIfMissing($company->id, $lead->id);
         } elseif ($classification === "lead_repetido") {
             $lead->is_repeat_lead = true;
             $this->leadSourceService->applyAutoSourceFromReentry($lead, $source);
