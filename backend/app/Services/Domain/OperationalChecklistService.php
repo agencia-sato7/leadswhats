@@ -22,28 +22,50 @@ class OperationalChecklistService
      */
     public function checklistForUser(User $user): array
     {
-        $companyId = (int) $user->company_id;
-        $rescueThresholdHours = max(1, $this->companySettingsService->rescueThresholdHours($companyId));
+        $conversations = $this->baseConversationsQuery((int) $user->company_id)
+            // Regra atual para SDR: checklist limitado ao próprio owner da conversa ou lead.
+            ->when(($user->role?->value ?? (string) $user->role) === 'sdr', function ($query) use ($user) {
+                $query->where(function ($scopeQuery) use ($user) {
+                    $scopeQuery->where('owner_user_id', $user->id)
+                        ->orWhereIn('lead_id', Lead::query()
+                            ->where('company_id', $user->company_id)
+                            ->where('owner_user_id', $user->id)
+                            ->select('id'));
+                });
+            })
+            ->orderByDesc('last_message_at')
+            ->get(['id', 'lead_id', 'last_message_at', 'owner_user_id']);
 
-        $conversationsQuery = Conversation::query()
+        return $this->buildVacuumItemsForCompany((int) $user->company_id, $conversations);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function checklistForCompany(int $companyId): array
+    {
+        $conversations = $this->baseConversationsQuery($companyId)
+            ->orderByDesc('last_message_at')
+            ->get(['id', 'lead_id', 'last_message_at', 'owner_user_id']);
+
+        return $this->buildVacuumItemsForCompany($companyId, $conversations);
+    }
+
+    private function baseConversationsQuery(int $companyId)
+    {
+        return Conversation::query()
             ->where('company_id', $companyId)
             ->where('status', 'active')
             ->whereNotNull('last_message_at');
+    }
 
-        // Regra atual para SDR: checklist limitado ao próprio owner da conversa ou lead.
-        if (($user->role?->value ?? (string) $user->role) === 'sdr') {
-            $conversationsQuery->where(function ($query) use ($user) {
-                $query->where('owner_user_id', $user->id)
-                    ->orWhereIn('lead_id', Lead::query()
-                        ->where('company_id', $user->company_id)
-                        ->where('owner_user_id', $user->id)
-                        ->select('id'));
-            });
-        }
-
-        $conversations = $conversationsQuery
-            ->orderByDesc('last_message_at')
-            ->get(['id', 'lead_id', 'last_message_at', 'owner_user_id']);
+    /**
+     * @param \Illuminate\Support\Collection<int, Conversation> $conversations
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildVacuumItemsForCompany(int $companyId, $conversations): array
+    {
+        $rescueThresholdHours = max(1, $this->companySettingsService->rescueThresholdHours($companyId));
 
         if ($conversations->isEmpty()) {
             return [];

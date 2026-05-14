@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Models\Company;
+use App\Models\CompanyBusinessSetting;
 use App\Models\Conversation;
 use App\Models\Lead;
 use App\Models\LeadSourceHistory;
@@ -135,6 +136,19 @@ class DashboardMetricsServiceTest extends TestCase
             "changed_at" => Carbon::parse("2026-05-06 13:00:00"),
         ]);
 
+        CompanyBusinessSetting::create([
+            "company_id" => $companyA->id,
+            "timezone" => "America/Sao_Paulo",
+            "workday_start_time" => "08:00:00",
+            "workday_end_time" => "18:00:00",
+            "lunch_start_time" => "12:00:00",
+            "lunch_end_time" => "13:00:00",
+            "working_days" => [1, 2, 3, 4, 5],
+            "repeated_lead_window_days" => 90,
+            "rescue_threshold_hours" => 12,
+            "webhook_token" => null,
+        ]);
+
         $service = app(DashboardMetricsService::class);
         $summary = $service->summaryForCompany($companyA->id);
 
@@ -147,6 +161,8 @@ class DashboardMetricsServiceTest extends TestCase
         $this->assertSame(1, $summary["metrics"]["active_conversations"]);
         $this->assertSame(1, $summary["metrics"]["unknown_source_leads"]);
         $this->assertSame(1, $summary["metrics"]["manual_classifications_today"]);
+        $this->assertSame(0, $summary["metrics"]["open_tasks"]);
+        $this->assertSame(0, $summary["metrics"]["vacuum_follow_up_tasks"]);
 
         Carbon::setTestNow();
     }

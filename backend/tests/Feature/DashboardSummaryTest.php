@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Company;
+use App\Models\CompanyBusinessSetting;
 use App\Models\Conversation;
 use App\Models\Lead;
 use App\Models\LeadSourceHistory;
@@ -160,6 +161,8 @@ class DashboardSummaryTest extends TestCase
                     "active_conversations",
                     "unknown_source_leads",
                     "manual_classifications_today",
+                    "open_tasks",
+                    "vacuum_follow_up_tasks",
                 ],
             ])
             ->assertJsonPath("date", "2026-05-06")
@@ -170,7 +173,115 @@ class DashboardSummaryTest extends TestCase
             ->assertJsonPath("metrics.rescues_today", 1)
             ->assertJsonPath("metrics.active_conversations", 1)
             ->assertJsonPath("metrics.unknown_source_leads", 1)
-            ->assertJsonPath("metrics.manual_classifications_today", 1);
+            ->assertJsonPath("metrics.manual_classifications_today", 1)
+            ->assertJsonPath("metrics.open_tasks", 0)
+            ->assertJsonPath("metrics.vacuum_follow_up_tasks", 0);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_dashboard_summary_counts_operational_checklist_tasks(): void
+    {
+        Carbon::setTestNow("2026-05-07 12:00:00");
+
+        $companyA = Company::create([
+            "name" => "Empresa A",
+            "slug" => "empresa-a",
+            "timezone" => "America/Sao_Paulo",
+        ]);
+
+        $companyB = Company::create([
+            "name" => "Empresa B",
+            "slug" => "empresa-b",
+            "timezone" => "America/Sao_Paulo",
+        ]);
+
+        CompanyBusinessSetting::create([
+            "company_id" => $companyA->id,
+            "timezone" => "America/Sao_Paulo",
+            "workday_start_time" => "08:00:00",
+            "workday_end_time" => "18:00:00",
+            "lunch_start_time" => "12:00:00",
+            "lunch_end_time" => "13:00:00",
+            "working_days" => [1, 2, 3, 4, 5],
+            "repeated_lead_window_days" => 90,
+            "rescue_threshold_hours" => 12,
+            "webhook_token" => null,
+        ]);
+
+        $gestorA = User::create([
+            "company_id" => $companyA->id,
+            "name" => "Gestor A",
+            "email" => "gestor.tasks.dashboard@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "gestor",
+            "active" => true,
+        ]);
+
+        $leadA = Lead::create([
+            "company_id" => $companyA->id,
+            "name" => "Lead A",
+            "phone_e164" => "+5511955552001",
+            "source" => "google",
+        ]);
+
+        $conversationA = Conversation::create([
+            "company_id" => $companyA->id,
+            "lead_id" => $leadA->id,
+            "status" => "active",
+            "started_at" => Carbon::parse("2026-05-06 09:00:00"),
+            "last_message_at" => Carbon::parse("2026-05-06 22:00:00"),
+        ]);
+
+        Message::create([
+            "company_id" => $companyA->id,
+            "lead_id" => $leadA->id,
+            "conversation_id" => $conversationA->id,
+            "provider" => "whatsapp",
+            "direction" => "outbound",
+            "channel" => "text",
+            "sent_at" => Carbon::parse("2026-05-06 22:00:00"),
+            "is_rescue" => false,
+        ]);
+
+        $leadB = Lead::create([
+            "company_id" => $companyB->id,
+            "name" => "Lead B",
+            "phone_e164" => "+5511955552999",
+            "source" => "google",
+        ]);
+
+        $conversationB = Conversation::create([
+            "company_id" => $companyB->id,
+            "lead_id" => $leadB->id,
+            "status" => "active",
+            "started_at" => Carbon::parse("2026-05-06 09:00:00"),
+            "last_message_at" => Carbon::parse("2026-05-06 20:00:00"),
+        ]);
+
+        Message::create([
+            "company_id" => $companyB->id,
+            "lead_id" => $leadB->id,
+            "conversation_id" => $conversationB->id,
+            "provider" => "whatsapp",
+            "direction" => "outbound",
+            "channel" => "text",
+            "sent_at" => Carbon::parse("2026-05-06 20:00:00"),
+            "is_rescue" => false,
+        ]);
+
+        $token = $this->postJson("/api/v1/auth/login", [
+            "email" => $gestorA->email,
+            "password" => "12345678",
+        ])->json("token");
+
+        $response = $this->withHeaders([
+            "Authorization" => "Bearer " . $token,
+        ])->getJson("/api/v1/dashboard/summary");
+
+        $response->assertOk()
+            ->assertJsonPath("metrics.open_tasks", 1)
+            ->assertJsonPath("metrics.vacuum_follow_up_tasks", 1);
 
         Carbon::setTestNow();
     }

@@ -9,6 +9,11 @@ use App\Models\Message;
 
 class DashboardMetricsService
 {
+    public function __construct(
+        private readonly OperationalChecklistService $operationalChecklistService,
+    ) {
+    }
+
     /**
      * @return array{date:string,metrics:array<string,int>}
      */
@@ -58,6 +63,13 @@ class DashboardMetricsService
             ->where("changed_at", ">=", $todayStart)
             ->count();
 
+        $checklistItems = $this->operationalChecklistService->checklistForCompany($companyId);
+        $openTasks = count($checklistItems);
+        $vacuumFollowUpTasks = count(array_filter(
+            $checklistItems,
+            static fn (array $item): bool => ($item["task_type"] ?? null) === "vacuum_follow_up"
+        ));
+
         return [
             "date" => today()->toDateString(),
             "metrics" => [
@@ -69,6 +81,8 @@ class DashboardMetricsService
                 "active_conversations" => $activeConversations,
                 "unknown_source_leads" => $unknownSourceLeads,
                 "manual_classifications_today" => $manualClassificationsToday,
+                "open_tasks" => $openTasks,
+                "vacuum_follow_up_tasks" => $vacuumFollowUpTasks,
             ],
         ];
     }
