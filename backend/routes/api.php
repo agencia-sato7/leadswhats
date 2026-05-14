@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BootstrapController;
+use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\LeadStageHistoryController;
 use App\Http\Controllers\Api\LeadSourceController;
@@ -25,6 +26,11 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/dashboard/summary', [DashboardController::class, 'summary'])
             ->middleware('role:admin,gestor,sdr');
+
+        Route::get('/contacts', [ContactController::class, 'index'])
+            ->middleware('role:admin,gestor,sdr');
+        Route::get('/contacts/export', [ContactController::class, 'export'])
+            ->middleware('role:admin,gestor');
 
         Route::get('/tasks/checklist', [TaskChecklistController::class, 'index'])
             ->middleware('role:admin,gestor,sdr');

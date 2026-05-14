@@ -329,6 +329,12 @@
               },
               "manual_classifications_today": {
                 "type": "integer"
+              },
+              "open_tasks": {
+                "type": "integer"
+              },
+              "vacuum_follow_up_tasks": {
+                "type": "integer"
               }
             }
           }
@@ -823,6 +829,115 @@
             }
           }
         }
+      },
+      "ContactItem": {
+        "type": "object",
+        "required": [
+          "lead_id",
+          "phone",
+          "source",
+          "source_method",
+          "classification",
+          "created_at"
+        ],
+        "properties": {
+          "lead_id": {
+            "type": "integer",
+            "example": 123
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "example": "Maria Silva"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+5511991111111"
+          },
+          "source": {
+            "type": "string",
+            "example": "instagram"
+          },
+          "source_method": {
+            "type": "string",
+            "example": "manual"
+          },
+          "classification": {
+            "type": "string",
+            "enum": [
+              "lead_novo",
+              "lead_repetido"
+            ],
+            "example": "lead_novo"
+          },
+          "current_stage": {
+            "type": "string",
+            "nullable": true,
+            "example": "Novo Contato"
+          },
+          "last_message_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-05-07T09:00:00.000000Z"
+          },
+          "last_message_direction": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "inbound",
+              "outbound"
+            ],
+            "example": "outbound"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-05T10:00:00.000000Z"
+          }
+        }
+      },
+      "ContactsResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContactItem"
+            }
+          },
+          "meta": {
+            "type": "object",
+            "required": [
+              "page",
+              "per_page",
+              "total",
+              "last_page"
+            ],
+            "properties": {
+              "page": {
+                "type": "integer",
+                "example": 1
+              },
+              "per_page": {
+                "type": "integer",
+                "example": 20
+              },
+              "total": {
+                "type": "integer",
+                "example": 42
+              },
+              "last_page": {
+                "type": "integer",
+                "example": 3
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -1061,6 +1176,21 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/DashboardSummaryResponse"
+                },
+                "example": {
+                  "date": "2026-05-07",
+                  "metrics": {
+                    "new_leads_today": 5,
+                    "repeat_leads_today": 1,
+                    "avg_first_response_seconds": 132,
+                    "vacuum_24h_open": 2,
+                    "rescues_today": 1,
+                    "active_conversations": 7,
+                    "unknown_source_leads": 3,
+                    "manual_classifications_today": 2,
+                    "open_tasks": 4,
+                    "vacuum_follow_up_tasks": 4
+                  }
                 }
               }
             }
@@ -1942,6 +2072,357 @@
           },
           "403": {
             "description": "Perfil sem acesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/contacts": {
+      "get": {
+        "tags": [
+          "Contacts"
+        ],
+        "summary": "Lista contatos/leads da empresa autenticada",
+        "description": "Retorna contatos da empresa autenticada com filtros e paginação. Multi-tenancy por company_id. Regra SDR: apenas leads/conversas com ownership do próprio SDR (lead.owner_user_id ou conversation.owner_user_id).",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Busca por nome ou telefone."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtra por source exata."
+          },
+          {
+            "name": "classification",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "lead_novo",
+                "lead_repetido"
+              ]
+            },
+            "description": "Filtra por classificação do lead."
+          },
+          {
+            "name": "stage_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Filtra por etapa atual (kanban column id)."
+          },
+          {
+            "name": "kanban_column_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Alias de stage_id."
+          },
+          {
+            "name": "has_unknown_source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "true filtra source desconhecido; false exclui desconhecido."
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Data inicial de criação (YYYY-MM-DD)."
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Data final de criação (YYYY-MM-DD)."
+          },
+          {
+            "name": "last_message_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Data/hora inicial da última mensagem."
+          },
+          {
+            "name": "last_message_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Data/hora final da última mensagem."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de contatos paginada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactsResponse"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "lead_id": 123,
+                      "name": "Maria Silva",
+                      "phone": "+5511991111111",
+                      "source": "instagram",
+                      "source_method": "manual",
+                      "classification": "lead_novo",
+                      "current_stage": "Novo Contato",
+                      "last_message_at": "2026-05-07T09:00:00.000000Z",
+                      "last_message_direction": "outbound",
+                      "created_at": "2026-05-05T10:00:00.000000Z"
+                    }
+                  ],
+                  "meta": {
+                    "page": 1,
+                    "per_page": 20,
+                    "total": 1,
+                    "last_page": 1
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Perfil sem acesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Erro de validação nos filtros",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/contacts/export": {
+      "get": {
+        "tags": [
+          "Contacts"
+        ],
+        "summary": "Exporta contatos filtrados em CSV",
+        "description": "Exporta contatos da empresa autenticada em CSV, reutilizando os mesmos filtros de GET /api/v1/contacts. Acesso restrito a admin e gestor.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Busca por nome ou telefone."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filtra por source exata."
+          },
+          {
+            "name": "classification",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "lead_novo",
+                "lead_repetido"
+              ]
+            },
+            "description": "Filtra por classificação do lead."
+          },
+          {
+            "name": "stage_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Filtra por etapa atual (kanban column id)."
+          },
+          {
+            "name": "kanban_column_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Alias de stage_id."
+          },
+          {
+            "name": "has_unknown_source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "true filtra source desconhecido; false exclui desconhecido."
+          },
+          {
+            "name": "created_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Data inicial de criação (YYYY-MM-DD)."
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Data final de criação (YYYY-MM-DD)."
+          },
+          {
+            "name": "last_message_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Data/hora inicial da última mensagem."
+          },
+          {
+            "name": "last_message_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Data/hora final da última mensagem."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV gerado com sucesso",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "example": "phone,name,source,classification,current_stage,created_at,last_message_at\\n+5511991111111,Maria Silva,instagram,lead_novo,Novo Contato,2026-05-05T10:00:00.000000Z,2026-05-07T09:00:00.000000Z\\n"
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Perfil sem acesso (SDR não pode exportar)",
             "content": {
               "application/json": {
                 "schema": {
