@@ -1213,6 +1213,81 @@
             "$ref": "#/components/schemas/InboxConversationDetail"
           }
         }
+      },
+      "InboxSendMessageRequest": {
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "example": "Olá! Como posso ajudar?"
+          }
+        }
+      },
+      "InboxSendMessageResponse": {
+        "type": "object",
+        "required": [
+          "message",
+          "data"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Message sent successfully."
+          },
+          "data": {
+            "type": "object",
+            "required": [
+              "id",
+              "conversation_id",
+              "lead_id",
+              "direction",
+              "body",
+              "provider",
+              "sent_at"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer",
+                "example": 1001
+              },
+              "conversation_id": {
+                "type": "integer",
+                "example": 501
+              },
+              "lead_id": {
+                "type": "integer",
+                "example": 123
+              },
+              "direction": {
+                "type": "string",
+                "example": "outbound"
+              },
+              "body": {
+                "type": "string",
+                "example": "Olá! Como posso ajudar?"
+              },
+              "provider": {
+                "type": "string",
+                "example": "fake"
+              },
+              "external_message_id": {
+                "type": "string",
+                "nullable": true,
+                "example": "fake-01f4e6ab5ef645fdbb07f8cb"
+              },
+              "sent_at": {
+                "type": "string",
+                "format": "date-time",
+                "example": "2026-05-14T10:00:00.000000Z"
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -2917,6 +2992,73 @@
           }
         },
         "description": "Retorna detalhe da conversa com histórico de mensagens. A abertura da conversa registra evento de auditoria (conversation_opened)."
+      },
+      "post": {
+        "tags": [
+          "Inbox"
+        ],
+        "summary": "Envia mensagem outbound na conversa da Inbox",
+        "description": "Envia mensagem outbound usando o provider configurado no backend (no ambiente atual pode ser fake/local). Só permite envio com service window aberta.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InboxSendMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mensagem enviada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxSendMessageResponse"
+                },
+                "example": {
+                  "message": "Message sent successfully.",
+                  "data": {
+                    "id": 1001,
+                    "conversation_id": 501,
+                    "lead_id": 123,
+                    "direction": "outbound",
+                    "body": "Olá! Como posso ajudar?",
+                    "provider": "fake",
+                    "external_message_id": "fake-01f4e6ab5ef645fdbb07f8cb",
+                    "sent_at": "2026-05-14T10:00:00.000000Z"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado"
+          },
+          "404": {
+            "description": "Conversa não encontrada"
+          },
+          "422": {
+            "description": "Body inválido, janela de atendimento fechada ou erro no provider"
+          }
+        }
       }
     }
   }

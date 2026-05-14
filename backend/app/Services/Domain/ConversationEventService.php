@@ -8,6 +8,7 @@ use App\Models\User;
 class ConversationEventService
 {
     private const EVENT_CONVERSATION_OPENED = 'conversation_opened';
+    private const EVENT_MESSAGE_SENT = 'message_sent';
     private const DEDUP_SECONDS = 10;
 
     /**
@@ -42,5 +43,24 @@ class ConversationEventService
             'created_at' => now(),
         ]);
     }
-}
 
+    /**
+     * @param array<string, mixed>|null $metadata
+     */
+    public function registerMessageSent(
+        User $user,
+        int $conversationId,
+        int $leadId,
+        ?array $metadata = null,
+    ): void {
+        ConversationEvent::create([
+            'company_id' => $user->company_id,
+            'conversation_id' => $conversationId,
+            'lead_id' => $leadId,
+            'user_id' => $user->id,
+            'event_type' => self::EVENT_MESSAGE_SENT,
+            'metadata' => $metadata,
+            'created_at' => now(),
+        ]);
+    }
+}
