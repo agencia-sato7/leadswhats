@@ -142,3 +142,35 @@ export async function getContacts(
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+export async function exportContactsCsv(
+  token: string,
+  params: {
+    search?: string;
+    source?: string;
+    classification?: 'lead_novo' | 'lead_repetido' | '';
+    stage_id?: number | '';
+  },
+): Promise<Blob> {
+  const query = new URLSearchParams();
+
+  if (params.search) query.set('search', params.search);
+  if (params.source) query.set('source', params.source);
+  if (params.classification) query.set('classification', params.classification);
+  if (params.stage_id) query.set('stage_id', String(params.stage_id));
+
+  const path = query.size > 0 ? `/contacts/export?${query.toString()}` : '/contacts/export';
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Erro HTTP ${res.status}`);
+  }
+
+  return res.blob();
+}

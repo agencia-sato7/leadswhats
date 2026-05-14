@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   classifyLeadSource,
+  exportContactsCsv,
   getContacts,
   getDashboardSummary,
   getLeadStageHistory,
@@ -77,6 +78,9 @@ export function App() {
   const [contactSourceFilter, setContactSourceFilter] = useState('');
   const [contactClassificationFilter, setContactClassificationFilter] = useState<'' | 'lead_novo' | 'lead_repetido'>('');
   const [contactStageFilter, setContactStageFilter] = useState<number | ''>('');
+  const [contactsExportLoading, setContactsExportLoading] = useState(false);
+  const [contactsExportError, setContactsExportError] = useState<string | null>(null);
+  const [contactsExportSuccess, setContactsExportSuccess] = useState<string | null>(null);
 
   const [pipelines, setPipelines] = useState<PipelineListItem[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(null);
@@ -360,6 +364,38 @@ export function App() {
     setContactsPage(nextPage);
   }
 
+  async function handleExportContactsCsv() {
+    if (!session || !canManageSource) return;
+    setContactsExportLoading(true);
+    setContactsExportError(null);
+    setContactsExportSuccess(null);
+
+    try {
+      const csvBlob = await exportContactsCsv(session.token, {
+        search: contactSearch || undefined,
+        source: contactSourceFilter || undefined,
+        classification: contactClassificationFilter || '',
+        stage_id: contactStageFilter,
+      });
+
+      const fileUrl = URL.createObjectURL(csvBlob);
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.download = 'contacts-export.csv';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(fileUrl);
+
+      setContactsExportSuccess('Download iniciado.');
+    } catch (err) {
+      console.error(err);
+      setContactsExportError('Não foi possível exportar os contatos em CSV.');
+    } finally {
+      setContactsExportLoading(false);
+    }
+  }
+
   if (!session) {
     return (
       <main style={{ maxWidth: 420, margin: '40px auto', fontFamily: 'system-ui', padding: 16 }}>
@@ -614,11 +650,18 @@ export function App() {
               ))}
             </select>
             <button type="submit">Aplicar filtros</button>
+            {canManageSource ? (
+              <button type="button" onClick={() => void handleExportContactsCsv()} disabled={contactsExportLoading}>
+                {contactsExportLoading ? 'Exportando...' : 'Exportar CSV'}
+              </button>
+            ) : null}
           </div>
         </form>
 
         {contactsLoading ? <p>Carregando contatos...</p> : null}
         {contactsError ? <p style={{ color: 'crimson' }}>{contactsError}</p> : null}
+        {contactsExportError ? <p style={{ color: 'crimson' }}>{contactsExportError}</p> : null}
+        {contactsExportSuccess ? <p style={{ color: '#1b7f3b' }}>{contactsExportSuccess}</p> : null}
 
         {!contactsLoading && !contactsError && contacts.length === 0 ? (
           <p>Nenhum contato encontrado com os filtros atuais.</p>
