@@ -5,6 +5,7 @@ import type {
   DashboardSummaryResponse,
   InboxConversationDetail,
   InboxConversationsResponse,
+  InboxSendMessageResponse,
   LeadStageHistoryItem,
   LeadSourceItem,
   LoginResponse,
@@ -210,4 +211,12 @@ export async function getInboxConversationDetail(token: string, conversationId: 
     headers: { Authorization: `Bearer ${token}` },
   });
   return data.data;
+}
+
+export function sendInboxMessage(token: string, conversationId: number, body: string): Promise<InboxSendMessageResponse> {
+  return request<InboxSendMessageResponse>(`/inbox/conversations/${conversationId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ body }),
+  });
 }

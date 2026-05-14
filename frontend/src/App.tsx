@@ -15,6 +15,7 @@ import {
   getUnknownLeads,
   login,
   moveLeadStage,
+  sendInboxMessage,
 } from './api';
 import type {
   AuthUser,
@@ -98,6 +99,10 @@ export function App() {
   const [inboxSourceFilter, setInboxSourceFilter] = useState('');
   const [inboxStageFilter, setInboxStageFilter] = useState<number | ''>('');
   const [inboxServiceWindowFilter, setInboxServiceWindowFilter] = useState<'' | 'true' | 'false'>('');
+  const [inboxReplyBody, setInboxReplyBody] = useState('');
+  const [inboxSendLoading, setInboxSendLoading] = useState(false);
+  const [inboxSendError, setInboxSendError] = useState<string | null>(null);
+  const [inboxSendSuccess, setInboxSendSuccess] = useState<string | null>(null);
 
   const [pipelines, setPipelines] = useState<PipelineListItem[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(null);
@@ -268,6 +273,17 @@ export function App() {
     }
   }
 
+  function parseApiErrorMessage(error: unknown, fallback: string): string {
+    if (!(error instanceof Error) || !error.message) return fallback;
+    try {
+      const parsed = JSON.parse(error.message) as { message?: string };
+      if (parsed?.message) return parsed.message;
+    } catch {
+      return error.message;
+    }
+    return fallback;
+  }
+
   useEffect(() => {
     if (!session) return;
 
@@ -308,6 +324,8 @@ export function App() {
 
   useEffect(() => {
     if (!session || !selectedConversationId) return;
+    setInboxSendError(null);
+    setInboxSendSuccess(null);
     refreshInboxDetail(session.token, selectedConversationId).catch((err) => console.error(err));
   }, [session, selectedConversationId]);
 
@@ -342,6 +360,10 @@ export function App() {
     setInboxConversations([]);
     setInboxDetail(null);
     setSelectedConversationId(null);
+    setInboxReplyBody('');
+    setInboxSendLoading(false);
+    setInboxSendError(null);
+    setInboxSendSuccess(null);
     setStageHistoryByLead({});
     setDraggingCard(null);
     setDragOverColumnId(null);
@@ -463,6 +485,39 @@ export function App() {
   function changeInboxPage(nextPage: number) {
     if (nextPage < 1 || nextPage > inboxMeta.last_page) return;
     setInboxPage(nextPage);
+  }
+
+  async function handleInboxSendMessage(event: React.FormEvent) {
+    event.preventDefault();
+    if (!session || !selectedConversationId || !inboxDetail || inboxSendLoading) return;
+
+    setInboxSendError(null);
+    setInboxSendSuccess(null);
+
+    if (!inboxDetail.service_window_open) {
+      setInboxSendError('Janela de atendimento fechada. Aguarde nova mensagem inbound para enviar.');
+      return;
+    }
+
+    const body = inboxReplyBody.trim();
+    if (!body) {
+      setInboxSendError('Digite uma mensagem antes de enviar.');
+      return;
+    }
+
+    setInboxSendLoading(true);
+    try {
+      await sendInboxMessage(session.token, selectedConversationId, body);
+      setInboxReplyBody('');
+      setInboxSendSuccess('Mensagem enviada com sucesso.');
+      await refreshInboxDetail(session.token, selectedConversationId);
+      await refreshInboxConversations(session.token, inboxPage);
+    } catch (err) {
+      setInboxSendError(parseApiErrorMessage(err, 'Não foi possível enviar a mensagem.'));
+      console.error(err);
+    } finally {
+      setInboxSendLoading(false);
+    }
   }
 
   async function handleExportContactsCsv() {
@@ -667,9 +722,31 @@ export function App() {
                       ))}
                     </div>
 
-                    <div style={{ marginTop: 12 }}>
-                      <input disabled placeholder="Envio será habilitado na próxima etapa." style={{ width: '100%', padding: 8 }} />
-                    </div>
+                    <form onSubmit={(event) => void handleInboxSendMessage(event)} style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+                      {!inboxDetail.service_window_open ? (
+                        <small style={{ color: '#8a5a00' }}>
+                          Janela de atendimento fechada. O envio será habilitado após nova mensagem inbound do cliente.
+                        </small>
+                      ) : null}
+                      {inboxSendError ? <small style={{ color: 'crimson' }}>{inboxSendError}</small> : null}
+                      {inboxSendSuccess ? <small style={{ color: '#1b7f3b' }}>{inboxSendSuccess}</small> : null}
+                      <textarea
+                        value={inboxReplyBody}
+                        onChange={(event) => setInboxReplyBody(event.target.value)}
+                        placeholder={inboxDetail.service_window_open ? 'Digite sua resposta...' : 'Envio indisponível com janela fechada'}
+                        disabled={inboxSendLoading || !inboxDetail.service_window_open}
+                        rows={3}
+                        style={{ width: '100%', padding: 8, resize: 'vertical' }}
+                      />
+                      <div>
+                        <button
+                          type="submit"
+                          disabled={inboxSendLoading || !inboxDetail.service_window_open || inboxReplyBody.trim().length === 0}
+                        >
+                          {inboxSendLoading ? 'Enviando...' : 'Enviar'}
+                        </button>
+                      </div>
+                    </form>
                   </>
                 ) : null}
               </div>

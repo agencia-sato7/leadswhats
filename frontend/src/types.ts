@@ -210,3 +210,17 @@ export type InboxConversationDetail = {
   service_window_expires_at: string | null;
   messages: InboxMessageItem[];
 };
+
+export type InboxSendMessageResponse = {
+  message: string;
+  data: {
+    id: number;
+    conversation_id: number;
+    lead_id: number;
+    direction: 'outbound';
+    body: string;
+    provider: string | null;
+    external_message_id: string | null;
+    sent_at: string;
+  };
+};
