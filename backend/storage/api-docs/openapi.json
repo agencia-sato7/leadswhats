@@ -938,6 +938,281 @@
             }
           }
         }
+      },
+      "InboxConversationListItem": {
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "lead_id",
+          "phone",
+          "source",
+          "last_message_direction",
+          "unread_count",
+          "has_open_task",
+          "service_window_open"
+        ],
+        "properties": {
+          "conversation_id": {
+            "type": "integer",
+            "example": 501
+          },
+          "lead_id": {
+            "type": "integer",
+            "example": 123
+          },
+          "lead_name": {
+            "type": "string",
+            "nullable": true,
+            "example": "Maria Silva"
+          },
+          "phone": {
+            "type": "string",
+            "example": "+5511991111111"
+          },
+          "source": {
+            "type": "string",
+            "example": "instagram"
+          },
+          "current_stage": {
+            "type": "string",
+            "nullable": true,
+            "example": "Novo Contato"
+          },
+          "owner_user_id": {
+            "type": "integer",
+            "nullable": true,
+            "example": 7
+          },
+          "owner_name": {
+            "type": "string",
+            "nullable": true,
+            "example": "SDR A"
+          },
+          "last_message_body": {
+            "type": "string",
+            "nullable": true,
+            "example": "Olá, posso ajudar?"
+          },
+          "last_message_direction": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "inbound",
+              "outbound"
+            ],
+            "example": "outbound"
+          },
+          "last_message_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-05-14T10:00:00.000000Z"
+          },
+          "unread_count": {
+            "type": "integer",
+            "example": 0
+          },
+          "has_open_task": {
+            "type": "boolean",
+            "example": true
+          },
+          "service_window_open": {
+            "type": "boolean",
+            "example": true
+          },
+          "service_window_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-05-15T08:00:00.000000Z"
+          }
+        }
+      },
+      "InboxConversationsResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboxConversationListItem"
+            }
+          },
+          "meta": {
+            "type": "object",
+            "required": [
+              "page",
+              "per_page",
+              "total",
+              "last_page"
+            ],
+            "properties": {
+              "page": {
+                "type": "integer",
+                "example": 1
+              },
+              "per_page": {
+                "type": "integer",
+                "example": 20
+              },
+              "total": {
+                "type": "integer",
+                "example": 2
+              },
+              "last_page": {
+                "type": "integer",
+                "example": 1
+              }
+            }
+          }
+        }
+      },
+      "InboxMessageItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "direction",
+          "sent_at",
+          "provider",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 9001
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "inbound",
+              "outbound"
+            ],
+            "example": "inbound"
+          },
+          "body": {
+            "type": "string",
+            "nullable": true,
+            "example": "Oi, tudo bem?"
+          },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-14T09:00:00.000000Z"
+          },
+          "provider": {
+            "type": "string",
+            "nullable": true,
+            "example": "whatsapp-cloud"
+          },
+          "external_message_id": {
+            "type": "string",
+            "nullable": true,
+            "example": "wamid.example.123"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-14T09:00:01.000000Z"
+          }
+        }
+      },
+      "InboxConversationDetail": {
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "status",
+          "lead",
+          "owner",
+          "service_window_open",
+          "messages"
+        ],
+        "properties": {
+          "conversation_id": {
+            "type": "integer",
+            "example": 501
+          },
+          "status": {
+            "type": "string",
+            "example": "active"
+          },
+          "lead": {
+            "type": "object",
+            "required": [
+              "lead_id",
+              "phone",
+              "source"
+            ],
+            "properties": {
+              "lead_id": {
+                "type": "integer",
+                "example": 123
+              },
+              "lead_name": {
+                "type": "string",
+                "nullable": true,
+                "example": "Maria Silva"
+              },
+              "phone": {
+                "type": "string",
+                "example": "+5511991111111"
+              },
+              "source": {
+                "type": "string",
+                "example": "instagram"
+              },
+              "current_stage": {
+                "type": "string",
+                "nullable": true,
+                "example": "Qualificação"
+              }
+            }
+          },
+          "owner": {
+            "type": "object",
+            "properties": {
+              "owner_user_id": {
+                "type": "integer",
+                "nullable": true,
+                "example": 7
+              },
+              "owner_name": {
+                "type": "string",
+                "nullable": true,
+                "example": "SDR A"
+              }
+            }
+          },
+          "service_window_open": {
+            "type": "boolean",
+            "example": true
+          },
+          "service_window_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-05-15T08:00:00.000000Z"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboxMessageItem"
+            }
+          }
+        }
+      },
+      "InboxConversationDetailResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/InboxConversationDetail"
+          }
+        }
       }
     }
   },
@@ -2432,6 +2707,216 @@
             }
           }
         }
+      }
+    },
+    "/api/v1/inbox/conversations": {
+      "get": {
+        "tags": [
+          "Inbox"
+        ],
+        "summary": "Lista conversas da central de atendimento",
+        "description": "Lista paginada de conversas da empresa autenticada com filtros e regras de ownership para SDR.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Busca por nome/telefone do lead."
+          },
+          {
+            "name": "owner_user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Filtra por dono da conversa."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "has_open_task",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Filtra por conversa com tarefa operacional aberta (vácuo follow-up)."
+          },
+          {
+            "name": "service_window_open",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Filtra por janela de atendimento aberta (última inbound < 24h)."
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de conversas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxConversationsResponse"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "conversation_id": 501,
+                      "lead_id": 123,
+                      "lead_name": "Maria Silva",
+                      "phone": "+5511991111111",
+                      "source": "instagram",
+                      "current_stage": "Novo Contato",
+                      "owner_user_id": 7,
+                      "owner_name": "SDR A",
+                      "last_message_body": "Olá, posso ajudar?",
+                      "last_message_direction": "outbound",
+                      "last_message_at": "2026-05-14T10:00:00.000000Z",
+                      "unread_count": 0,
+                      "has_open_task": true,
+                      "service_window_open": true,
+                      "service_window_expires_at": "2026-05-15T08:00:00.000000Z"
+                    }
+                  ],
+                  "meta": {
+                    "page": 1,
+                    "per_page": 20,
+                    "total": 1,
+                    "last_page": 1
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado"
+          },
+          "422": {
+            "description": "Parâmetros inválidos"
+          }
+        }
+      }
+    },
+    "/api/v1/inbox/conversations/{conversationId}": {
+      "get": {
+        "tags": [
+          "Inbox"
+        ],
+        "summary": "Retorna detalhe da conversa com histórico de mensagens",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detalhe da conversa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxConversationDetailResponse"
+                },
+                "example": {
+                  "data": {
+                    "conversation_id": 501,
+                    "status": "active",
+                    "lead": {
+                      "lead_id": 123,
+                      "lead_name": "Maria Silva",
+                      "phone": "+5511991111111",
+                      "source": "instagram",
+                      "current_stage": "Qualificação"
+                    },
+                    "owner": {
+                      "owner_user_id": 7,
+                      "owner_name": "SDR A"
+                    },
+                    "service_window_open": true,
+                    "service_window_expires_at": "2026-05-15T08:00:00.000000Z",
+                    "messages": [
+                      {
+                        "id": 9001,
+                        "direction": "inbound",
+                        "body": "Oi, tudo bem?",
+                        "sent_at": "2026-05-14T09:00:00.000000Z",
+                        "provider": "whatsapp-cloud",
+                        "external_message_id": "wamid.example.123",
+                        "created_at": "2026-05-14T09:00:01.000000Z"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado"
+          },
+          "404": {
+            "description": "Conversa não encontrada"
+          },
+          "422": {
+            "description": "Parâmetros inválidos"
+          }
+        },
+        "description": "Retorna detalhe da conversa com histórico de mensagens. A abertura da conversa registra evento de auditoria (conversation_opened)."
       }
     }
   }

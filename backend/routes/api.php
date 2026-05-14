@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BootstrapController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\InboxController;
 use App\Http\Controllers\Api\LeadStageHistoryController;
 use App\Http\Controllers\Api\LeadSourceController;
 use App\Http\Controllers\Api\LeadStageController;
@@ -31,6 +32,12 @@ Route::prefix('v1')->group(function () {
             ->middleware('role:admin,gestor,sdr');
         Route::get('/contacts/export', [ContactController::class, 'export'])
             ->middleware('role:admin,gestor');
+
+        Route::get('/inbox/conversations', [InboxController::class, 'index'])
+            ->middleware('role:admin,gestor,sdr');
+
+        Route::get('/inbox/conversations/{conversationId}', [InboxController::class, 'show'])
+            ->middleware('role:admin,gestor,sdr');
 
         Route::get('/tasks/checklist', [TaskChecklistController::class, 'index'])
             ->middleware('role:admin,gestor,sdr');
