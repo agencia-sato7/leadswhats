@@ -1306,7 +1306,10 @@
             "enum": [
               "conversation_opened",
               "message_sent",
-              "stage_changed"
+              "stage_changed",
+              "owner_assigned",
+              "owner_changed",
+              "owner_removed"
             ],
             "example": "stage_changed"
           },
@@ -1351,6 +1354,67 @@
             "items": {
               "$ref": "#/components/schemas/InboxConversationEventItem"
             }
+          }
+        }
+      },
+      "LeadOwnerUpdateRequest": {
+        "type": "object",
+        "required": [
+          "owner_user_id",
+          "reason"
+        ],
+        "properties": {
+          "owner_user_id": {
+            "type": "integer",
+            "nullable": true,
+            "example": 7
+          },
+          "reason": {
+            "type": "string",
+            "example": "Distribuição manual pelo gestor"
+          }
+        }
+      },
+      "LeadOwnerUpdateData": {
+        "type": "object",
+        "required": [
+          "lead_id",
+          "updated_by_user_id"
+        ],
+        "properties": {
+          "lead_id": {
+            "type": "integer",
+            "example": 123
+          },
+          "owner_user_id": {
+            "type": "integer",
+            "nullable": true,
+            "example": 7
+          },
+          "owner_name": {
+            "type": "string",
+            "nullable": true,
+            "example": "SDR A"
+          },
+          "updated_by_user_id": {
+            "type": "integer",
+            "example": 1
+          }
+        }
+      },
+      "LeadOwnerUpdateResponse": {
+        "type": "object",
+        "required": [
+          "message",
+          "data"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Lead owner updated successfully."
+          },
+          "data": {
+            "$ref": "#/components/schemas/LeadOwnerUpdateData"
           }
         }
       }
@@ -3132,7 +3196,7 @@
           "Inbox"
         ],
         "summary": "Retorna timeline operacional da conversa",
-        "description": "Lista cronológica de eventos da conversa agregando conversation_events (conversation_opened, message_sent) e lead_stage_histories (stage_changed).",
+        "description": "Lista cronológica de eventos da conversa agregando conversation_events (conversation_opened, message_sent, owner_assigned, owner_changed, owner_removed) e lead_stage_histories (stage_changed).",
         "security": [
           {
             "BearerAuth": []
@@ -3208,6 +3272,117 @@
           },
           "422": {
             "description": "Parâmetros inválidos"
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{leadId}/owner": {
+      "patch": {
+        "tags": [
+          "Leads"
+        ],
+        "summary": "Atribui ou remove responsável do lead",
+        "description": "Atualiza o owner do lead (lead.owner_user_id). Quando houver conversa ativa do lead, sincroniza também conversation.owner_user_id. Registra auditoria operacional em conversation_events na conversa ativa mais recente.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "leadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LeadOwnerUpdateRequest"
+              },
+              "examples": {
+                "assign_owner": {
+                  "summary": "Atribuir responsável",
+                  "value": {
+                    "owner_user_id": 7,
+                    "reason": "Distribuição manual pelo gestor"
+                  }
+                },
+                "remove_owner": {
+                  "summary": "Remover responsável",
+                  "value": {
+                    "owner_user_id": null,
+                    "reason": "Removido responsável"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Responsável atualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeadOwnerUpdateResponse"
+                },
+                "example": {
+                  "message": "Lead owner updated successfully.",
+                  "data": {
+                    "lead_id": 123,
+                    "owner_user_id": 7,
+                    "owner_name": "SDR A",
+                    "updated_by_user_id": 1
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil (SDR não pode alterar responsável)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Lead não encontrado para a empresa autenticada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Payload inválido (owner_user_id inválido para a empresa/perfil permitido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }

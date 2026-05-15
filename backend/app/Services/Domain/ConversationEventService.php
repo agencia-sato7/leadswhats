@@ -9,6 +9,9 @@ class ConversationEventService
 {
     private const EVENT_CONVERSATION_OPENED = 'conversation_opened';
     private const EVENT_MESSAGE_SENT = 'message_sent';
+    private const EVENT_OWNER_ASSIGNED = 'owner_assigned';
+    private const EVENT_OWNER_CHANGED = 'owner_changed';
+    private const EVENT_OWNER_REMOVED = 'owner_removed';
     private const DEDUP_SECONDS = 10;
 
     /**
@@ -59,6 +62,35 @@ class ConversationEventService
             'lead_id' => $leadId,
             'user_id' => $user->id,
             'event_type' => self::EVENT_MESSAGE_SENT,
+            'metadata' => $metadata,
+            'created_at' => now(),
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed>|null $metadata
+     */
+    public function registerOwnershipChanged(
+        User $user,
+        int $conversationId,
+        int $leadId,
+        string $eventType,
+        ?array $metadata = null,
+    ): void {
+        if (!in_array($eventType, [
+            self::EVENT_OWNER_ASSIGNED,
+            self::EVENT_OWNER_CHANGED,
+            self::EVENT_OWNER_REMOVED,
+        ], true)) {
+            return;
+        }
+
+        ConversationEvent::create([
+            'company_id' => $user->company_id,
+            'conversation_id' => $conversationId,
+            'lead_id' => $leadId,
+            'user_id' => $user->id,
+            'event_type' => $eventType,
             'metadata' => $metadata,
             'created_at' => now(),
         ]);

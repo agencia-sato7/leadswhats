@@ -62,7 +62,13 @@ class InboxConversationTimelineService
             })
             ->where('conversation_events.company_id', $user->company_id)
             ->where('conversation_events.conversation_id', $conversationId)
-            ->whereIn('conversation_events.event_type', ['conversation_opened', 'message_sent'])
+            ->whereIn('conversation_events.event_type', [
+                'conversation_opened',
+                'message_sent',
+                'owner_assigned',
+                'owner_changed',
+                'owner_removed',
+            ])
             ->orderBy('conversation_events.created_at')
             ->orderBy('conversation_events.id')
             ->get([
@@ -139,4 +145,3 @@ class InboxConversationTimelineService
             });
     }
 }
-

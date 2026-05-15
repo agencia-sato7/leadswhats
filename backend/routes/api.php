@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\InboxController;
 use App\Http\Controllers\Api\LeadStageHistoryController;
+use App\Http\Controllers\Api\LeadOwnerController;
 use App\Http\Controllers\Api\LeadSourceController;
 use App\Http\Controllers\Api\LeadStageController;
 use App\Http\Controllers\Api\KanbanColumnController;
@@ -56,6 +57,9 @@ Route::prefix('v1')->group(function () {
             ->middleware('role:admin,gestor,sdr');
 
         Route::patch('/leads/{leadId}/stage', [LeadStageController::class, 'update'])
+            ->middleware('role:admin,gestor');
+
+        Route::patch('/leads/{leadId}/owner', [LeadOwnerController::class, 'update'])
             ->middleware('role:admin,gestor');
 
         Route::post('/pipelines/{pipelineId}/columns', [KanbanColumnController::class, 'store'])
