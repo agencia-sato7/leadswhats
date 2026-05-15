@@ -9,6 +9,7 @@ import type {
   InboxSendMessageResponse,
   LeadStageHistoryItem,
   LeadSourceItem,
+  LeadOwnerUpdateResponse,
   LoginResponse,
   MoveLeadStageResponse,
   OverviewResponse,
@@ -227,4 +228,15 @@ export async function getInboxConversationEvents(token: string, conversationId: 
     headers: { Authorization: `Bearer ${token}` },
   });
   return data.data;
+}
+
+export function updateLeadOwner(token: string, leadId: number, ownerUserId: number | null, reason: string): Promise<LeadOwnerUpdateResponse> {
+  return request<LeadOwnerUpdateResponse>(`/leads/${leadId}/owner`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      owner_user_id: ownerUserId,
+      reason,
+    }),
+  });
 }

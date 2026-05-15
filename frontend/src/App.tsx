@@ -17,6 +17,7 @@ import {
   login,
   moveLeadStage,
   sendInboxMessage,
+  updateLeadOwner,
 } from './api';
 import type {
   AuthUser,
@@ -63,6 +64,9 @@ function getFriendlyAuditEventType(eventType: InboxConversationEvent['event_type
   if (eventType === 'conversation_opened') return 'Conversa aberta';
   if (eventType === 'message_sent') return 'Mensagem enviada';
   if (eventType === 'stage_changed') return 'Etapa alterada';
+  if (eventType === 'owner_assigned') return 'Responsável atribuído';
+  if (eventType === 'owner_changed') return 'Responsável alterado';
+  if (eventType === 'owner_removed') return 'Responsável removido';
   return eventType;
 }
 
@@ -116,6 +120,10 @@ export function App() {
   const [inboxEvents, setInboxEvents] = useState<InboxConversationEvent[]>([]);
   const [inboxEventsLoading, setInboxEventsLoading] = useState(false);
   const [inboxEventsError, setInboxEventsError] = useState<string | null>(null);
+  const [inboxOwnerUpdateLoading, setInboxOwnerUpdateLoading] = useState(false);
+  const [inboxOwnerUpdateError, setInboxOwnerUpdateError] = useState<string | null>(null);
+  const [inboxOwnerUpdateSuccess, setInboxOwnerUpdateSuccess] = useState<string | null>(null);
+  const [inboxOwnerSelection, setInboxOwnerSelection] = useState<number | ''>('');
 
   const [pipelines, setPipelines] = useState<PipelineListItem[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(null);
@@ -160,6 +168,28 @@ export function App() {
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [inboxConversations]);
+
+  const inboxAssignableOwnerOptions = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const owner of inboxOwnerOptions) map.set(owner.id, owner.name);
+    if (session?.user?.id && session.user.name) map.set(session.user.id, session.user.name);
+    if (inboxDetail?.owner.owner_user_id && inboxDetail?.owner.owner_name) {
+      map.set(inboxDetail.owner.owner_user_id, inboxDetail.owner.owner_name);
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [inboxOwnerOptions, session, inboxDetail]);
+
+  async function fetchInboxEvents(token: string, conversationId: number) {
+    const events = await getInboxConversationEvents(token, conversationId);
+    const sorted = [...events].sort((a, b) => {
+      const occurredCompare = String(a.occurred_at).localeCompare(String(b.occurred_at));
+      if (occurredCompare !== 0) return occurredCompare;
+      return a.event_id - b.event_id;
+    });
+    setInboxEvents(sorted);
+  }
 
   async function refreshData(token: string) {
     const [overviewData, dashboardData, pipelineData, checklistData] = await Promise.all([
@@ -339,6 +369,9 @@ export function App() {
     if (!session || !selectedConversationId) return;
     setInboxSendError(null);
     setInboxSendSuccess(null);
+    setInboxOwnerUpdateError(null);
+    setInboxOwnerUpdateSuccess(null);
+    setInboxOwnerSelection('');
     setInboxDetailTab('messages');
     setInboxEvents([]);
     setInboxEventsError(null);
@@ -353,15 +386,7 @@ export function App() {
     setInboxEventsLoading(true);
     setInboxEventsError(null);
 
-    getInboxConversationEvents(session.token, selectedConversationId)
-      .then((events) => {
-        const sorted = [...events].sort((a, b) => {
-          const occurredCompare = String(a.occurred_at).localeCompare(String(b.occurred_at));
-          if (occurredCompare !== 0) return occurredCompare;
-          return a.event_id - b.event_id;
-        });
-        setInboxEvents(sorted);
-      })
+    fetchInboxEvents(session.token, selectedConversationId)
       .catch((err: unknown) => {
         const message = parseApiErrorMessage(err, 'Não foi possível carregar a auditoria da conversa.');
         const statusMatch = err instanceof Error ? err.message.match(/Erro HTTP (\d{3})/) : null;
@@ -380,6 +405,14 @@ export function App() {
         setInboxEventsLoading(false);
       });
   }, [session, selectedConversationId, inboxDetailTab, inboxEventsLoading, inboxEvents.length, inboxEventsError]);
+
+  useEffect(() => {
+    if (!inboxDetail) {
+      setInboxOwnerSelection('');
+      return;
+    }
+    setInboxOwnerSelection(inboxDetail.owner.owner_user_id ?? '');
+  }, [inboxDetail]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -420,6 +453,10 @@ export function App() {
     setInboxEvents([]);
     setInboxEventsLoading(false);
     setInboxEventsError(null);
+    setInboxOwnerUpdateLoading(false);
+    setInboxOwnerUpdateError(null);
+    setInboxOwnerUpdateSuccess(null);
+    setInboxOwnerSelection('');
     setStageHistoryByLead({});
     setDraggingCard(null);
     setDragOverColumnId(null);
@@ -573,6 +610,41 @@ export function App() {
       console.error(err);
     } finally {
       setInboxSendLoading(false);
+    }
+  }
+
+  async function handleUpdateInboxOwner(event: React.FormEvent) {
+    event.preventDefault();
+    if (!session || !inboxDetail || inboxOwnerUpdateLoading) return;
+
+    setInboxOwnerUpdateError(null);
+    setInboxOwnerUpdateSuccess(null);
+    setInboxOwnerUpdateLoading(true);
+
+    try {
+      const ownerUserId = inboxOwnerSelection === '' ? null : inboxOwnerSelection;
+      await updateLeadOwner(session.token, inboxDetail.lead.lead_id, ownerUserId, 'Alterado pela Inbox');
+      setInboxOwnerUpdateSuccess('Responsável atualizado com sucesso.');
+      await refreshInboxDetail(session.token, inboxDetail.conversation_id);
+      await refreshInboxConversations(session.token, inboxPage);
+
+      if (inboxDetailTab === 'audit') {
+        setInboxEvents([]);
+        setInboxEventsError(null);
+        setInboxEventsLoading(true);
+        try {
+          await fetchInboxEvents(session.token, inboxDetail.conversation_id);
+        } catch (err: unknown) {
+          setInboxEventsError(parseApiErrorMessage(err, 'Não foi possível recarregar a auditoria.'));
+        } finally {
+          setInboxEventsLoading(false);
+        }
+      }
+    } catch (err) {
+      setInboxOwnerUpdateError(parseApiErrorMessage(err, 'Não foi possível atualizar o responsável.'));
+      console.error(err);
+    } finally {
+      setInboxOwnerUpdateLoading(false);
     }
   }
 
@@ -753,6 +825,39 @@ export function App() {
                     <small style={{ display: 'block' }}><strong>Origem:</strong> {inboxDetail.lead.source}</small>
                     <small style={{ display: 'block' }}><strong>Etapa:</strong> {inboxDetail.lead.current_stage || 'Sem etapa'}</small>
                     <small style={{ display: 'block' }}><strong>Responsável:</strong> {inboxDetail.owner.owner_name || 'Sem responsável'}</small>
+                    {canManageSource ? (
+                      <form onSubmit={(event) => void handleUpdateInboxOwner(event)} style={{ marginTop: 8, marginBottom: 8, display: 'grid', gap: 6 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <label>
+                            Alterar responsável:
+                            <select
+                              value={inboxOwnerSelection}
+                              onChange={(event) => setInboxOwnerSelection(event.target.value ? Number(event.target.value) : '')}
+                              disabled={inboxOwnerUpdateLoading}
+                              style={{ marginLeft: 8 }}
+                            >
+                              <option value="">Sem responsável</option>
+                              {inboxAssignableOwnerOptions.map((owner) => (
+                                <option key={owner.id} value={owner.id}>{owner.name}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <button type="submit" disabled={inboxOwnerUpdateLoading}>
+                            {inboxOwnerUpdateLoading ? 'Atualizando...' : 'Salvar responsável'}
+                          </button>
+                        </div>
+                        <small style={{ color: '#555' }}>
+                          Motivo aplicado: "Alterado pela Inbox".
+                        </small>
+                        {inboxAssignableOwnerOptions.length === 0 ? (
+                          <small style={{ color: '#8a5a00' }}>
+                            Não há lista completa de usuários neste frontend; opções limitadas aos responsáveis já vistos na Inbox e usuário logado.
+                          </small>
+                        ) : null}
+                        {inboxOwnerUpdateError ? <small style={{ color: 'crimson' }}>{inboxOwnerUpdateError}</small> : null}
+                        {inboxOwnerUpdateSuccess ? <small style={{ color: '#1b7f3b' }}>{inboxOwnerUpdateSuccess}</small> : null}
+                      </form>
+                    ) : null}
                     <small style={{ display: 'block', marginBottom: 10 }}>
                       <strong>Janela:</strong> {inboxDetail.service_window_open ? 'Aberta' : 'Fechada'}
                       {inboxDetail.service_window_expires_at ? ` · expira em ${formatDateTime(inboxDetail.service_window_expires_at)}` : ''}
@@ -871,6 +976,21 @@ export function App() {
                                   </small>
                                   <small style={{ display: 'block' }}>
                                     move_source: {event.metadata?.move_source || 'n/d'}
+                                  </small>
+                                  {event.metadata?.reason ? (
+                                    <small style={{ display: 'block' }}>
+                                      motivo: {event.metadata.reason}
+                                    </small>
+                                  ) : null}
+                                </>
+                              ) : null}
+                              {(event.event_type === 'owner_assigned' || event.event_type === 'owner_changed' || event.event_type === 'owner_removed') ? (
+                                <>
+                                  <p style={{ margin: '6px 0' }}>
+                                    {event.event_type === 'owner_assigned' ? 'Responsável atribuído' : event.event_type === 'owner_changed' ? 'Responsável alterado' : 'Responsável removido'} por {event.user_name || 'usuário não identificado'}
+                                  </p>
+                                  <small style={{ display: 'block' }}>
+                                    anterior: {event.metadata?.previous_owner_name || 'Sem responsável'} · novo: {event.metadata?.new_owner_name || 'Sem responsável'}
                                   </small>
                                   {event.metadata?.reason ? (
                                     <small style={{ display: 'block' }}>

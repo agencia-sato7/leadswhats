@@ -225,7 +225,13 @@ export type InboxSendMessageResponse = {
   };
 };
 
-export type InboxConversationEventType = 'conversation_opened' | 'message_sent' | 'stage_changed';
+export type InboxConversationEventType =
+  | 'conversation_opened'
+  | 'message_sent'
+  | 'stage_changed'
+  | 'owner_assigned'
+  | 'owner_changed'
+  | 'owner_removed';
 
 export type InboxConversationEventMetadata = {
   provider?: string | null;
@@ -235,6 +241,10 @@ export type InboxConversationEventMetadata = {
   to_column_id?: number | null;
   to_column_name?: string | null;
   move_source?: string | null;
+  previous_owner_user_id?: number | null;
+  previous_owner_name?: string | null;
+  new_owner_user_id?: number | null;
+  new_owner_name?: string | null;
   reason?: string | null;
 };
 
@@ -245,4 +255,14 @@ export type InboxConversationEvent = {
   user_name: string | null;
   occurred_at: string;
   metadata: InboxConversationEventMetadata | null;
+};
+
+export type LeadOwnerUpdateResponse = {
+  message: string;
+  data: {
+    lead_id: number;
+    owner_user_id: number | null;
+    owner_name: string | null;
+    updated_by_user_id: number;
+  };
 };
