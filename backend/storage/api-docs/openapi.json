@@ -1288,6 +1288,71 @@
             }
           }
         }
+      },
+      "InboxConversationEventItem": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "event_type",
+          "occurred_at"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "integer",
+            "example": 22
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "conversation_opened",
+              "message_sent",
+              "stage_changed"
+            ],
+            "example": "stage_changed"
+          },
+          "user_id": {
+            "type": "integer",
+            "nullable": true,
+            "example": 7
+          },
+          "user_name": {
+            "type": "string",
+            "nullable": true,
+            "example": "SDR A"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-14T10:05:00.000000Z"
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true,
+            "example": {
+              "from_column_id": 1,
+              "from_column_name": "Novo Contato",
+              "to_column_id": 2,
+              "to_column_name": "Em negociação",
+              "move_source": "manual",
+              "reason": "Cliente pediu proposta"
+            }
+          }
+        }
+      },
+      "InboxConversationEventsResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboxConversationEventItem"
+            }
+          }
+        }
       }
     }
   },
@@ -3057,6 +3122,92 @@
           },
           "422": {
             "description": "Body inválido, janela de atendimento fechada ou erro no provider"
+          }
+        }
+      }
+    },
+    "/api/v1/inbox/conversations/{conversationId}/events": {
+      "get": {
+        "tags": [
+          "Inbox"
+        ],
+        "summary": "Retorna timeline operacional da conversa",
+        "description": "Lista cronológica de eventos da conversa agregando conversation_events (conversation_opened, message_sent) e lead_stage_histories (stage_changed).",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Timeline da conversa",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboxConversationEventsResponse"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "event_id": 1,
+                      "event_type": "conversation_opened",
+                      "user_id": 7,
+                      "user_name": "SDR A",
+                      "occurred_at": "2026-05-14T10:00:00.000000Z",
+                      "metadata": {
+                        "source": "inbox_api"
+                      }
+                    },
+                    {
+                      "event_id": 22,
+                      "event_type": "stage_changed",
+                      "user_id": 7,
+                      "user_name": "SDR A",
+                      "occurred_at": "2026-05-14T10:05:00.000000Z",
+                      "metadata": {
+                        "from_column_id": 1,
+                        "from_column_name": "Novo Contato",
+                        "to_column_id": 2,
+                        "to_column_name": "Em negociação",
+                        "move_source": "manual",
+                        "reason": "Cliente pediu proposta"
+                      }
+                    },
+                    {
+                      "event_id": 8,
+                      "event_type": "message_sent",
+                      "user_id": 7,
+                      "user_name": "SDR A",
+                      "occurred_at": "2026-05-14T10:10:00.000000Z",
+                      "metadata": {
+                        "provider": "fake",
+                        "external_message_id": "fake-01f4e6ab5ef645fdbb07f8cb"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado"
+          },
+          "404": {
+            "description": "Conversa não encontrada"
+          },
+          "422": {
+            "description": "Parâmetros inválidos"
           }
         }
       }

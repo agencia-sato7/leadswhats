@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Domain\ConversationEventService;
+use App\Services\Domain\InboxConversationTimelineService;
 use App\Services\Domain\InboxMessageService;
 use App\Services\Domain\InboxService;
 use Illuminate\Http\JsonResponse;
@@ -121,5 +122,20 @@ class InboxController extends Controller
                 'sent_at' => optional($message->sent_at)?->toISOString(),
             ],
         ]);
+    }
+
+    public function events(
+        Request $request,
+        int $conversationId,
+        InboxConversationTimelineService $timelineService,
+    ): JsonResponse {
+        $timeline = $timelineService->listEventsForConversation($request->user(), $conversationId);
+        if (!$timeline) {
+            return response()->json([
+                'message' => 'Conversa não encontrada.',
+            ], 404);
+        }
+
+        return response()->json($timeline);
     }
 }

@@ -26,7 +26,105 @@ class InboxApiTest extends TestCase
     {
         $this->getJson('/api/v1/inbox/conversations')->assertUnauthorized();
         $this->getJson('/api/v1/inbox/conversations/1')->assertUnauthorized();
+        $this->getJson('/api/v1/inbox/conversations/1/events')->assertUnauthorized();
         $this->postJson('/api/v1/inbox/conversations/1/messages', ['body' => 'oi'])->assertUnauthorized();
+    }
+
+    public function test_timeline_is_visible_for_gestor_admin_and_owned_sdr_and_hidden_otherwise(): void
+    {
+        Carbon::setTestNow('2026-05-14 12:00:00');
+        [$companyA, $gestorA, $adminA, $columnA] = $this->seedCompanyWithManagerAndAdmin('empresa-events-a', 'gestor.events.a@test.local', 'admin.events.a@test.local');
+        [$companyB, $gestorB] = $this->seedCompanyWithManagerAndAdmin('empresa-events-b', 'gestor.events.b@test.local', 'admin.events.b@test.local');
+        $sdrOwner = $this->createUser($companyA->id, 'SDR Owner', 'sdr.owner.events@test.local', 'sdr');
+        $sdrOther = $this->createUser($companyA->id, 'SDR Other', 'sdr.other.events@test.local', 'sdr');
+        $columnB = $this->seedColumn($companyA->id, 'Em negociação', 2);
+
+        $conversation = $this->seedConversationWithMessages(
+            $companyA->id,
+            $columnA->id,
+            'Lead Timeline',
+            '+5511993000001',
+            'google',
+            'inbound',
+            now()->subMinutes(2),
+            now()->subMinutes(2),
+            $sdrOwner->id,
+            $sdrOwner->id,
+        );
+
+        LeadStageHistory::create([
+            'company_id' => $companyA->id,
+            'lead_id' => $conversation->lead_id,
+            'from_column_id' => $columnA->id,
+            'to_column_id' => $columnB->id,
+            'moved_by_user_id' => $sdrOwner->id,
+            'move_source' => 'manual',
+            'reason' => 'Cliente pediu proposta',
+            'moved_at' => now()->subMinutes(15),
+        ]);
+
+        $gestorToken = $this->login($gestorA->email);
+        $adminToken = $this->login($adminA->email);
+        $sdrOwnerToken = $this->login($sdrOwner->email);
+        $sdrOtherToken = $this->login($sdrOther->email);
+        $otherTenantToken = $this->login($gestorB->email);
+
+        $this->withHeaders(['Authorization' => 'Bearer ' . $gestorToken])
+            ->getJson('/api/v1/inbox/conversations/' . $conversation->id)
+            ->assertOk();
+
+        $this->withHeaders(['Authorization' => 'Bearer ' . $gestorToken])
+            ->postJson('/api/v1/inbox/conversations/' . $conversation->id . '/messages', [
+                'body' => 'Mensagem timeline',
+            ])
+            ->assertOk();
+
+        $gestorTimeline = $this->withHeaders(['Authorization' => 'Bearer ' . $gestorToken])
+            ->getJson('/api/v1/inbox/conversations/' . $conversation->id . '/events')
+            ->assertOk();
+
+        $events = collect($gestorTimeline->json('data'));
+        $this->assertTrue($events->contains(fn ($event) => $event['event_type'] === 'conversation_opened'));
+        $this->assertTrue($events->contains(fn ($event) => $event['event_type'] === 'message_sent'));
+        $this->assertTrue($events->contains(fn ($event) => $event['event_type'] === 'stage_changed'));
+
+        $stageEvent = $events->first(fn ($event) => $event['event_type'] === 'stage_changed' && data_get($event, 'metadata.reason') === 'Cliente pediu proposta');
+        $this->assertNotNull($stageEvent);
+        $this->assertSame($columnA->id, data_get($stageEvent, 'metadata.from_column_id'));
+        $this->assertSame('Novo Contato', data_get($stageEvent, 'metadata.from_column_name'));
+        $this->assertSame($columnB->id, data_get($stageEvent, 'metadata.to_column_id'));
+        $this->assertSame('Em negociação', data_get($stageEvent, 'metadata.to_column_name'));
+        $this->assertSame('manual', data_get($stageEvent, 'metadata.move_source'));
+        $this->assertSame('Cliente pediu proposta', data_get($stageEvent, 'metadata.reason'));
+
+        $times = $events->pluck('occurred_at')->values()->all();
+        $sortedTimes = $times;
+        sort($sortedTimes);
+        $this->assertSame($sortedTimes, $times);
+
+        $this->withHeaders(['Authorization' => 'Bearer ' . $adminToken])
+            ->getJson('/api/v1/inbox/conversations/' . $conversation->id . '/events')
+            ->assertOk();
+
+        $this->withHeaders(['Authorization' => 'Bearer ' . $sdrOwnerToken])
+            ->getJson('/api/v1/inbox/conversations/' . $conversation->id . '/events')
+            ->assertOk();
+
+        $this->withHeaders(['Authorization' => 'Bearer ' . $sdrOtherToken])
+            ->getJson('/api/v1/inbox/conversations/' . $conversation->id . '/events')
+            ->assertNotFound();
+
+        $this->withHeaders(['Authorization' => 'Bearer ' . $otherTenantToken])
+            ->getJson('/api/v1/inbox/conversations/' . $conversation->id . '/events')
+            ->assertNotFound();
+
+        $this->assertDatabaseMissing('conversation_events', [
+            'company_id' => $companyB->id,
+            'conversation_id' => $conversation->id,
+            'event_type' => 'conversation_opened',
+        ]);
+
+        Carbon::setTestNow();
     }
 
     public function test_gestor_and_admin_can_send_message_inside_service_window(): void

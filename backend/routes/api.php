@@ -38,6 +38,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/inbox/conversations/{conversationId}', [InboxController::class, 'show'])
             ->middleware('role:admin,gestor,sdr');
+        Route::get('/inbox/conversations/{conversationId}/events', [InboxController::class, 'events'])
+            ->middleware('role:admin,gestor,sdr');
         Route::post('/inbox/conversations/{conversationId}/messages', [InboxController::class, 'sendMessage'])
             ->middleware('role:admin,gestor,sdr');
 
