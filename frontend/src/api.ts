@@ -4,6 +4,7 @@ import type {
   ChecklistTaskItem,
   DashboardSummaryResponse,
   InboxConversationDetail,
+  InboxConversationEvent,
   InboxConversationsResponse,
   InboxSendMessageResponse,
   LeadStageHistoryItem,
@@ -219,4 +220,11 @@ export function sendInboxMessage(token: string, conversationId: number, body: st
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify({ body }),
   });
+}
+
+export async function getInboxConversationEvents(token: string, conversationId: number): Promise<InboxConversationEvent[]> {
+  const data = await request<{ data: InboxConversationEvent[] }>(`/inbox/conversations/${conversationId}/events`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data.data;
 }

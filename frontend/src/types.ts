@@ -224,3 +224,25 @@ export type InboxSendMessageResponse = {
     sent_at: string;
   };
 };
+
+export type InboxConversationEventType = 'conversation_opened' | 'message_sent' | 'stage_changed';
+
+export type InboxConversationEventMetadata = {
+  provider?: string | null;
+  external_message_id?: string | null;
+  from_column_id?: number | null;
+  from_column_name?: string | null;
+  to_column_id?: number | null;
+  to_column_name?: string | null;
+  move_source?: string | null;
+  reason?: string | null;
+};
+
+export type InboxConversationEvent = {
+  event_id: number;
+  event_type: InboxConversationEventType;
+  user_id: number | null;
+  user_name: string | null;
+  occurred_at: string;
+  metadata: InboxConversationEventMetadata | null;
+};

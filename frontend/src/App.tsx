@@ -5,6 +5,7 @@ import {
   getContacts,
   getDashboardSummary,
   getInboxConversationDetail,
+  getInboxConversationEvents,
   getInboxConversations,
   getLeadStageHistory,
   getOverview,
@@ -24,6 +25,7 @@ import type {
   ContactsResponse,
   DashboardSummaryResponse,
   InboxConversationDetail,
+  InboxConversationEvent,
   InboxConversationListItem,
   InboxConversationsResponse,
   LeadSourceItem,
@@ -55,6 +57,13 @@ function formatDateTime(value: string | null | undefined): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString('pt-BR');
+}
+
+function getFriendlyAuditEventType(eventType: InboxConversationEvent['event_type']): string {
+  if (eventType === 'conversation_opened') return 'Conversa aberta';
+  if (eventType === 'message_sent') return 'Mensagem enviada';
+  if (eventType === 'stage_changed') return 'Etapa alterada';
+  return eventType;
 }
 
 export function App() {
@@ -103,6 +112,10 @@ export function App() {
   const [inboxSendLoading, setInboxSendLoading] = useState(false);
   const [inboxSendError, setInboxSendError] = useState<string | null>(null);
   const [inboxSendSuccess, setInboxSendSuccess] = useState<string | null>(null);
+  const [inboxDetailTab, setInboxDetailTab] = useState<'messages' | 'audit'>('messages');
+  const [inboxEvents, setInboxEvents] = useState<InboxConversationEvent[]>([]);
+  const [inboxEventsLoading, setInboxEventsLoading] = useState(false);
+  const [inboxEventsError, setInboxEventsError] = useState<string | null>(null);
 
   const [pipelines, setPipelines] = useState<PipelineListItem[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(null);
@@ -326,8 +339,47 @@ export function App() {
     if (!session || !selectedConversationId) return;
     setInboxSendError(null);
     setInboxSendSuccess(null);
+    setInboxDetailTab('messages');
+    setInboxEvents([]);
+    setInboxEventsError(null);
+    setInboxEventsLoading(false);
     refreshInboxDetail(session.token, selectedConversationId).catch((err) => console.error(err));
   }, [session, selectedConversationId]);
+
+  useEffect(() => {
+    if (!session || !selectedConversationId || inboxDetailTab !== 'audit') return;
+    if (inboxEventsLoading || inboxEvents.length > 0 || inboxEventsError) return;
+
+    setInboxEventsLoading(true);
+    setInboxEventsError(null);
+
+    getInboxConversationEvents(session.token, selectedConversationId)
+      .then((events) => {
+        const sorted = [...events].sort((a, b) => {
+          const occurredCompare = String(a.occurred_at).localeCompare(String(b.occurred_at));
+          if (occurredCompare !== 0) return occurredCompare;
+          return a.event_id - b.event_id;
+        });
+        setInboxEvents(sorted);
+      })
+      .catch((err: unknown) => {
+        const message = parseApiErrorMessage(err, 'Não foi possível carregar a auditoria da conversa.');
+        const statusMatch = err instanceof Error ? err.message.match(/Erro HTTP (\d{3})/) : null;
+        const status = statusMatch ? Number(statusMatch[1]) : null;
+        if (status === 403) {
+          setInboxEventsError('Você não tem permissão para visualizar a auditoria desta conversa.');
+          return;
+        }
+        if (status === 404) {
+          setInboxEventsError('Conversa não encontrada ou indisponível para o seu perfil.');
+          return;
+        }
+        setInboxEventsError(message);
+      })
+      .finally(() => {
+        setInboxEventsLoading(false);
+      });
+  }, [session, selectedConversationId, inboxDetailTab, inboxEventsLoading, inboxEvents.length, inboxEventsError]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -364,6 +416,10 @@ export function App() {
     setInboxSendLoading(false);
     setInboxSendError(null);
     setInboxSendSuccess(null);
+    setInboxDetailTab('messages');
+    setInboxEvents([]);
+    setInboxEventsLoading(false);
+    setInboxEventsError(null);
     setStageHistoryByLead({});
     setDraggingCard(null);
     setDragOverColumnId(null);
@@ -702,51 +758,132 @@ export function App() {
                       {inboxDetail.service_window_expires_at ? ` · expira em ${formatDateTime(inboxDetail.service_window_expires_at)}` : ''}
                     </small>
 
-                    <div style={{ display: 'grid', gap: 8, maxHeight: 360, overflow: 'auto', paddingRight: 4 }}>
-                      {inboxDetail.messages.map((message) => (
-                        <div
-                          key={message.id}
-                          style={{
-                            border: '1px solid #ddd',
-                            borderRadius: 8,
-                            padding: 8,
-                            background: message.direction === 'inbound' ? '#f4fff4' : '#f5f8ff',
-                          }}
-                        >
-                          <small style={{ display: 'block' }}>
-                            <strong>{message.direction === 'inbound' ? 'Cliente' : 'Time'}</strong> · {formatDateTime(message.sent_at)}
-                          </small>
-                          <p style={{ margin: '6px 0' }}>{message.body || 'Mensagem sem texto'}</p>
-                          <small style={{ display: 'block' }}>provider: {message.provider || 'n/d'} · id externo: {message.external_message_id || 'n/d'}</small>
-                        </div>
-                      ))}
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                      <button
+                        type="button"
+                        onClick={() => setInboxDetailTab('messages')}
+                        style={{
+                          border: '1px solid #ddd',
+                          background: inboxDetailTab === 'messages' ? '#eef5ff' : '#fff',
+                        }}
+                      >
+                        Mensagens
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInboxDetailTab('audit')}
+                        style={{
+                          border: '1px solid #ddd',
+                          background: inboxDetailTab === 'audit' ? '#eef5ff' : '#fff',
+                        }}
+                      >
+                        Auditoria
+                      </button>
                     </div>
 
-                    <form onSubmit={(event) => void handleInboxSendMessage(event)} style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-                      {!inboxDetail.service_window_open ? (
-                        <small style={{ color: '#8a5a00' }}>
-                          Janela de atendimento fechada. O envio será habilitado após nova mensagem inbound do cliente.
-                        </small>
-                      ) : null}
-                      {inboxSendError ? <small style={{ color: 'crimson' }}>{inboxSendError}</small> : null}
-                      {inboxSendSuccess ? <small style={{ color: '#1b7f3b' }}>{inboxSendSuccess}</small> : null}
-                      <textarea
-                        value={inboxReplyBody}
-                        onChange={(event) => setInboxReplyBody(event.target.value)}
-                        placeholder={inboxDetail.service_window_open ? 'Digite sua resposta...' : 'Envio indisponível com janela fechada'}
-                        disabled={inboxSendLoading || !inboxDetail.service_window_open}
-                        rows={3}
-                        style={{ width: '100%', padding: 8, resize: 'vertical' }}
-                      />
-                      <div>
-                        <button
-                          type="submit"
-                          disabled={inboxSendLoading || !inboxDetail.service_window_open || inboxReplyBody.trim().length === 0}
-                        >
-                          {inboxSendLoading ? 'Enviando...' : 'Enviar'}
-                        </button>
+                    {inboxDetailTab === 'messages' ? (
+                      <>
+                        <div style={{ display: 'grid', gap: 8, maxHeight: 360, overflow: 'auto', paddingRight: 4 }}>
+                          {inboxDetail.messages.map((message) => (
+                            <div
+                              key={message.id}
+                              style={{
+                                border: '1px solid #ddd',
+                                borderRadius: 8,
+                                padding: 8,
+                                background: message.direction === 'inbound' ? '#f4fff4' : '#f5f8ff',
+                              }}
+                            >
+                              <small style={{ display: 'block' }}>
+                                <strong>{message.direction === 'inbound' ? 'Cliente' : 'Time'}</strong> · {formatDateTime(message.sent_at)}
+                              </small>
+                              <p style={{ margin: '6px 0' }}>{message.body || 'Mensagem sem texto'}</p>
+                              <small style={{ display: 'block' }}>provider: {message.provider || 'n/d'} · id externo: {message.external_message_id || 'n/d'}</small>
+                            </div>
+                          ))}
+                        </div>
+
+                        <form onSubmit={(event) => void handleInboxSendMessage(event)} style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+                          {!inboxDetail.service_window_open ? (
+                            <small style={{ color: '#8a5a00' }}>
+                              Janela de atendimento fechada. O envio será habilitado após nova mensagem inbound do cliente.
+                            </small>
+                          ) : null}
+                          {inboxSendError ? <small style={{ color: 'crimson' }}>{inboxSendError}</small> : null}
+                          {inboxSendSuccess ? <small style={{ color: '#1b7f3b' }}>{inboxSendSuccess}</small> : null}
+                          <textarea
+                            value={inboxReplyBody}
+                            onChange={(event) => setInboxReplyBody(event.target.value)}
+                            placeholder={inboxDetail.service_window_open ? 'Digite sua resposta...' : 'Envio indisponível com janela fechada'}
+                            disabled={inboxSendLoading || !inboxDetail.service_window_open}
+                            rows={3}
+                            style={{ width: '100%', padding: 8, resize: 'vertical' }}
+                          />
+                          <div>
+                            <button
+                              type="submit"
+                              disabled={inboxSendLoading || !inboxDetail.service_window_open || inboxReplyBody.trim().length === 0}
+                            >
+                              {inboxSendLoading ? 'Enviando...' : 'Enviar'}
+                            </button>
+                          </div>
+                        </form>
+                      </>
+                    ) : null}
+
+                    {inboxDetailTab === 'audit' ? (
+                      <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto', paddingRight: 4 }}>
+                        {inboxEventsLoading ? <p>Carregando auditoria...</p> : null}
+                        {inboxEventsError ? <p style={{ color: 'crimson' }}>{inboxEventsError}</p> : null}
+                        {!inboxEventsLoading && !inboxEventsError && inboxEvents.length === 0 ? (
+                          <p>Nenhum evento de auditoria encontrado para esta conversa.</p>
+                        ) : null}
+                        {!inboxEventsLoading && !inboxEventsError && inboxEvents.length > 0 ? (
+                          inboxEvents.map((event) => (
+                            <div key={`${event.event_type}-${event.event_id}`} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 8 }}>
+                              <small style={{ display: 'block' }}>
+                                <strong>{getFriendlyAuditEventType(event.event_type)}</strong> · {formatDateTime(event.occurred_at)}
+                              </small>
+                              {event.event_type === 'conversation_opened' ? (
+                                <p style={{ margin: '6px 0' }}>
+                                  Conversa aberta por {event.user_name || 'usuário não identificado'}
+                                </p>
+                              ) : null}
+                              {event.event_type === 'message_sent' ? (
+                                <>
+                                  <p style={{ margin: '6px 0' }}>
+                                    Mensagem enviada por {event.user_name || 'usuário não identificado'}
+                                  </p>
+                                  {(event.metadata?.provider || event.metadata?.external_message_id) ? (
+                                    <small style={{ color: '#555' }}>
+                                      provider: {event.metadata?.provider || 'n/d'} · id externo: {event.metadata?.external_message_id || 'n/d'}
+                                    </small>
+                                  ) : null}
+                                </>
+                              ) : null}
+                              {event.event_type === 'stage_changed' ? (
+                                <>
+                                  <p style={{ margin: '6px 0' }}>
+                                    Etapa alterada por {event.user_name || 'usuário não identificado'}
+                                  </p>
+                                  <small style={{ display: 'block' }}>
+                                    de {event.metadata?.from_column_name || 'Sem etapa'} para {event.metadata?.to_column_name || 'Sem etapa'}
+                                  </small>
+                                  <small style={{ display: 'block' }}>
+                                    move_source: {event.metadata?.move_source || 'n/d'}
+                                  </small>
+                                  {event.metadata?.reason ? (
+                                    <small style={{ display: 'block' }}>
+                                      motivo: {event.metadata.reason}
+                                    </small>
+                                  ) : null}
+                                </>
+                              ) : null}
+                            </div>
+                          ))
+                        ) : null}
                       </div>
-                    </form>
+                    ) : null}
                   </>
                 ) : null}
               </div>
