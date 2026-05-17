@@ -138,6 +138,53 @@
           }
         }
       },
+      "AssignableUser": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 7
+          },
+          "name": {
+            "type": "string",
+            "example": "SDR A"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "sdr@example.com"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "gestor",
+              "sdr"
+            ],
+            "example": "sdr"
+          }
+        }
+      },
+      "AssignableUsersResponse": {
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssignableUser"
+            }
+          }
+        }
+      },
       "OverviewResponse": {
         "type": "object",
         "properties": {
@@ -3376,6 +3423,68 @@
           },
           "422": {
             "description": "Payload inválido (owner_user_id inválido para a empresa/perfil permitido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/assignable": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Lista usuários atribuíveis da empresa autenticada",
+        "description": "Retorna usuários atribuíveis (roles admin, gestor, sdr) somente da empresa autenticada para uso em atribuição de responsável.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de usuários atribuíveis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignableUsersResponse"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": 7,
+                      "name": "SDR A",
+                      "email": "sdr@example.com",
+                      "role": "sdr"
+                    },
+                    {
+                      "id": 2,
+                      "name": "Gestor Comercial",
+                      "email": "gestor@example.com",
+                      "role": "gestor"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil (SDR não pode listar atribuíveis)",
             "content": {
               "application/json": {
                 "schema": {
