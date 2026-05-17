@@ -3,6 +3,7 @@ import type {
   ContactsResponse,
   ChecklistTaskItem,
   DashboardSummaryResponse,
+  AssignableUsersResponse,
   InboxConversationDetail,
   InboxConversationEvent,
   InboxConversationsResponse,
@@ -238,5 +239,11 @@ export function updateLeadOwner(token: string, leadId: number, ownerUserId: numb
       owner_user_id: ownerUserId,
       reason,
     }),
+  });
+}
+
+export function getAssignableUsers(token: string): Promise<AssignableUsersResponse> {
+  return request<AssignableUsersResponse>('/users/assignable', {
+    headers: { Authorization: `Bearer ${token}` },
   });
 }

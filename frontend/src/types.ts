@@ -182,6 +182,17 @@ export type InboxConversationsResponse = {
   };
 };
 
+export type AssignableUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: Role;
+};
+
+export type AssignableUsersResponse = {
+  data: AssignableUser[];
+};
+
 export type InboxMessageItem = {
   id: number;
   direction: 'inbound' | 'outbound';

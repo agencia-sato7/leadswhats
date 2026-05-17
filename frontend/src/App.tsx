@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   classifyLeadSource,
   exportContactsCsv,
+  getAssignableUsers,
   getContacts,
   getDashboardSummary,
   getInboxConversationDetail,
@@ -21,6 +22,7 @@ import {
 } from './api';
 import type {
   AuthUser,
+  AssignableUser,
   ChecklistTaskItem,
   ContactItem,
   ContactsResponse,
@@ -124,6 +126,8 @@ export function App() {
   const [inboxOwnerUpdateError, setInboxOwnerUpdateError] = useState<string | null>(null);
   const [inboxOwnerUpdateSuccess, setInboxOwnerUpdateSuccess] = useState<string | null>(null);
   const [inboxOwnerSelection, setInboxOwnerSelection] = useState<number | ''>('');
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+  const [assignableUsersError, setAssignableUsersError] = useState<string | null>(null);
 
   const [pipelines, setPipelines] = useState<PipelineListItem[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(null);
@@ -161,25 +165,33 @@ export function App() {
 
   const inboxOwnerOptions = useMemo(() => {
     const map = new Map<number, string>();
-    for (const conv of inboxConversations) {
-      if (conv.owner_user_id && conv.owner_name) map.set(conv.owner_user_id, conv.owner_name);
+    if (canManageSource && assignableUsers.length > 0) {
+      for (const user of assignableUsers) map.set(user.id, user.name);
+    } else {
+      for (const conv of inboxConversations) {
+        if (conv.owner_user_id && conv.owner_name) map.set(conv.owner_user_id, conv.owner_name);
+      }
     }
     return Array.from(map.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [inboxConversations]);
+  }, [canManageSource, assignableUsers, inboxConversations]);
 
   const inboxAssignableOwnerOptions = useMemo(() => {
     const map = new Map<number, string>();
-    for (const owner of inboxOwnerOptions) map.set(owner.id, owner.name);
-    if (session?.user?.id && session.user.name) map.set(session.user.id, session.user.name);
-    if (inboxDetail?.owner.owner_user_id && inboxDetail?.owner.owner_name) {
-      map.set(inboxDetail.owner.owner_user_id, inboxDetail.owner.owner_name);
+    if (canManageSource && assignableUsers.length > 0) {
+      for (const user of assignableUsers) map.set(user.id, user.name);
+    } else {
+      for (const owner of inboxOwnerOptions) map.set(owner.id, owner.name);
+      if (session?.user?.id && session.user.name) map.set(session.user.id, session.user.name);
+      if (inboxDetail?.owner.owner_user_id && inboxDetail?.owner.owner_name) {
+        map.set(inboxDetail.owner.owner_user_id, inboxDetail.owner.owner_name);
+      }
     }
     return Array.from(map.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [inboxOwnerOptions, session, inboxDetail]);
+  }, [canManageSource, assignableUsers, inboxOwnerOptions, session, inboxDetail]);
 
   async function fetchInboxEvents(token: string, conversationId: number) {
     const events = await getInboxConversationEvents(token, conversationId);
@@ -366,6 +378,24 @@ export function App() {
   }, [session, inboxPage, inboxSearch, inboxOwnerFilter, inboxSourceFilter, inboxStageFilter, inboxServiceWindowFilter]);
 
   useEffect(() => {
+    if (!session || !canManageSource) {
+      setAssignableUsers([]);
+      setAssignableUsersError(null);
+      return;
+    }
+
+    setAssignableUsersError(null);
+    getAssignableUsers(session.token)
+      .then((response) => {
+        setAssignableUsers(response.data);
+      })
+      .catch((err: unknown) => {
+        setAssignableUsers([]);
+        setAssignableUsersError(parseApiErrorMessage(err, 'Não foi possível carregar usuários atribuíveis. Usando opções disponíveis na Inbox.'));
+      });
+  }, [session, canManageSource]);
+
+  useEffect(() => {
     if (!session || !selectedConversationId) return;
     setInboxSendError(null);
     setInboxSendSuccess(null);
@@ -457,6 +487,8 @@ export function App() {
     setInboxOwnerUpdateError(null);
     setInboxOwnerUpdateSuccess(null);
     setInboxOwnerSelection('');
+    setAssignableUsers([]);
+    setAssignableUsersError(null);
     setStageHistoryByLead({});
     setDraggingCard(null);
     setDragOverColumnId(null);
@@ -849,9 +881,9 @@ export function App() {
                         <small style={{ color: '#555' }}>
                           Motivo aplicado: "Alterado pela Inbox".
                         </small>
-                        {inboxAssignableOwnerOptions.length === 0 ? (
+                        {assignableUsersError ? (
                           <small style={{ color: '#8a5a00' }}>
-                            Não há lista completa de usuários neste frontend; opções limitadas aos responsáveis já vistos na Inbox e usuário logado.
+                            {assignableUsersError}
                           </small>
                         ) : null}
                         {inboxOwnerUpdateError ? <small style={{ color: 'crimson' }}>{inboxOwnerUpdateError}</small> : null}
