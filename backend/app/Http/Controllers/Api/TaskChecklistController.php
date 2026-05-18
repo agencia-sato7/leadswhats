@@ -16,10 +16,8 @@ class TaskChecklistController extends Controller
         return response()->json([
             'data' => $items,
             'meta' => [
-                'task_types' => ['vacuum_follow_up'],
-                'limitations' => [
-                    'waiting_first_response_not_implemented',
-                ],
+                'task_types' => ['vacuum_follow_up', 'waiting_first_response'],
+                'limitations' => [],
             ],
         ]);
     }

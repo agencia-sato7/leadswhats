@@ -2,6 +2,7 @@
 
 namespace App\Services\Domain;
 
+use App\Models\Company;
 use App\Models\Conversation;
 use App\Models\KanbanColumn;
 use App\Models\Lead;
@@ -14,6 +15,7 @@ class OperationalChecklistService
 {
     public function __construct(
         private readonly CompanySettingsService $companySettingsService,
+        private readonly BusinessTimeCalculatorService $businessTimeCalculatorService,
     ) {
     }
 
@@ -36,7 +38,7 @@ class OperationalChecklistService
             ->orderByDesc('last_message_at')
             ->get(['id', 'lead_id', 'last_message_at', 'owner_user_id']);
 
-        return $this->buildVacuumItemsForCompany((int) $user->company_id, $conversations);
+        return $this->buildChecklistItemsForCompany((int) $user->company_id, $conversations);
     }
 
     /**
@@ -48,7 +50,7 @@ class OperationalChecklistService
             ->orderByDesc('last_message_at')
             ->get(['id', 'lead_id', 'last_message_at', 'owner_user_id']);
 
-        return $this->buildVacuumItemsForCompany($companyId, $conversations);
+        return $this->buildChecklistItemsForCompany($companyId, $conversations);
     }
 
     private function baseConversationsQuery(int $companyId)
@@ -63,24 +65,48 @@ class OperationalChecklistService
      * @param \Illuminate\Support\Collection<int, Conversation> $conversations
      * @return array<int, array<string, mixed>>
      */
-    private function buildVacuumItemsForCompany(int $companyId, $conversations): array
+    private function buildChecklistItemsForCompany(int $companyId, $conversations): array
     {
         $rescueThresholdHours = max(1, $this->companySettingsService->rescueThresholdHours($companyId));
+        $firstResponseSlaMinutes = max(1, $this->companySettingsService->firstResponseSlaMinutes($companyId));
 
         if ($conversations->isEmpty()) {
             return [];
         }
 
+        $company = Company::query()->find($companyId, ['id']);
+        if (!$company) {
+            return [];
+        }
+
+        $conversationIds = $conversations->pluck('id')->all();
+
         $latestMessageIdsByConversation = Message::query()
-            ->selectRaw('MAX(id) as id')
+            ->selectRaw('MAX(id)')
             ->where('company_id', $companyId)
-            ->whereIn('conversation_id', $conversations->pluck('id')->all())
+            ->whereIn('conversation_id', $conversationIds)
             ->groupBy('conversation_id');
 
         $latestMessages = Message::query()
             ->whereIn('id', $latestMessageIdsByConversation)
             ->get(['id', 'conversation_id', 'direction', 'sent_at'])
             ->keyBy('conversation_id');
+
+        $latestInboundAtByConversation = Message::query()
+            ->where('company_id', $companyId)
+            ->whereIn('conversation_id', $conversationIds)
+            ->where('direction', 'inbound')
+            ->selectRaw('conversation_id, MAX(sent_at) as latest_inbound_at')
+            ->groupBy('conversation_id')
+            ->pluck('latest_inbound_at', 'conversation_id');
+
+        $latestOutboundAtByConversation = Message::query()
+            ->where('company_id', $companyId)
+            ->whereIn('conversation_id', $conversationIds)
+            ->where('direction', 'outbound')
+            ->selectRaw('conversation_id, MAX(sent_at) as latest_outbound_at')
+            ->groupBy('conversation_id')
+            ->pluck('latest_outbound_at', 'conversation_id');
 
         $leadIds = $conversations->pluck('lead_id')->unique()->values()->all();
 
@@ -122,15 +148,50 @@ class OperationalChecklistService
             $hoursSinceLastMessage = (float) $lastMessage->sent_at->diffInRealHours(now());
             $lastDirection = (string) $lastMessage->direction;
 
-            // Escopo inicial: apenas vacuum_follow_up. waiting_first_response fica para etapa futura.
-            if ($lastDirection !== 'outbound' || $hoursSinceLastMessage < $rescueThresholdHours) {
-                continue;
-            }
-
             $stage = $latestStages->get($lead->id);
             $currentStageName = null;
             if ($stage && $stage->to_column_id) {
                 $currentStageName = $columnNamesById[$stage->to_column_id] ?? null;
+            }
+
+            if ($lastDirection === 'outbound' && $hoursSinceLastMessage >= $rescueThresholdHours) {
+                $items[] = [
+                    'lead_id' => $lead->id,
+                    'conversation_id' => $conversation->id,
+                    'lead_name' => $lead->name,
+                    'phone' => $lead->phone_e164,
+                    'source' => $lead->source,
+                    'current_stage' => $currentStageName,
+                    'last_message_at' => $lastMessage->sent_at?->toISOString(),
+                    'last_message_direction' => $lastDirection,
+                    'hours_since_last_message' => round($hoursSinceLastMessage, 2),
+                    'task_type' => 'vacuum_follow_up',
+                    'task_label' => 'Lead em vácuo - follow-up pendente',
+                    'priority' => $hoursSinceLastMessage >= ($rescueThresholdHours * 2) ? 'high' : 'medium',
+                ];
+            }
+
+            $latestInboundRaw = $latestInboundAtByConversation->get($conversation->id);
+            if (!$latestInboundRaw) {
+                continue;
+            }
+
+            $latestInboundAt = \Carbon\Carbon::parse((string) $latestInboundRaw);
+            $latestOutboundRaw = $latestOutboundAtByConversation->get($conversation->id);
+            if ($latestOutboundRaw) {
+                $latestOutboundAt = \Carbon\Carbon::parse((string) $latestOutboundRaw);
+                if ($latestOutboundAt->gte($latestInboundAt)) {
+                    continue;
+                }
+            }
+
+            $businessSeconds = $this->businessTimeCalculatorService->calculateBusinessSeconds(
+                $latestInboundAt,
+                now(),
+                $company,
+            );
+            if ($businessSeconds < ($firstResponseSlaMinutes * 60)) {
+                continue;
             }
 
             $items[] = [
@@ -140,14 +201,18 @@ class OperationalChecklistService
                 'phone' => $lead->phone_e164,
                 'source' => $lead->source,
                 'current_stage' => $currentStageName,
-                'last_message_at' => $lastMessage->sent_at?->toISOString(),
-                'last_message_direction' => $lastDirection,
-                'hours_since_last_message' => round($hoursSinceLastMessage, 2),
-                'task_type' => 'vacuum_follow_up',
-                'task_label' => 'Lead em vácuo - follow-up pendente',
-                'priority' => $hoursSinceLastMessage >= ($rescueThresholdHours * 2) ? 'high' : 'medium',
+                'last_message_at' => $latestInboundAt->toISOString(),
+                'last_message_direction' => 'inbound',
+                'hours_since_last_message' => round($latestInboundAt->diffInRealHours(now()), 2),
+                'task_type' => 'waiting_first_response',
+                'task_label' => 'Primeiro atendimento atrasado',
+                'priority' => 'high',
             ];
         }
+
+        usort($items, static function (array $a, array $b): int {
+            return strcmp((string) $b['last_message_at'], (string) $a['last_message_at']);
+        });
 
         return $items;
     }

@@ -211,15 +211,18 @@ class OperationalChecklistApiTest extends TestCase
             ->getJson('/api/v1/tasks/checklist');
 
         $response->assertOk();
-        $response->assertJsonCount(1, 'data');
-        $response->assertJsonPath('data.0.lead_id', $leadVacuum->id);
-        $response->assertJsonPath('data.0.conversation_id', $conversationVacuum->id);
-        $response->assertJsonPath('data.0.task_type', 'vacuum_follow_up');
-        $response->assertJsonPath('data.0.current_stage', 'Novo Contato');
-        $response->assertJsonPath('data.0.last_message_direction', 'outbound');
 
-        $hours = (float) $response->json('data.0.hours_since_last_message');
+        $items = collect($response->json('data'));
+        $vacuumItem = $items->first(fn (array $item) => ($item['lead_id'] ?? null) === $leadVacuum->id && ($item['task_type'] ?? null) === 'vacuum_follow_up');
+        $this->assertNotNull($vacuumItem);
+        $this->assertSame($conversationVacuum->id, $vacuumItem['conversation_id']);
+        $this->assertSame('Novo Contato', $vacuumItem['current_stage']);
+        $this->assertSame('outbound', $vacuumItem['last_message_direction']);
+
+        $hours = (float) $vacuumItem['hours_since_last_message'];
         $this->assertGreaterThanOrEqual(12.0, $hours);
+
+        $this->assertFalse($items->contains(fn (array $item) => ($item['lead_id'] ?? null) === $leadOtherTenant->id));
 
         Carbon::setTestNow();
     }
@@ -332,6 +335,325 @@ class OperationalChecklistApiTest extends TestCase
         $response->assertOk();
         $response->assertJsonCount(1, 'data');
         $response->assertJsonPath('data.0.lead_id', $leadOwned->id);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_waiting_first_response_appears_when_inbound_without_reply_exceeds_sla(): void
+    {
+        Carbon::setTestNow('2026-05-07 12:00:00');
+
+        $company = Company::create(['name' => 'Empresa A', 'slug' => 'empresa-a']);
+        CompanyBusinessSetting::create([
+            'company_id' => $company->id,
+            'timezone' => 'America/Sao_Paulo',
+            'workday_start_time' => '08:00:00',
+            'workday_end_time' => '18:00:00',
+            'lunch_start_time' => '12:00:00',
+            'lunch_end_time' => '13:00:00',
+            'working_days' => [1, 2, 3, 4, 5],
+            'repeated_lead_window_days' => 90,
+            'rescue_threshold_hours' => 24,
+            'first_response_sla_minutes' => 15,
+            'webhook_token' => null,
+        ]);
+
+        $gestor = User::create([
+            'company_id' => $company->id,
+            'name' => 'Gestor A',
+            'email' => 'gestor.first.response@test.local',
+            'password' => Hash::make('12345678'),
+            'role' => 'gestor',
+            'active' => true,
+        ]);
+
+        $lead = Lead::create([
+            'company_id' => $company->id,
+            'name' => 'Lead sem resposta',
+            'phone_e164' => '+5511912340001',
+            'source' => 'site',
+        ]);
+
+        $conversation = Conversation::create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'status' => 'active',
+            'started_at' => now()->subHours(2),
+            'last_message_at' => now()->subMinutes(30),
+        ]);
+
+        Message::create([
+            'company_id' => $company->id,
+            'lead_id' => $lead->id,
+            'conversation_id' => $conversation->id,
+            'provider' => 'whatsapp-cloud',
+            'direction' => 'inbound',
+            'channel' => 'text',
+            'body' => 'Preciso de ajuda',
+            'sent_at' => now()->subMinutes(30),
+            'external_message_id' => 'wamid.checklist.waiting.1',
+            'metadata' => [],
+        ]);
+
+        $token = $this->postJson('/api/v1/auth/login', [
+            'email' => $gestor->email,
+            'password' => '12345678',
+        ])->json('token');
+
+        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+            ->getJson('/api/v1/tasks/checklist');
+
+        $response->assertOk();
+        $this->assertTrue(collect($response->json('data'))->contains(function (array $item) use ($lead): bool {
+            return $item['lead_id'] === $lead->id
+                && $item['task_type'] === 'waiting_first_response'
+                && $item['task_label'] === 'Primeiro atendimento atrasado'
+                && $item['priority'] === 'high';
+        }));
+        $response->assertJsonPath('meta.task_types.0', 'vacuum_follow_up');
+        $response->assertJsonPath('meta.task_types.1', 'waiting_first_response');
+
+        Carbon::setTestNow();
+    }
+
+    public function test_waiting_first_response_does_not_appear_before_sla_or_with_outbound_after_inbound(): void
+    {
+        Carbon::setTestNow('2026-05-07 12:00:00');
+
+        $company = Company::create(['name' => 'Empresa A', 'slug' => 'empresa-a']);
+        CompanyBusinessSetting::create([
+            'company_id' => $company->id,
+            'timezone' => 'America/Sao_Paulo',
+            'workday_start_time' => '08:00:00',
+            'workday_end_time' => '18:00:00',
+            'lunch_start_time' => '12:00:00',
+            'lunch_end_time' => '13:00:00',
+            'working_days' => [1, 2, 3, 4, 5],
+            'repeated_lead_window_days' => 90,
+            'rescue_threshold_hours' => 24,
+            'first_response_sla_minutes' => 30,
+            'webhook_token' => null,
+        ]);
+
+        $gestor = User::create([
+            'company_id' => $company->id,
+            'name' => 'Gestor A',
+            'email' => 'gestor.first.response.rules@test.local',
+            'password' => Hash::make('12345678'),
+            'role' => 'gestor',
+            'active' => true,
+        ]);
+
+        $leadBeforeSla = Lead::create([
+            'company_id' => $company->id,
+            'name' => 'Lead antes SLA',
+            'phone_e164' => '+5511912340002',
+            'source' => 'google',
+        ]);
+        $convBeforeSla = Conversation::create([
+            'company_id' => $company->id,
+            'lead_id' => $leadBeforeSla->id,
+            'status' => 'active',
+            'started_at' => now()->subHours(1),
+            'last_message_at' => now()->subMinutes(20),
+        ]);
+        Message::create([
+            'company_id' => $company->id,
+            'lead_id' => $leadBeforeSla->id,
+            'conversation_id' => $convBeforeSla->id,
+            'provider' => 'whatsapp-cloud',
+            'direction' => 'inbound',
+            'channel' => 'text',
+            'body' => 'Oi',
+            'sent_at' => now()->subMinutes(20),
+            'external_message_id' => 'wamid.checklist.waiting.2a',
+            'metadata' => [],
+        ]);
+
+        $leadWithReply = Lead::create([
+            'company_id' => $company->id,
+            'name' => 'Lead respondido',
+            'phone_e164' => '+5511912340003',
+            'source' => 'instagram',
+        ]);
+        $convWithReply = Conversation::create([
+            'company_id' => $company->id,
+            'lead_id' => $leadWithReply->id,
+            'status' => 'active',
+            'started_at' => now()->subHours(2),
+            'last_message_at' => now()->subMinutes(5),
+        ]);
+        Message::create([
+            'company_id' => $company->id,
+            'lead_id' => $leadWithReply->id,
+            'conversation_id' => $convWithReply->id,
+            'provider' => 'whatsapp-cloud',
+            'direction' => 'inbound',
+            'channel' => 'text',
+            'body' => 'Preciso de orçamento',
+            'sent_at' => now()->subMinutes(40),
+            'external_message_id' => 'wamid.checklist.waiting.2b',
+            'metadata' => [],
+        ]);
+        Message::create([
+            'company_id' => $company->id,
+            'lead_id' => $leadWithReply->id,
+            'conversation_id' => $convWithReply->id,
+            'provider' => 'whatsapp-cloud',
+            'direction' => 'outbound',
+            'channel' => 'text',
+            'body' => 'Claro, vou te enviar',
+            'sent_at' => now()->subMinutes(5),
+            'external_message_id' => 'wamid.checklist.waiting.2c',
+            'metadata' => [],
+        ]);
+
+        $token = $this->postJson('/api/v1/auth/login', [
+            'email' => $gestor->email,
+            'password' => '12345678',
+        ])->json('token');
+
+        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+            ->getJson('/api/v1/tasks/checklist');
+
+        $response->assertOk();
+        $this->assertFalse(collect($response->json('data'))->contains(fn (array $item) => $item['task_type'] === 'waiting_first_response'));
+
+        Carbon::setTestNow();
+    }
+
+    public function test_waiting_first_response_respects_sdr_ownership_and_tenant_isolation(): void
+    {
+        Carbon::setTestNow('2026-05-07 12:00:00');
+
+        $companyA = Company::create(['name' => 'Empresa A', 'slug' => 'empresa-a']);
+        $companyB = Company::create(['name' => 'Empresa B', 'slug' => 'empresa-b']);
+
+        CompanyBusinessSetting::create([
+            'company_id' => $companyA->id,
+            'timezone' => 'America/Sao_Paulo',
+            'workday_start_time' => '08:00:00',
+            'workday_end_time' => '18:00:00',
+            'lunch_start_time' => '12:00:00',
+            'lunch_end_time' => '13:00:00',
+            'working_days' => [1, 2, 3, 4, 5],
+            'repeated_lead_window_days' => 90,
+            'rescue_threshold_hours' => 24,
+            'first_response_sla_minutes' => 10,
+            'webhook_token' => null,
+        ]);
+
+        $sdrA = User::create([
+            'company_id' => $companyA->id,
+            'name' => 'SDR A',
+            'email' => 'sdr.waiting.owner@test.local',
+            'password' => Hash::make('12345678'),
+            'role' => 'sdr',
+            'active' => true,
+        ]);
+        $sdrB = User::create([
+            'company_id' => $companyA->id,
+            'name' => 'SDR B',
+            'email' => 'sdr.waiting.other@test.local',
+            'password' => Hash::make('12345678'),
+            'role' => 'sdr',
+            'active' => true,
+        ]);
+
+        $leadOwned = Lead::create([
+            'company_id' => $companyA->id,
+            'owner_user_id' => $sdrA->id,
+            'name' => 'Lead dono SDR A',
+            'phone_e164' => '+5511912340004',
+            'source' => 'site',
+        ]);
+        $convOwned = Conversation::create([
+            'company_id' => $companyA->id,
+            'lead_id' => $leadOwned->id,
+            'owner_user_id' => $sdrA->id,
+            'status' => 'active',
+            'started_at' => now()->subHours(1),
+            'last_message_at' => now()->subMinutes(30),
+        ]);
+        Message::create([
+            'company_id' => $companyA->id,
+            'lead_id' => $leadOwned->id,
+            'conversation_id' => $convOwned->id,
+            'provider' => 'whatsapp-cloud',
+            'direction' => 'inbound',
+            'channel' => 'text',
+            'body' => 'Atendimento?',
+            'sent_at' => now()->subMinutes(30),
+            'external_message_id' => 'wamid.checklist.waiting.3a',
+            'metadata' => [],
+        ]);
+
+        $leadOtherOwner = Lead::create([
+            'company_id' => $companyA->id,
+            'owner_user_id' => $sdrB->id,
+            'name' => 'Lead dono SDR B',
+            'phone_e164' => '+5511912340005',
+            'source' => 'site',
+        ]);
+        $convOtherOwner = Conversation::create([
+            'company_id' => $companyA->id,
+            'lead_id' => $leadOtherOwner->id,
+            'owner_user_id' => $sdrB->id,
+            'status' => 'active',
+            'started_at' => now()->subHours(1),
+            'last_message_at' => now()->subMinutes(30),
+        ]);
+        Message::create([
+            'company_id' => $companyA->id,
+            'lead_id' => $leadOtherOwner->id,
+            'conversation_id' => $convOtherOwner->id,
+            'provider' => 'whatsapp-cloud',
+            'direction' => 'inbound',
+            'channel' => 'text',
+            'body' => 'Sem resposta ainda',
+            'sent_at' => now()->subMinutes(30),
+            'external_message_id' => 'wamid.checklist.waiting.3b',
+            'metadata' => [],
+        ]);
+
+        $leadTenantB = Lead::create([
+            'company_id' => $companyB->id,
+            'name' => 'Lead tenant B',
+            'phone_e164' => '+5511912340006',
+            'source' => 'google',
+        ]);
+        $convTenantB = Conversation::create([
+            'company_id' => $companyB->id,
+            'lead_id' => $leadTenantB->id,
+            'status' => 'active',
+            'started_at' => now()->subHours(1),
+            'last_message_at' => now()->subMinutes(30),
+        ]);
+        Message::create([
+            'company_id' => $companyB->id,
+            'lead_id' => $leadTenantB->id,
+            'conversation_id' => $convTenantB->id,
+            'provider' => 'whatsapp-cloud',
+            'direction' => 'inbound',
+            'channel' => 'text',
+            'body' => 'Tenant B sem resposta',
+            'sent_at' => now()->subMinutes(30),
+            'external_message_id' => 'wamid.checklist.waiting.3c',
+            'metadata' => [],
+        ]);
+
+        $token = $this->postJson('/api/v1/auth/login', [
+            'email' => $sdrA->email,
+            'password' => '12345678',
+        ])->json('token');
+
+        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+            ->getJson('/api/v1/tasks/checklist');
+
+        $response->assertOk();
+        $response->assertJsonCount(1, 'data');
+        $response->assertJsonPath('data.0.lead_id', $leadOwned->id);
+        $response->assertJsonPath('data.0.task_type', 'waiting_first_response');
 
         Carbon::setTestNow();
     }
