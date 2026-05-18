@@ -3201,13 +3201,16 @@
           }
         },
         "description": "Retorna detalhe da conversa com histórico de mensagens. A abertura da conversa registra evento de auditoria (conversation_opened)."
-      },
+      }
+      
+    },
+    "/api/v1/inbox/conversations/{conversationId}/messages": {
       "post": {
         "tags": [
           "Inbox"
         ],
         "summary": "Envia mensagem outbound na conversa da Inbox",
-        "description": "Envia mensagem outbound usando o provider configurado no backend (no ambiente atual pode ser fake/local). Só permite envio com service window aberta.",
+        "description": "Envia mensagem outbound usando o provider configurado no backend. No ambiente local/demo o provider pode ser fake/local e o endpoint não garante envio externo real enquanto um provider real não estiver configurado. Só permite envio com service window aberta.",
         "security": [
           {
             "BearerAuth": []
@@ -3221,7 +3224,8 @@
             "schema": {
               "type": "integer",
               "minimum": 1
-            }
+            },
+            "description": "ID da conversa."
           }
         ],
         "requestBody": {
@@ -3230,6 +3234,9 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/InboxSendMessageRequest"
+              },
+              "example": {
+                "body": "Olá! Como posso ajudar?"
               }
             }
           }
@@ -3259,13 +3266,13 @@
             }
           },
           "401": {
-            "description": "Não autenticado"
+            "description": "Não autenticado (token ausente/inválido)"
           },
           "404": {
-            "description": "Conversa não encontrada"
+            "description": "Conversa inexistente, de outro tenant ou sem acesso"
           },
           "422": {
-            "description": "Body inválido, janela de atendimento fechada ou erro no provider"
+            "description": "Body vazio/inválido, janela de atendimento fechada ou falha do provider"
           }
         }
       }
