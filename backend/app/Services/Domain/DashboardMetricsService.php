@@ -15,7 +15,7 @@ class DashboardMetricsService
     }
 
     /**
-     * @return array{date:string,metrics:array<string,int>}
+     * @return array{date:string,metrics:array<string,int|float>}
      */
     public function summaryForCompany(int $companyId): array
     {
@@ -69,6 +69,20 @@ class DashboardMetricsService
             $checklistItems,
             static fn (array $item): bool => ($item["task_type"] ?? null) === "vacuum_follow_up"
         ));
+        $waitingFirstResponseTasks = count(array_filter(
+            $checklistItems,
+            static fn (array $item): bool => ($item["task_type"] ?? null) === "waiting_first_response"
+        ));
+        $overdueFollowUpTasks = $vacuumFollowUpTasks;
+        $oldestPendingTaskHours = $openTasks > 0
+            ? (float) max(array_map(
+                static fn (array $item): float => (float) ($item["hours_since_last_message"] ?? 0),
+                $checklistItems
+            ))
+            : 0.0;
+        $unassignedLeads = Lead::where("company_id", $companyId)
+            ->whereNull("owner_user_id")
+            ->count();
 
         return [
             "date" => today()->toDateString(),
@@ -83,6 +97,10 @@ class DashboardMetricsService
                 "manual_classifications_today" => $manualClassificationsToday,
                 "open_tasks" => $openTasks,
                 "vacuum_follow_up_tasks" => $vacuumFollowUpTasks,
+                "waiting_first_response_tasks" => $waitingFirstResponseTasks,
+                "overdue_follow_up_tasks" => $overdueFollowUpTasks,
+                "unassigned_leads" => $unassignedLeads,
+                "oldest_pending_task_hours" => round($oldestPendingTaskHours, 2),
             ],
         ];
     }

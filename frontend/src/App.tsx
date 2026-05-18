@@ -762,6 +762,10 @@ export function App() {
             <li>Classificações manuais hoje: {dashboard.metrics.manual_classifications_today}</li>
             <li>Tarefas operacionais abertas: {dashboard.metrics.open_tasks}</li>
             <li>Tarefas de follow-up em vácuo: {dashboard.metrics.vacuum_follow_up_tasks}</li>
+            <li>Tarefas de primeiro atendimento atrasado: {dashboard.metrics.waiting_first_response_tasks}</li>
+            <li>Tarefas de follow-up atrasado: {dashboard.metrics.overdue_follow_up_tasks}</li>
+            <li>Leads sem responsável: {dashboard.metrics.unassigned_leads}</li>
+            <li>Maior atraso de tarefa pendente (h): {dashboard.metrics.oldest_pending_task_hours}</li>
           </ul>
         </section>
       ) : null}

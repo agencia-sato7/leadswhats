@@ -382,6 +382,18 @@
               },
               "vacuum_follow_up_tasks": {
                 "type": "integer"
+              },
+              "waiting_first_response_tasks": {
+                "type": "integer"
+              },
+              "overdue_follow_up_tasks": {
+                "type": "integer"
+              },
+              "unassigned_leads": {
+                "type": "integer"
+              },
+              "oldest_pending_task_hours": {
+                "type": "number"
               }
             }
           }
@@ -835,6 +847,10 @@
           },
           "task_type": {
             "type": "string",
+            "enum": [
+              "vacuum_follow_up",
+              "waiting_first_response"
+            ],
             "example": "vacuum_follow_up"
           },
           "task_label": {
@@ -1715,7 +1731,11 @@
                     "unknown_source_leads": 3,
                     "manual_classifications_today": 2,
                     "open_tasks": 4,
-                    "vacuum_follow_up_tasks": 4
+                    "vacuum_follow_up_tasks": 4,
+                    "waiting_first_response_tasks": 2,
+                    "overdue_follow_up_tasks": 4,
+                    "unassigned_leads": 6,
+                    "oldest_pending_task_hours": 31.5
                   }
                 }
               }
@@ -2543,7 +2563,7 @@
           "Tasks"
         ],
         "summary": "Checklist operacional de tarefas pendentes",
-        "description": "Retorna checklist operacional por empresa (isolamento por company_id). Escopo atual inclui task_type vacuum_follow_up com base em rescue_threshold_hours. Regra SDR nesta fase: somente conversas/leads com ownership do próprio SDR.",
+        "description": "Retorna checklist operacional por empresa (isolamento por company_id). Inclui task_types vacuum_follow_up e waiting_first_response. Regra SDR: somente conversas/leads com ownership do próprio SDR.",
         "security": [
           {
             "BearerAuth": []
@@ -2572,15 +2592,28 @@
                       "task_type": "vacuum_follow_up",
                       "task_label": "Lead em vácuo - follow-up pendente",
                       "priority": "medium"
+                    },
+                    {
+                      "lead_id": 18,
+                      "conversation_id": 77,
+                      "lead_name": "João",
+                      "phone": "+5511988887777",
+                      "source": "instagram",
+                      "current_stage": "Novo Contato",
+                      "last_message_at": "2026-05-07T10:30:00.000000Z",
+                      "last_message_direction": "inbound",
+                      "hours_since_last_message": 1.5,
+                      "task_type": "waiting_first_response",
+                      "task_label": "Primeiro atendimento atrasado",
+                      "priority": "high"
                     }
                   ],
                   "meta": {
                     "task_types": [
-                      "vacuum_follow_up"
+                      "vacuum_follow_up",
+                      "waiting_first_response"
                     ],
-                    "limitations": [
-                      "waiting_first_response_not_implemented"
-                    ]
+                    "limitations": []
                   }
                 }
               }

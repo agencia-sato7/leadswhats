@@ -160,11 +160,15 @@ class DashboardSummaryTest extends TestCase
                     "rescues_today",
                     "active_conversations",
                     "unknown_source_leads",
-                    "manual_classifications_today",
-                    "open_tasks",
-                    "vacuum_follow_up_tasks",
-                ],
-            ])
+                "manual_classifications_today",
+                "open_tasks",
+                "vacuum_follow_up_tasks",
+                "waiting_first_response_tasks",
+                "overdue_follow_up_tasks",
+                "unassigned_leads",
+                "oldest_pending_task_hours",
+            ],
+        ])
             ->assertJsonPath("date", "2026-05-06")
             ->assertJsonPath("metrics.new_leads_today", 2)
             ->assertJsonPath("metrics.repeat_leads_today", 1)
@@ -175,7 +179,11 @@ class DashboardSummaryTest extends TestCase
             ->assertJsonPath("metrics.unknown_source_leads", 1)
             ->assertJsonPath("metrics.manual_classifications_today", 1)
             ->assertJsonPath("metrics.open_tasks", 0)
-            ->assertJsonPath("metrics.vacuum_follow_up_tasks", 0);
+            ->assertJsonPath("metrics.vacuum_follow_up_tasks", 0)
+            ->assertJsonPath("metrics.waiting_first_response_tasks", 0)
+            ->assertJsonPath("metrics.overdue_follow_up_tasks", 0)
+            ->assertJsonPath("metrics.unassigned_leads", 3)
+            ->assertJsonPath("metrics.oldest_pending_task_hours", 0);
 
         Carbon::setTestNow();
     }
@@ -223,6 +231,7 @@ class DashboardSummaryTest extends TestCase
             "name" => "Lead A",
             "phone_e164" => "+5511955552001",
             "source" => "google",
+            "owner_user_id" => null,
         ]);
 
         $conversationA = Conversation::create([
@@ -241,6 +250,33 @@ class DashboardSummaryTest extends TestCase
             "direction" => "outbound",
             "channel" => "text",
             "sent_at" => Carbon::parse("2026-05-06 22:00:00"),
+            "is_rescue" => false,
+        ]);
+
+        $leadWaiting = Lead::create([
+            "company_id" => $companyA->id,
+            "name" => "Lead waiting",
+            "phone_e164" => "+5511955552002",
+            "source" => "instagram",
+            "owner_user_id" => null,
+        ]);
+
+        $conversationWaiting = Conversation::create([
+            "company_id" => $companyA->id,
+            "lead_id" => $leadWaiting->id,
+            "status" => "active",
+            "started_at" => Carbon::parse("2026-05-07 10:00:00"),
+            "last_message_at" => Carbon::parse("2026-05-07 11:30:00"),
+        ]);
+
+        Message::create([
+            "company_id" => $companyA->id,
+            "lead_id" => $leadWaiting->id,
+            "conversation_id" => $conversationWaiting->id,
+            "provider" => "whatsapp",
+            "direction" => "inbound",
+            "channel" => "text",
+            "sent_at" => Carbon::parse("2026-05-07 11:30:00"),
             "is_rescue" => false,
         ]);
 
@@ -280,8 +316,12 @@ class DashboardSummaryTest extends TestCase
         ])->getJson("/api/v1/dashboard/summary");
 
         $response->assertOk()
-            ->assertJsonPath("metrics.open_tasks", 1)
-            ->assertJsonPath("metrics.vacuum_follow_up_tasks", 1);
+            ->assertJsonPath("metrics.open_tasks", 2)
+            ->assertJsonPath("metrics.vacuum_follow_up_tasks", 1)
+            ->assertJsonPath("metrics.waiting_first_response_tasks", 1)
+            ->assertJsonPath("metrics.overdue_follow_up_tasks", 1)
+            ->assertJsonPath("metrics.unassigned_leads", 2)
+            ->assertJsonPath("metrics.oldest_pending_task_hours", 14);
 
         Carbon::setTestNow();
     }

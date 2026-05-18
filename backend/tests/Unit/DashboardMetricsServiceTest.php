@@ -59,8 +59,18 @@ class DashboardMetricsServiceTest extends TestCase
             "phone_e164" => "+5511933333333",
             "source" => "facebook",
             "is_repeat_lead" => false,
+            "owner_user_id" => null,
             "last_inbound_at" => Carbon::parse("2026-05-05 10:00:00"),
             "last_outbound_at" => Carbon::parse("2026-05-05 14:30:00"),
+        ]);
+
+        $leadUnassignedNoTask = Lead::create([
+            "company_id" => $companyA->id,
+            "name" => "Lead Sem Dono",
+            "phone_e164" => "+5511933333000",
+            "source" => "site",
+            "is_repeat_lead" => false,
+            "owner_user_id" => null,
         ]);
 
         $leadOtherCompany = Lead::create([
@@ -153,7 +163,7 @@ class DashboardMetricsServiceTest extends TestCase
         $summary = $service->summaryForCompany($companyA->id);
 
         $this->assertSame("2026-05-06", $summary["date"]);
-        $this->assertSame(2, $summary["metrics"]["new_leads_today"]);
+        $this->assertSame(3, $summary["metrics"]["new_leads_today"]);
         $this->assertSame(1, $summary["metrics"]["repeat_leads_today"]);
         $this->assertSame(150, $summary["metrics"]["avg_first_response_seconds"]);
         $this->assertSame(1, $summary["metrics"]["vacuum_24h_open"]);
@@ -163,6 +173,10 @@ class DashboardMetricsServiceTest extends TestCase
         $this->assertSame(1, $summary["metrics"]["manual_classifications_today"]);
         $this->assertSame(0, $summary["metrics"]["open_tasks"]);
         $this->assertSame(0, $summary["metrics"]["vacuum_follow_up_tasks"]);
+        $this->assertSame(0, $summary["metrics"]["waiting_first_response_tasks"]);
+        $this->assertSame(0, $summary["metrics"]["overdue_follow_up_tasks"]);
+        $this->assertSame(4, $summary["metrics"]["unassigned_leads"]);
+        $this->assertSame(0.0, (float) $summary["metrics"]["oldest_pending_task_hours"]);
 
         Carbon::setTestNow();
     }

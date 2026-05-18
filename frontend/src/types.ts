@@ -47,6 +47,10 @@ export type DashboardSummaryResponse = {
     manual_classifications_today: number;
     open_tasks: number;
     vacuum_follow_up_tasks: number;
+    waiting_first_response_tasks: number;
+    overdue_follow_up_tasks: number;
+    unassigned_leads: number;
+    oldest_pending_task_hours: number;
   };
 };
 
