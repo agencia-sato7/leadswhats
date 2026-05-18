@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Company;
+use App\Models\CompanyBusinessSetting;
 use App\Services\WhatsappIngestionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,13 +13,6 @@ class WhatsappWebhookController extends Controller
 {
     public function ingest(Request $request, WhatsappIngestionService $service): JsonResponse
     {
-        $token = $request->header('X-Webhook-Token');
-        $expected = env('WEBHOOK_INGEST_TOKEN', 'leadswhats-dev-token');
-
-        if (!$token || $token !== $expected) {
-            return response()->json(['message' => 'Webhook token inválido.'], 401);
-        }
-
         $validated = $request->validate([
             'company_slug' => ['required', 'string'],
             'phone' => ['required', 'string'],
@@ -38,6 +32,19 @@ class WhatsappWebhookController extends Controller
 
         if (!$company) {
             return response()->json(['message' => 'Empresa não encontrada.'], 404);
+        }
+
+        $providedToken = (string) $request->header('X-Webhook-Token', '');
+        $configuredToken = CompanyBusinessSetting::query()
+            ->where('company_id', $company->id)
+            ->value('webhook_token');
+
+        if (filled($configuredToken)) {
+            if ($providedToken === '' || !hash_equals((string) $configuredToken, $providedToken)) {
+                return response()->json(['message' => 'Webhook token inválido.'], 401);
+            }
+        } elseif ((string) config('app.env') === 'production') {
+            return response()->json(['message' => 'Webhook token não configurado.'], 401);
         }
 
         $validated['raw_payload'] = $request->all();

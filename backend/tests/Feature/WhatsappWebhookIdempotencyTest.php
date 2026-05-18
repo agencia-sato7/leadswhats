@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Company;
+use App\Models\CompanyBusinessSetting;
 use App\Models\Conversation;
 use App\Models\Lead;
 use App\Models\Message;
@@ -21,6 +22,11 @@ class WhatsappWebhookIdempotencyTest extends TestCase
             'timezone' => 'America/Sao_Paulo',
         ]);
 
+        CompanyBusinessSetting::create([
+            'company_id' => $company->id,
+            'webhook_token' => 'demo_idempotent_token',
+        ]);
+
         $payload = [
             'company_slug' => $company->slug,
             'phone' => '(11) 98888-1111',
@@ -33,7 +39,7 @@ class WhatsappWebhookIdempotencyTest extends TestCase
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ];
 
-        $headers = ['X-Webhook-Token' => 'leadswhats-dev-token'];
+        $headers = ['X-Webhook-Token' => 'demo_idempotent_token'];
 
         $firstResponse = $this->postJson('/api/v1/webhooks/whatsapp', $payload, $headers);
         $firstResponse->assertOk()->assertJsonPath('data.duplicated', false);

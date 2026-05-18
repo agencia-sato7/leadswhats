@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Company;
+use App\Models\CompanyBusinessSetting;
 use App\Models\KanbanColumn;
 use App\Models\Lead;
 use App\Models\LeadStageHistory;
@@ -10,6 +11,7 @@ use App\Models\Pipeline;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -36,6 +38,11 @@ class WebhookBusinessRulesTest extends TestCase
             'active' => true,
         ]);
 
+        CompanyBusinessSetting::create([
+            'company_id' => $company->id,
+            'webhook_token' => 'demo_metric_token',
+        ]);
+
         $payload = [
             'company_slug' => $company->slug,
             'phone' => '(11) 97777-1111',
@@ -48,7 +55,7 @@ class WebhookBusinessRulesTest extends TestCase
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ];
 
-        $headers = ['X-Webhook-Token' => 'leadswhats-dev-token'];
+        $headers = ['X-Webhook-Token' => 'demo_metric_token'];
 
         $this->postJson('/api/v1/webhooks/whatsapp', $payload, $headers)->assertOk();
         $this->postJson('/api/v1/webhooks/whatsapp', $payload, $headers)
@@ -70,6 +77,108 @@ class WebhookBusinessRulesTest extends TestCase
         $this->assertSame(1, $summary['metrics']['active_conversations']);
 
         Carbon::setTestNow();
+    }
+
+    public function test_webhook_with_correct_company_token_is_accepted_and_does_not_expose_token(): void
+    {
+        $company = Company::create(['name' => 'Empresa Token', 'slug' => 'empresa-token']);
+        CompanyBusinessSetting::create([
+            'company_id' => $company->id,
+            'webhook_token' => 'demo_valid_token_123',
+        ]);
+
+        $response = $this->postJson('/api/v1/webhooks/whatsapp', [
+            'company_slug' => $company->slug,
+            'phone' => '(11) 94444-1111',
+            'direction' => 'inbound',
+            'provider' => 'whatsapp-cloud',
+            'external_message_id' => 'wamid.token.valid.1',
+            'sent_at' => '2026-05-06T10:00:00-03:00',
+        ], ['X-Webhook-Token' => 'demo_valid_token_123'])
+            ->assertOk()
+            ->assertJsonPath('data.duplicated', false);
+
+        $response->assertJsonMissingPath('webhook_token');
+        $response->assertJsonMissingPath('data.webhook_token');
+    }
+
+    public function test_webhook_without_token_returns_401_when_company_has_configured_token(): void
+    {
+        $company = Company::create(['name' => 'Empresa Token', 'slug' => 'empresa-token-missing']);
+        CompanyBusinessSetting::create([
+            'company_id' => $company->id,
+            'webhook_token' => 'demo_missing_token_123',
+        ]);
+
+        $this->postJson('/api/v1/webhooks/whatsapp', [
+            'company_slug' => $company->slug,
+            'phone' => '(11) 94444-2222',
+            'direction' => 'inbound',
+            'provider' => 'whatsapp-cloud',
+            'external_message_id' => 'wamid.token.missing.1',
+            'sent_at' => '2026-05-06T10:00:00-03:00',
+        ])->assertStatus(401);
+    }
+
+    public function test_webhook_with_invalid_token_returns_401_when_company_has_configured_token(): void
+    {
+        $company = Company::create(['name' => 'Empresa Token', 'slug' => 'empresa-token-invalid']);
+        CompanyBusinessSetting::create([
+            'company_id' => $company->id,
+            'webhook_token' => 'demo_expected_token_123',
+        ]);
+
+        $this->postJson('/api/v1/webhooks/whatsapp', [
+            'company_slug' => $company->slug,
+            'phone' => '(11) 94444-3333',
+            'direction' => 'inbound',
+            'provider' => 'whatsapp-cloud',
+            'external_message_id' => 'wamid.token.invalid.1',
+            'sent_at' => '2026-05-06T10:00:00-03:00',
+        ], ['X-Webhook-Token' => 'wrong-token'])->assertStatus(401);
+    }
+
+    public function test_webhook_allows_fallback_in_testing_when_company_token_is_null(): void
+    {
+        $company = Company::create(['name' => 'Empresa Fallback', 'slug' => 'empresa-fallback-testing']);
+        CompanyBusinessSetting::create([
+            'company_id' => $company->id,
+            'webhook_token' => null,
+        ]);
+
+        $this->postJson('/api/v1/webhooks/whatsapp', [
+            'company_slug' => $company->slug,
+            'phone' => '(11) 94444-4444',
+            'direction' => 'inbound',
+            'provider' => 'whatsapp-cloud',
+            'external_message_id' => 'wamid.token.null.testing.1',
+            'sent_at' => '2026-05-06T10:00:00-03:00',
+        ])->assertOk();
+    }
+
+    public function test_webhook_rejects_when_company_token_is_null_in_production(): void
+    {
+        $company = Company::create(['name' => 'Empresa Fallback', 'slug' => 'empresa-fallback-production']);
+        CompanyBusinessSetting::create([
+            'company_id' => $company->id,
+            'webhook_token' => null,
+        ]);
+
+        $originalEnv = Config::get('app.env');
+        Config::set('app.env', 'production');
+
+        try {
+            $this->postJson('/api/v1/webhooks/whatsapp', [
+                'company_slug' => $company->slug,
+                'phone' => '(11) 94444-5555',
+                'direction' => 'inbound',
+                'provider' => 'whatsapp-cloud',
+                'external_message_id' => 'wamid.token.null.production.1',
+                'sent_at' => '2026-05-06T10:00:00-03:00',
+            ])->assertStatus(401);
+        } finally {
+            Config::set('app.env', $originalEnv);
+        }
     }
 
     public function test_webhook_respects_company_slug_for_tenant_isolation(): void

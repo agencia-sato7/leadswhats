@@ -1638,11 +1638,12 @@
           {
             "name": "X-Webhook-Token",
             "in": "header",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string"
             },
-            "example": "leadswhats-dev-token"
+            "description": "Token de autenticação do webhook por empresa. Quando company_business_settings.webhook_token estiver configurado, o header é obrigatório.",
+            "example": "<TOKEN_DEMO_GERADO>"
           }
         ],
         "requestBody": {
@@ -1680,7 +1681,7 @@
                   "duplicated": {
                     "summary": "Evento duplicado (idempotente)",
                     "value": {
-                      "message": "Mensagem duplicada recebida; evento ja processado anteriormente.",
+                      "message": "Mensagem já processada (idempotente).",
                       "data": {
                         "duplicated": true
                       }
@@ -1691,13 +1692,13 @@
             }
           },
           "401": {
-            "description": "Token invalido"
+            "description": "Token ausente/inválido ou token não configurado em produção"
           },
           "404": {
             "description": "Empresa nao encontrada"
           }
         },
-        "description": "Endpoint de ingestao passiva (somente leitura de eventos). A chave idempotente prioritaria e company + provider + external_message_id. Se external_message_id nao for enviado, o sistema aplica fallback por hash deterministico do conteudo do evento. Replays da mesma mensagem retornam sucesso estavel e nao duplicam message, lead, conversation nem metricas. Quando aplicavel, classificacao e efeitos derivados respeitam configuracoes comerciais da empresa (timezone, expediente, almoco, dias uteis, janela de lead repetido e threshold de vacuo/resgate)."
+        "description": "Endpoint de ingestao passiva (somente leitura de eventos). A chave idempotente prioritaria e company + provider + external_message_id. Se external_message_id nao for enviado, o sistema aplica fallback por hash deterministico do conteudo do evento. Replays da mesma mensagem retornam sucesso estavel e nao duplicam message, lead, conversation nem metricas. Quando aplicavel, classificacao e efeitos derivados respeitam configuracoes comerciais da empresa (timezone, expediente, almoco, dias uteis, janela de lead repetido e threshold de vacuo/resgate). No ambiente local/testing, se company_business_settings.webhook_token estiver null, o endpoint permite fallback de compatibilidade. Em production, webhook_token null e rejeitado com 401."
       }
     },
     "/api/v1/dashboard/summary": {
