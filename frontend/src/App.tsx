@@ -20,7 +20,7 @@ import {
   sendInboxMessage,
   updateLeadOwner,
 } from './api';
-import { AppShell, PageHeader, Topbar } from './components/layout';
+import { AppShell, PageHeader, Sidebar, Topbar } from './components/layout';
 import {
   Badge,
   Button,
@@ -86,6 +86,7 @@ function getFriendlyAuditEventType(eventType: InboxConversationEvent['event_type
 }
 
 export function App() {
+  type ActiveView = 'dashboard' | 'inbox' | 'checklist' | 'kanban' | 'contacts';
   const [email, setEmail] = useState('gestor@empresa.local');
   const [password, setPassword] = useState('12345678');
   const [session, setSession] = useState<Session | null>(null);
@@ -150,6 +151,7 @@ export function App() {
   const [draggingCard, setDraggingCard] = useState<{ leadId: number; fromColumnId: number } | null>(null);
   const [dragOverColumnId, setDragOverColumnId] = useState<number | null>(null);
   const [pressedCardId, setPressedCardId] = useState<number | null>(null);
+  const [activeView, setActiveView] = useState<ActiveView>('dashboard');
 
   const [loading, setLoading] = useState(false);
   const [kanbanLoading, setKanbanLoading] = useState(false);
@@ -779,23 +781,62 @@ export function App() {
     { label: 'Leads sem responsável', value: dashboard.metrics.unassigned_leads },
     { label: 'Maior atraso (h)', value: dashboard.metrics.oldest_pending_task_hours },
   ] : [];
+  const riskMetricLabels = new Set([
+    'Tarefas abertas',
+    '1º atendimento atrasado',
+    'Follow-up atrasado',
+    'Leads sem responsável',
+  ]);
+  const navSections: Array<{ id: ActiveView; label: string; subtitle: string }> = [
+    { id: 'dashboard', label: 'Dashboard', subtitle: 'Visão geral e métricas' },
+    { id: 'inbox', label: 'Inbox', subtitle: 'Atendimento e auditoria' },
+    { id: 'checklist', label: 'Checklist', subtitle: 'Tarefas operacionais' },
+    { id: 'kanban', label: 'Kanban', subtitle: 'Pipeline e movimentação' },
+    { id: 'contacts', label: 'Contatos', subtitle: 'Busca e exportação' },
+  ];
+  const activeNav = navSections.find((item) => item.id === activeView) ?? navSections[0];
 
   return (
     <AppShell>
-      <Topbar
-        left={(
-          <PageHeader
-            title="LEADSWHATS"
-            subtitle={<>{session.user.name} <Badge variant="info">{session.user.role}</Badge></>}
+      <div className="lw-shell">
+        <Sidebar>
+          <div className="lw-side-brand">
+            <p className="lw-side-title">LEADSWHATS</p>
+            <small className="lw-side-subtitle">Revenue Intelligence</small>
+          </div>
+          <nav className="lw-side-nav" aria-label="Navegação local">
+            {navSections.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`lw-side-link ${activeView === item.id ? 'lw-side-link--active' : ''}`}
+                onClick={() => setActiveView(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+          <div className="lw-side-user">
+            <small>{session.user.name}</small>
+            <Badge variant="info">{session.user.role}</Badge>
+          </div>
+        </Sidebar>
+
+        <div className={`lw-shell-main ${activeView === 'kanban' ? 'lw-shell-main--kanban' : ''}`}>
+          <Topbar
+            left={(
+              <PageHeader
+                title={activeNav.label}
+                subtitle={overview ? `${activeNav.subtitle} · ${overview.company.name} (${overview.company.slug})` : activeNav.subtitle}
+              />
+            )}
+            right={<Button onClick={logout}>Sair</Button>}
           />
-        )}
-        right={<Button onClick={logout}>Sair</Button>}
-      />
 
-      {loading ? <LoadingState message="Carregando dados..." /> : null}
-      {error ? <ErrorState message={error} /> : null}
+          {loading ? <LoadingState message="Carregando dados..." /> : null}
+          {error ? <ErrorState message={error} /> : null}
 
-      {overview ? (
+          {activeView === 'dashboard' && overview ? (
         <Section>
           <h2>Empresa</h2>
           <p><strong>{overview.company.name}</strong> ({overview.company.slug})</p>
@@ -803,21 +844,27 @@ export function App() {
         </Section>
       ) : null}
 
-      {dashboard ? (
-        <Section>
+      {activeView === 'dashboard' && dashboard ? (
+        <Section className="lw-dashboard-section">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <h2 style={{ margin: 0 }}>Dashboard Diário</h2>
             <Badge variant="neutral">{dashboard.date}</Badge>
           </div>
           <div className="lw-metrics-grid">
             {dashboardMetrics.map((metric) => (
-              <MetricCard key={metric.label} label={metric.label} value={metric.value} />
+              <MetricCard
+                key={metric.label}
+                label={metric.label}
+                value={metric.value}
+                variant={riskMetricLabels.has(metric.label) ? 'risk' : 'default'}
+              />
             ))}
           </div>
         </Section>
       ) : null}
 
-      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16 }}>
+      {activeView === 'inbox' ? (
+      <Section>
         <h2 style={{ marginTop: 0 }}>Inbox / Atendimento</h2>
 
         <form onSubmit={(event) => void applyInboxFilters(event)} style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
@@ -869,7 +916,7 @@ export function App() {
 
         {!inboxLoading && !inboxError && inboxConversations.length > 0 ? (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 12, alignItems: 'start' }}>
+            <div className="lw-inbox-split" style={{ gap: 12, alignItems: 'start' }}>
               <aside style={{ border: '1px solid #eee', borderRadius: 8, maxHeight: 520, overflow: 'auto' }}>
                 {inboxConversations.map((conversation) => {
                   const isSelected = selectedConversationId === conversation.conversation_id;
@@ -1110,9 +1157,11 @@ export function App() {
             </div>
           </>
         ) : null}
-      </section>
+      </Section>
+      ) : null}
 
-      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16 }}>
+      {activeView === 'checklist' ? (
+      <Section>
         <h2 style={{ marginTop: 0 }}>Checklist do Dia</h2>
         {checklistLoading ? <p>Carregando checklist...</p> : null}
         {checklistError ? <p style={{ color: 'crimson' }}>{checklistError}</p> : null}
@@ -1121,7 +1170,7 @@ export function App() {
         {!checklistLoading && !checklistError && checklistItems.length === 0 ? <p>Nenhuma tarefa operacional pendente no momento.</p> : null}
 
         {!checklistLoading && !checklistError && checklistItems.length > 0 ? (
-          <div style={{ display: 'grid', gap: 10 }}>
+          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
             {checklistItems.map((item) => (
               <div key={`${item.lead_id}-${item.conversation_id}-${item.task_type}`} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 10 }}>
                 <p style={{ margin: 0 }}><strong>{item.lead_name || item.phone}</strong></p>
@@ -1139,10 +1188,15 @@ export function App() {
             ))}
           </div>
         ) : null}
-      </section>
+      </Section>
+      ) : null}
 
-      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16 }}>
-        <h2 style={{ marginTop: 0 }}>Kanban</h2>
+      {activeView === 'kanban' ? (
+      <Section className="lw-kanban-section">
+        <div className="lw-kanban-header">
+          <h2 style={{ marginTop: 0 }}>Kanban</h2>
+          {selectedPipelineId ? <Badge variant="info">Pipeline #{selectedPipelineId}</Badge> : null}
+        </div>
         {!canMoveStage ? <p style={{ marginTop: 0 }}>Você está em perfil <strong>SDR</strong>: pode visualizar o Kanban, mas não pode mover cards.</p> : null}
 
         {pipelines.length === 0 ? <p>Nenhum pipeline encontrado para esta empresa. Rode o bootstrap demo ou configure um pipeline.</p> : null}
@@ -1150,7 +1204,7 @@ export function App() {
         {pipelines.length > 1 ? (
           <label style={{ display: 'block', marginBottom: 12 }}>
             Pipeline:
-            <select style={{ marginLeft: 8 }} value={selectedPipelineId ?? ''} onChange={(e) => setSelectedPipelineId(Number(e.target.value))}>
+            <select className="lw-select" style={{ marginLeft: 8, maxWidth: 280 }} value={selectedPipelineId ?? ''} onChange={(e) => setSelectedPipelineId(Number(e.target.value))}>
               {pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}
             </select>
           </label>
@@ -1163,26 +1217,23 @@ export function App() {
         {!kanbanLoading && !kanbanError && kanban && kanban.columns.length === 0 ? <p>Este pipeline ainda não possui colunas.</p> : null}
 
         {!kanbanLoading && !kanbanError && kanban && kanban.columns.length > 0 ? (
-          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', alignItems: 'flex-start', paddingBottom: 8 }}>
+          <div className="lw-kanban-columns">
             {kanban.columns.map((column) => (
               <div
                 key={column.id}
                 onDragOver={(event) => handleColumnDragOver(event, column.id)}
                 onDrop={(event) => { void handleColumnDrop(event, column.id); }}
                 onDragLeave={() => { if (dragOverColumnId === column.id) setDragOverColumnId(null); }}
-                style={{
-                  minWidth: 280,
-                  maxWidth: 320,
-                  border: dragOverColumnId === column.id ? '2px dashed #2f7cf6' : '1px solid #ddd',
-                  borderRadius: 8,
-                  padding: 10,
-                  background: dragOverColumnId === column.id ? '#eef5ff' : '#fafafa',
-                }}
+                className={`lw-kanban-column ${dragOverColumnId === column.id ? 'lw-kanban-column--drag-over' : ''}`}
               >
-                <h3 style={{ marginTop: 0, marginBottom: 8 }}>{column.name}</h3>
+                <div className="lw-kanban-column-header">
+                  <h3 style={{ marginTop: 0, marginBottom: 8 }}>{column.name}</h3>
+                  <Badge variant="neutral">{column.cards.length}</Badge>
+                </div>
                 <small style={{ display: 'block', marginBottom: 10 }}>Etapa atual: {column.name}</small>
+                {column.rule ? <small style={{ display: 'block', marginBottom: 10, color: '#64748b' }}>Regra: {column.rule}</small> : null}
 
-                {column.cards.length === 0 ? <p style={{ margin: 0 }}>Nenhum lead nesta etapa.</p> : null}
+                {column.cards.length === 0 ? <EmptyState title="Sem leads nesta etapa." /> : null}
 
                 {column.cards.map((card) => {
                   const history = stageHistoryByLead[card.lead_id];
@@ -1195,29 +1246,23 @@ export function App() {
                       onMouseDown={() => { if (canMoveStage) setPressedCardId(card.lead_id); }}
                       onMouseUp={() => setPressedCardId(null)}
                       onMouseLeave={() => setPressedCardId(null)}
+                      className={`lw-kanban-card ${draggingCard?.leadId === card.lead_id || pressedCardId === card.lead_id ? 'lw-kanban-card--active' : ''}`}
                       style={{
-                        border: '1px solid #ccc',
-                        borderRadius: 8,
-                        padding: 10,
-                        marginBottom: 8,
-                        background: '#fff',
                         cursor: canMoveStage
                           ? (draggingCard?.leadId === card.lead_id || pressedCardId === card.lead_id ? 'grabbing' : 'grab')
                           : 'default',
-                        transform: draggingCard?.leadId === card.lead_id || pressedCardId === card.lead_id ? 'scale(0.99)' : 'scale(1)',
-                        boxShadow: draggingCard?.leadId === card.lead_id || pressedCardId === card.lead_id
-                          ? '0 2px 10px rgba(0,0,0,0.15)'
-                          : '0 1px 4px rgba(0,0,0,0.06)',
-                        transition: 'transform 120ms ease, box-shadow 120ms ease',
                       }}
                     >
                       <p style={{ margin: 0 }}><strong>{card.name || card.phone}</strong></p>
                       <small style={{ display: 'block' }}>Telefone: {card.phone}</small>
-                      <small style={{ display: 'block' }}>Source: {card.source}</small>
-                      <small style={{ display: 'block' }}>Classificação: {card.classification}</small>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, marginBottom: 6 }}>
+                        <Badge variant="info">{card.source}</Badge>
+                        <Badge variant={card.classification === 'lead_novo' ? 'success' : 'warning'}>{card.classification}</Badge>
+                      </div>
                       <small style={{ display: 'block' }}>Última mensagem: {card.last_message_at || 'Sem registro'}</small>
+                      <small style={{ display: 'block' }}>Responsável: n/d</small>
                       <small style={{ display: 'block', marginBottom: 8 }}>Etapa atual: {column.name}</small>
-                      {canMoveStage ? <small style={{ display: 'block', marginBottom: 8, color: '#555' }}>☰ Arrastar para mover</small> : null}
+                      {canMoveStage ? <small style={{ display: 'block', marginBottom: 8, color: '#555' }}>Arrastar para mover</small> : null}
 
                       <button onClick={() => handleToggleHistory(card.lead_id)} disabled={historyLoadingLeadId === card.lead_id}>
                         {history ? 'Ocultar histórico' : 'Ver histórico'}
@@ -1246,9 +1291,11 @@ export function App() {
             ))}
           </div>
         ) : null}
-      </section>
+      </Section>
+      ) : null}
 
-      <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16 }}>
+      {activeView === 'contacts' ? (
+      <Section>
         <h2 style={{ marginTop: 0 }}>Contatos</h2>
 
         <form onSubmit={(event) => void applyContactsFilters(event)} style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
@@ -1289,7 +1336,7 @@ export function App() {
 
         {!contactsLoading && !contactsError && contacts.length > 0 ? (
           <>
-            <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
               {contacts.map((contact) => (
                 <div key={contact.lead_id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 10 }}>
                   <p style={{ margin: 0 }}><strong>{contact.name || contact.phone}</strong></p>
@@ -1312,21 +1359,22 @@ export function App() {
             </div>
           </>
         ) : null}
-      </section>
+      </Section>
+      ) : null}
 
-      {!canManageSource ? (
-        <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12 }}>
+      {activeView === 'dashboard' && !canManageSource ? (
+        <Section>
           <h2>Classificação de Origem</h2>
           <p>
             Apenas <strong>gestor</strong> ou <strong>admin</strong> podem classificar/reclassificar origem.
             Se necessário, o atendimento deve solicitar essa ação ao gestor.
           </p>
-        </section>
+        </Section>
       ) : null}
 
-      {canManageSource ? (
+      {activeView === 'dashboard' && canManageSource ? (
         <>
-          <section>
+          <Section>
             <h2>Origem Pendente (Desconhecido)</h2>
             {unknownLeads.length === 0 ? <p>Nenhum lead pendente de classificação.</p> : null}
             {unknownLeads.map((lead) => (
@@ -1340,9 +1388,9 @@ export function App() {
                 </div>
               </div>
             ))}
-          </section>
+          </Section>
 
-          <section>
+          <Section>
             <h2>Leads Recentes (Reclassificar)</h2>
             {recentLeads.length === 0 ? <p>Nenhum lead recente.</p> : null}
             {recentLeads.map((lead) => (
@@ -1358,9 +1406,11 @@ export function App() {
                 </div>
               </div>
             ))}
-          </section>
+          </Section>
         </>
       ) : null}
+        </div>
+      </div>
     </AppShell>
   );
 }

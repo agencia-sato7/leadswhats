@@ -1,25 +1,32 @@
-import type { ReactNode, TableHTMLAttributes, TextareaHTMLAttributes, InputHTMLAttributes, SelectHTMLAttributes, ButtonHTMLAttributes } from 'react';
+import type {
+  ReactNode,
+  TableHTMLAttributes,
+  TextareaHTMLAttributes,
+  InputHTMLAttributes,
+  SelectHTMLAttributes,
+  ButtonHTMLAttributes,
+  HTMLAttributes,
+} from 'react';
 
-type BaseProps = {
+type BaseProps = HTMLAttributes<HTMLElement> & {
   children?: ReactNode;
-  className?: string;
 };
 
 function join(...values: Array<string | undefined>): string {
   return values.filter(Boolean).join(' ');
 }
 
-export function Section({ children, className }: BaseProps) {
-  return <section className={join('lw-section', className)}>{children}</section>;
+export function Section({ children, className, ...props }: BaseProps) {
+  return <section className={join('lw-section', className)} {...props}>{children}</section>;
 }
 
-export function Card({ children, className }: BaseProps) {
-  return <div className={join('lw-card', className)}>{children}</div>;
+export function Card({ children, className, ...props }: BaseProps) {
+  return <div className={join('lw-card', className)} {...props}>{children}</div>;
 }
 
-export function MetricCard({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
+export function MetricCard({ label, value, hint, variant = 'default' }: { label: string; value: ReactNode; hint?: ReactNode; variant?: 'default' | 'risk' }) {
   return (
-    <Card className="lw-metric-card">
+    <Card className={join('lw-metric-card', variant === 'risk' ? 'lw-metric-card--risk' : undefined)}>
       <p className="lw-metric-label">{label}</p>
       <p className="lw-metric-value">{value}</p>
       {hint ? <p className="lw-metric-hint">{hint}</p> : null}
