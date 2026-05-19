@@ -25,6 +25,12 @@ class DemoBootstrapCommandTest extends TestCase
         $this->assertSame('Empresa Demo', $company->name);
 
         $this->assertDatabaseHas('users', [
+            'company_id' => null,
+            'email' => 'platform@leadswhats.local',
+            'role' => 'platform_admin',
+            'active' => true,
+        ]);
+        $this->assertDatabaseHas('users', [
             'company_id' => $company->id,
             'email' => 'admin@leadswhats.local',
             'role' => 'admin',
@@ -124,6 +130,8 @@ class DemoBootstrapCommandTest extends TestCase
         $this->assertSame(1, User::query()->where('email', 'admin@leadswhats.local')->count());
         $this->assertSame(1, User::query()->where('email', 'gestor@empresa.local')->count());
         $this->assertSame(1, User::query()->where('email', 'sdr@empresa.local')->count());
+        $this->assertSame(1, User::query()->where('email', 'platform@leadswhats.local')->count());
+        $this->assertNull(User::query()->where('email', 'platform@leadswhats.local')->value('company_id'));
 
         $this->assertSame(
             $settingsToken,
@@ -131,4 +139,3 @@ class DemoBootstrapCommandTest extends TestCase
         );
     }
 }
-

@@ -32,19 +32,28 @@ class DemoBootstrapService
 
         $users = [
             [
+                'name' => 'Platform Admin Demo',
+                'email' => 'platform@leadswhats.local',
+                'role' => 'platform_admin',
+                'company_id' => null,
+            ],
+            [
                 'name' => 'Admin Plataforma',
                 'email' => 'admin@leadswhats.local',
                 'role' => 'admin',
+                'company_id' => $company->id,
             ],
             [
                 'name' => 'Gestor Demo',
                 'email' => 'gestor@empresa.local',
                 'role' => 'gestor',
+                'company_id' => $company->id,
             ],
             [
                 'name' => 'SDR Demo',
                 'email' => 'sdr@empresa.local',
                 'role' => 'sdr',
+                'company_id' => $company->id,
             ],
         ];
 
@@ -52,7 +61,7 @@ class DemoBootstrapService
             User::query()->updateOrCreate(
                 ['email' => $userData['email']],
                 [
-                    'company_id' => $company->id,
+                    'company_id' => $userData['company_id'],
                     'name' => $userData['name'],
                     'password' => Hash::make('12345678'),
                     'role' => $userData['role'],
@@ -131,4 +140,3 @@ class DemoBootstrapService
         ];
     }
 }
-

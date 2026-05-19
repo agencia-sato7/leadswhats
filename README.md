@@ -64,9 +64,14 @@ make down
 
 ## Usuários demo (bootstrap)
 
+- `platform@leadswhats.local` / `12345678` (`platform_admin`)
 - `admin@leadswhats.local` / `12345678` (`admin`)
 - `gestor@empresa.local` / `12345678` (`gestor`)
 - `sdr@empresa.local` / `12345678` (`sdr`)
+
+Notas de papel:
+- `platform_admin` é papel de administração SaaS da plataforma LEADSWHATS (global).
+- `admin` continua sendo administrador da empresa cliente (tenant).
 
 Aviso de segurança:
 - Essas credenciais são apenas para ambiente local/demo.

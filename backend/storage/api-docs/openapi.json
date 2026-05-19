@@ -100,10 +100,11 @@
               "role": {
                 "type": "string",
                 "enum": [
-                  "admin",
-                  "gestor",
-                  "sdr"
-                ]
+              "platform_admin",
+              "admin",
+              "gestor",
+              "sdr"
+            ]
               },
               "company_id": {
                 "type": "integer",
@@ -128,6 +129,7 @@
           "role": {
             "type": "string",
             "enum": [
+              "platform_admin",
               "admin",
               "gestor",
               "sdr"
@@ -163,6 +165,7 @@
           "role": {
             "type": "string",
             "enum": [
+              "platform_admin",
               "admin",
               "gestor",
               "sdr"

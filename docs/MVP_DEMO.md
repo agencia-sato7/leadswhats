@@ -21,6 +21,10 @@ Use o perfil gestor:
 - Email: `gestor@empresa.local`
 - Senha: `12345678`
 
+Usuário adicional criado pelo bootstrap:
+- `platform@leadswhats.local` / `12345678` (`platform_admin`, papel SaaS/global para futuras rotas de administração da plataforma).
+- `admin` permanece como papel de administração da empresa cliente (tenant).
+
 Aviso de segurança:
 - Credenciais demo são apenas para ambiente local/demo.
 - Não utilizar em produção.
