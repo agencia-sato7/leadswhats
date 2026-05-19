@@ -36,4 +36,9 @@ class Company extends Model
     {
         return $this->hasOne(CompanyBusinessSetting::class);
     }
+
+    public function whatsappIntegration(): HasOne
+    {
+        return $this->hasOne(CompanyWhatsAppIntegration::class);
+    }
 }

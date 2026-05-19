@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\LeadStageController;
 use App\Http\Controllers\Api\KanbanColumnController;
 use App\Http\Controllers\Api\PipelineController;
 use App\Http\Controllers\Api\TaskChecklistController;
+use App\Http\Controllers\Api\SettingsWhatsAppController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WhatsappWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -57,6 +58,11 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/tasks/checklist', [TaskChecklistController::class, 'index'])
             ->middleware('role:admin,gestor,sdr');
+
+        Route::get('/settings/whatsapp', [SettingsWhatsAppController::class, 'show'])
+            ->middleware('role:admin,gestor');
+        Route::put('/settings/whatsapp', [SettingsWhatsAppController::class, 'update'])
+            ->middleware('role:admin,gestor');
 
         Route::get('/users/assignable', [UserController::class, 'assignable'])
             ->middleware('role:admin,gestor');
