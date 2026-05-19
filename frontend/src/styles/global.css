@@ -342,6 +342,13 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.lw-whatsapp-badges {
+  display: flex;
+  gap: var(--lw-space-2);
+  flex-wrap: wrap;
+  margin-top: var(--lw-space-3);
+}
+
 .lw-login-shell {
   max-width: 430px;
   margin: 10vh auto;

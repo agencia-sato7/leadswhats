@@ -19,6 +19,10 @@ import type {
   OverviewResponse,
   PipelineKanban,
   PipelineListItem,
+  WhatsAppSettings,
+  WhatsAppSettingsResponse,
+  WhatsAppSettingsUpdateRequest,
+  WhatsAppSettingsUpdateResponse,
 } from './types';
 
 const API_BASE = 'http://localhost:8000/api/v1';
@@ -27,6 +31,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
+      Accept: 'application/json',
       'Content-Type': 'application/json',
       ...(init?.headers ?? {}),
     },
@@ -264,4 +269,20 @@ export function createAdminCompany(token: string, payload: AdminCompanyCreateReq
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   });
+}
+
+export async function getWhatsAppSettings(token: string): Promise<WhatsAppSettings> {
+  const data = await request<WhatsAppSettingsResponse>('/settings/whatsapp', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data.data;
+}
+
+export async function updateWhatsAppSettings(token: string, payload: WhatsAppSettingsUpdateRequest): Promise<WhatsAppSettings> {
+  const data = await request<WhatsAppSettingsUpdateResponse>('/settings/whatsapp', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  return data.data;
 }

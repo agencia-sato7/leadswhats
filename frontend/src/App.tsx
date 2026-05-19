@@ -17,9 +17,11 @@ import {
   getRecentLeads,
   getTasksChecklist,
   getUnknownLeads,
+  getWhatsAppSettings,
   login,
   moveLeadStage,
   sendInboxMessage,
+  updateWhatsAppSettings,
   updateLeadOwner,
 } from './api';
 import { AppShell, PageHeader, Sidebar, Topbar } from './components/layout';
@@ -35,6 +37,7 @@ import {
   Input,
   LoadingState,
   MetricCard,
+  Select,
   Section,
 } from './components/ui';
 import type {
@@ -55,6 +58,8 @@ import type {
   OverviewResponse,
   PipelineKanban,
   PipelineListItem,
+  WhatsAppSettings,
+  WhatsAppSettingsUpdateRequest,
 } from './types';
 
 type Session = {
@@ -92,7 +97,7 @@ function getFriendlyAuditEventType(eventType: InboxConversationEvent['event_type
 }
 
 export function App() {
-  type ActiveView = 'dashboard' | 'inbox' | 'checklist' | 'kanban' | 'contacts' | 'adminSaas';
+  type ActiveView = 'dashboard' | 'inbox' | 'checklist' | 'kanban' | 'contacts' | 'adminSaas' | 'whatsappSettings';
   const [email, setEmail] = useState('gestor@empresa.local');
   const [password, setPassword] = useState('12345678');
   const [session, setSession] = useState<Session | null>(null);
@@ -165,6 +170,19 @@ export function App() {
   const [adminCompanyCreateError, setAdminCompanyCreateError] = useState<string | null>(null);
   const [adminCompanyCreateSuccess, setAdminCompanyCreateSuccess] = useState<string | null>(null);
   const [adminCompanyTokenInfo, setAdminCompanyTokenInfo] = useState<{ configured: boolean; masked: string | null } | null>(null);
+  const [whatsAppSettings, setWhatsAppSettings] = useState<WhatsAppSettings | null>(null);
+  const [whatsAppLoading, setWhatsAppLoading] = useState(false);
+  const [whatsAppSaving, setWhatsAppSaving] = useState(false);
+  const [whatsAppError, setWhatsAppError] = useState<string | null>(null);
+  const [whatsAppSuccess, setWhatsAppSuccess] = useState<string | null>(null);
+  const [whatsAppForm, setWhatsAppForm] = useState<WhatsAppSettingsUpdateRequest>({
+    provider: 'meta_cloud',
+    phone_number: '',
+    phone_number_id: '',
+    business_account_id: '',
+    access_token: '',
+    webhook_verify_token: '',
+  });
   const [adminForm, setAdminForm] = useState<AdminCompanyCreateRequest>({
     company: { name: '', slug: '' },
     admin_user: { name: '', email: '', password: '' },
@@ -201,6 +219,7 @@ export function App() {
   }, []);
 
   const canManageSource = session?.user.role === 'gestor' || session?.user.role === 'admin';
+  const canManageWhatsAppSettings = canManageSource && !isPlatformAdmin;
   const canMoveStage = canManageSource;
 
   const columnNameById = useMemo(() => {
@@ -308,6 +327,28 @@ export function App() {
       setAdminCompaniesError(parseApiErrorMessage(err, 'Não foi possível carregar empresas SaaS.'));
     } finally {
       setAdminCompaniesLoading(false);
+    }
+  }
+
+  async function refreshWhatsAppSettings(token: string) {
+    setWhatsAppLoading(true);
+    setWhatsAppError(null);
+    try {
+      const data = await getWhatsAppSettings(token);
+      setWhatsAppSettings(data);
+      setWhatsAppForm({
+        provider: data.provider,
+        phone_number: data.phone_number ?? '',
+        phone_number_id: data.phone_number_id ?? '',
+        business_account_id: data.business_account_id ?? '',
+        access_token: '',
+        webhook_verify_token: '',
+      });
+    } catch (err) {
+      setWhatsAppSettings(null);
+      setWhatsAppError(parseApiErrorMessage(err, 'Não foi possível carregar a configuração do WhatsApp.'));
+    } finally {
+      setWhatsAppLoading(false);
     }
   }
 
@@ -440,6 +481,11 @@ export function App() {
   }, [session, isPlatformAdmin]);
 
   useEffect(() => {
+    if (!session || !canManageWhatsAppSettings || activeView !== 'whatsappSettings') return;
+    refreshWhatsAppSettings(session.token).catch((err) => console.error(err));
+  }, [session, canManageWhatsAppSettings, activeView]);
+
+  useEffect(() => {
     if (!session || !selectedPipelineId || isPlatformAdmin) return;
     refreshKanban(session.token, selectedPipelineId).catch((err) => console.error(err));
   }, [session, selectedPipelineId, isPlatformAdmin]);
@@ -526,6 +572,23 @@ export function App() {
   }, [session, isPlatformAdmin]);
 
   useEffect(() => {
+    const allowedViews: ActiveView[] = isPlatformAdmin
+      ? ['adminSaas']
+      : [
+        'dashboard',
+        'inbox',
+        'checklist',
+        'kanban',
+        'contacts',
+        ...(canManageWhatsAppSettings ? (['whatsappSettings'] as ActiveView[]) : []),
+      ];
+
+    if (!allowedViews.includes(activeView)) {
+      setActiveView(allowedViews[0]);
+    }
+  }, [activeView, canManageWhatsAppSettings, isPlatformAdmin]);
+
+  useEffect(() => {
     if (!inboxDetail) {
       setInboxOwnerSelection('');
       return;
@@ -588,6 +651,11 @@ export function App() {
     setAdminCompanyCreateError(null);
     setAdminCompanyCreateSuccess(null);
     setAdminCompanyTokenInfo(null);
+    setWhatsAppSettings(null);
+    setWhatsAppLoading(false);
+    setWhatsAppSaving(false);
+    setWhatsAppError(null);
+    setWhatsAppSuccess(null);
     localStorage.removeItem(STORAGE_KEY);
   }
 
@@ -884,6 +952,46 @@ export function App() {
     }
   }
 
+  function updateWhatsAppForm(path: keyof WhatsAppSettingsUpdateRequest, value: string) {
+    setWhatsAppForm((prev) => ({ ...prev, [path]: value }));
+  }
+
+  async function handleSaveWhatsAppSettings(event: React.FormEvent) {
+    event.preventDefault();
+    if (!session || !canManageWhatsAppSettings) return;
+    if (!whatsAppForm.provider) {
+      setWhatsAppError('Provider é obrigatório.');
+      return;
+    }
+
+    setWhatsAppSaving(true);
+    setWhatsAppError(null);
+    setWhatsAppSuccess(null);
+    try {
+      const payload: WhatsAppSettingsUpdateRequest = {
+        provider: 'meta_cloud',
+        phone_number: whatsAppForm.phone_number?.trim() || null,
+        phone_number_id: whatsAppForm.phone_number_id?.trim() || null,
+        business_account_id: whatsAppForm.business_account_id?.trim() || null,
+      };
+
+      if ((whatsAppForm.access_token ?? '').trim()) {
+        payload.access_token = (whatsAppForm.access_token ?? '').trim();
+      }
+      if ((whatsAppForm.webhook_verify_token ?? '').trim()) {
+        payload.webhook_verify_token = (whatsAppForm.webhook_verify_token ?? '').trim();
+      }
+
+      await updateWhatsAppSettings(session.token, payload);
+      await refreshWhatsAppSettings(session.token);
+      setWhatsAppSuccess('Configuração do WhatsApp salva com sucesso.');
+    } catch (err) {
+      setWhatsAppError(parseApiErrorMessage(err, 'Não foi possível salvar a configuração do WhatsApp.'));
+    } finally {
+      setWhatsAppSaving(false);
+    }
+  }
+
   if (!session) {
     return (
       <main className="lw-login-shell">
@@ -934,6 +1042,7 @@ export function App() {
       { id: 'checklist', label: 'Checklist', subtitle: 'Tarefas operacionais' },
       { id: 'kanban', label: 'Kanban', subtitle: 'Pipeline e movimentação' },
       { id: 'contacts', label: 'Contatos', subtitle: 'Busca e exportação' },
+      ...(canManageWhatsAppSettings ? [{ id: 'whatsappSettings' as ActiveView, label: 'WhatsApp', subtitle: 'Configuração da integração da empresa' }] : []),
     ];
   const activeNav = navSections.find((item) => item.id === activeView) ?? navSections[0];
   const adminSummary = {
@@ -1111,6 +1220,98 @@ export function App() {
                       ))}
                     </tbody>
                   </Table>
+                ) : null}
+              </Section>
+            </>
+          ) : null}
+
+          {activeView === 'whatsappSettings' && canManageWhatsAppSettings ? (
+            <>
+              <Section>
+                <PageHeader title="Configuração WhatsApp" subtitle="Configure o canal de atendimento da empresa" />
+                <div className="lw-metrics-grid" style={{ marginTop: 12 }}>
+                  <MetricCard
+                    label="Status da integração"
+                    value={whatsAppSettings?.status ?? 'not_configured'}
+                    variant={whatsAppSettings?.status === 'configured' ? 'default' : 'risk'}
+                  />
+                  <MetricCard label="Provider" value={whatsAppSettings?.provider ?? 'meta_cloud'} />
+                  <MetricCard
+                    label="Token de acesso configurado"
+                    value={whatsAppSettings?.access_token_configured ? 'Sim' : 'Não'}
+                    variant={whatsAppSettings?.access_token_configured ? 'default' : 'risk'}
+                  />
+                  <MetricCard
+                    label="Verify token configurado"
+                    value={whatsAppSettings?.webhook_verify_token_configured ? 'Sim' : 'Não'}
+                    variant={whatsAppSettings?.webhook_verify_token_configured ? 'default' : 'risk'}
+                  />
+                </div>
+              </Section>
+
+              <Section>
+                {whatsAppLoading ? <LoadingState message="Carregando configurações do WhatsApp..." /> : null}
+                {whatsAppError ? <ErrorState message={whatsAppError} /> : null}
+                {whatsAppSuccess ? <Alert variant="success">{whatsAppSuccess}</Alert> : null}
+                {!whatsAppLoading && whatsAppSettings?.status === 'not_configured' ? (
+                  <Alert variant="warning">Configuração incompleta. Preencha os campos necessários para ativar a integração.</Alert>
+                ) : null}
+                {!whatsAppLoading && whatsAppSettings?.status === 'configured' ? (
+                  <Alert variant="success">Integração configurada com sucesso para esta empresa.</Alert>
+                ) : null}
+                {!whatsAppLoading && whatsAppSettings?.status === 'error' ? (
+                  <Alert variant="danger">Erro de integração: {whatsAppSettings.last_error || 'sem detalhes fornecidos.'}</Alert>
+                ) : null}
+
+                {!whatsAppLoading ? (
+                  <form onSubmit={(event) => void handleSaveWhatsAppSettings(event)} className="lw-admin-form">
+                    <Card>
+                      <div className="lw-admin-grid">
+                        <FormGroup label="Provider">
+                          <Select value={whatsAppForm.provider} onChange={(event) => updateWhatsAppForm('provider', event.target.value)}>
+                            <option value="meta_cloud">meta_cloud</option>
+                          </Select>
+                        </FormGroup>
+                        <FormGroup label="Phone number">
+                          <Input value={whatsAppForm.phone_number ?? ''} onChange={(event) => updateWhatsAppForm('phone_number', event.target.value)} placeholder="+5511999999999" />
+                        </FormGroup>
+                        <FormGroup label="Phone number ID">
+                          <Input value={whatsAppForm.phone_number_id ?? ''} onChange={(event) => updateWhatsAppForm('phone_number_id', event.target.value)} placeholder="123456" />
+                        </FormGroup>
+                        <FormGroup label="Business account ID">
+                          <Input value={whatsAppForm.business_account_id ?? ''} onChange={(event) => updateWhatsAppForm('business_account_id', event.target.value)} placeholder="789" />
+                        </FormGroup>
+                        <FormGroup label="Access token">
+                          <Input type="password" value={whatsAppForm.access_token ?? ''} onChange={(event) => updateWhatsAppForm('access_token', event.target.value)} placeholder="Preencha apenas para atualizar" />
+                        </FormGroup>
+                        <FormGroup label="Webhook verify token">
+                          <Input type="password" value={whatsAppForm.webhook_verify_token ?? ''} onChange={(event) => updateWhatsAppForm('webhook_verify_token', event.target.value)} placeholder="Preencha apenas para atualizar" />
+                        </FormGroup>
+                      </div>
+                      <Alert variant="info">Preencha o token apenas se quiser atualizar a credencial.</Alert>
+                      <div className="lw-whatsapp-badges">
+                        <Badge variant={whatsAppSettings?.access_token_configured ? 'success' : 'neutral'}>
+                          {whatsAppSettings?.access_token_configured ? 'Token configurado' : 'Token não configurado'}
+                        </Badge>
+                        <Badge variant={whatsAppSettings?.webhook_verify_token_configured ? 'success' : 'neutral'}>
+                          {whatsAppSettings?.webhook_verify_token_configured ? 'Verify token configurado' : 'Verify token não configurado'}
+                        </Badge>
+                        {whatsAppSettings?.connected_at ? (
+                          <Badge variant="info">Conectado em {formatDateTime(whatsAppSettings.connected_at)}</Badge>
+                        ) : null}
+                      </div>
+                    </Card>
+
+                    <div>
+                      <Button type="submit" disabled={whatsAppSaving}>
+                        {whatsAppSaving ? 'Salvando...' : 'Salvar configuração'}
+                      </Button>
+                    </div>
+                  </form>
+                ) : null}
+
+                {!whatsAppLoading && !whatsAppSettings ? (
+                  <EmptyState title="Configuração indisponível no momento." description="Tente recarregar a página e salvar novamente." />
                 ) : null}
               </Section>
             </>

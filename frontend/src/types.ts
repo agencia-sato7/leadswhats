@@ -329,3 +329,33 @@ export type LeadOwnerUpdateResponse = {
     updated_by_user_id: number;
   };
 };
+
+export type WhatsAppSettings = {
+  provider: 'meta_cloud';
+  status: 'not_configured' | 'configured' | 'error';
+  phone_number: string | null;
+  phone_number_id: string | null;
+  business_account_id: string | null;
+  access_token_configured: boolean;
+  webhook_verify_token_configured: boolean;
+  connected_at: string | null;
+  last_error: string | null;
+};
+
+export type WhatsAppSettingsResponse = {
+  data: WhatsAppSettings;
+};
+
+export type WhatsAppSettingsUpdateRequest = {
+  provider: 'meta_cloud';
+  phone_number?: string | null;
+  phone_number_id?: string | null;
+  business_account_id?: string | null;
+  access_token?: string | null;
+  webhook_verify_token?: string | null;
+  last_error?: string | null;
+};
+
+export type WhatsAppSettingsUpdateResponse = {
+  data: WhatsAppSettings;
+};
