@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  createAdminCompany,
   classifyLeadSource,
   exportContactsCsv,
+  getAdminCompanies,
   getAssignableUsers,
   getContacts,
   getDashboardSummary,
@@ -22,6 +24,8 @@ import {
 } from './api';
 import { AppShell, PageHeader, Sidebar, Topbar } from './components/layout';
 import {
+  Alert,
+  Table,
   Badge,
   Button,
   Card,
@@ -34,6 +38,8 @@ import {
   Section,
 } from './components/ui';
 import type {
+  AdminCompanyCreateRequest,
+  AdminCompanyListItem,
   AuthUser,
   AssignableUser,
   ChecklistTaskItem,
@@ -86,7 +92,7 @@ function getFriendlyAuditEventType(eventType: InboxConversationEvent['event_type
 }
 
 export function App() {
-  type ActiveView = 'dashboard' | 'inbox' | 'checklist' | 'kanban' | 'contacts';
+  type ActiveView = 'dashboard' | 'inbox' | 'checklist' | 'kanban' | 'contacts' | 'adminSaas';
   const [email, setEmail] = useState('gestor@empresa.local');
   const [password, setPassword] = useState('12345678');
   const [session, setSession] = useState<Session | null>(null);
@@ -152,11 +158,36 @@ export function App() {
   const [dragOverColumnId, setDragOverColumnId] = useState<number | null>(null);
   const [pressedCardId, setPressedCardId] = useState<number | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
+  const [adminCompanies, setAdminCompanies] = useState<AdminCompanyListItem[]>([]);
+  const [adminCompaniesLoading, setAdminCompaniesLoading] = useState(false);
+  const [adminCompaniesError, setAdminCompaniesError] = useState<string | null>(null);
+  const [adminCompanyCreateLoading, setAdminCompanyCreateLoading] = useState(false);
+  const [adminCompanyCreateError, setAdminCompanyCreateError] = useState<string | null>(null);
+  const [adminCompanyCreateSuccess, setAdminCompanyCreateSuccess] = useState<string | null>(null);
+  const [adminCompanyTokenInfo, setAdminCompanyTokenInfo] = useState<{ configured: boolean; masked: string | null } | null>(null);
+  const [adminForm, setAdminForm] = useState<AdminCompanyCreateRequest>({
+    company: { name: '', slug: '' },
+    admin_user: { name: '', email: '', password: '' },
+    settings: {
+      timezone: 'America/Sao_Paulo',
+      workday_start_time: '08:00:00',
+      workday_end_time: '18:00:00',
+      lunch_start_time: '12:00:00',
+      lunch_end_time: '13:00:00',
+      working_days: [1, 2, 3, 4, 5],
+      repeated_lead_window_days: 90,
+      rescue_threshold_hours: 24,
+      first_response_sla_minutes: 15,
+      follow_up_sla_hours: 24,
+      stale_conversation_hours: 48,
+    },
+  });
 
   const [loading, setLoading] = useState(false);
   const [kanbanLoading, setKanbanLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [kanbanError, setKanbanError] = useState<string | null>(null);
+  const isPlatformAdmin = session?.user.role === 'platform_admin';
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -263,6 +294,20 @@ export function App() {
       console.error(err);
     } finally {
       setKanbanLoading(false);
+    }
+  }
+
+  async function refreshAdminCompanies(token: string) {
+    setAdminCompaniesLoading(true);
+    setAdminCompaniesError(null);
+    try {
+      const companies = await getAdminCompanies(token);
+      setAdminCompanies(companies);
+    } catch (err) {
+      setAdminCompanies([]);
+      setAdminCompaniesError(parseApiErrorMessage(err, 'Não foi possível carregar empresas SaaS.'));
+    } finally {
+      setAdminCompaniesLoading(false);
     }
   }
 
@@ -374,6 +419,7 @@ export function App() {
 
   useEffect(() => {
     if (!session) return;
+    if (isPlatformAdmin) return;
 
     setLoading(true);
     setError(null);
@@ -391,27 +437,27 @@ export function App() {
         setChecklistLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, [session, isPlatformAdmin]);
 
   useEffect(() => {
-    if (!session || !selectedPipelineId) return;
+    if (!session || !selectedPipelineId || isPlatformAdmin) return;
     refreshKanban(session.token, selectedPipelineId).catch((err) => console.error(err));
-  }, [session, selectedPipelineId]);
+  }, [session, selectedPipelineId, isPlatformAdmin]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || isPlatformAdmin) return;
     refreshContacts(session.token, contactsPage).catch((err) => console.error(err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, contactsPage, contactSearch, contactSourceFilter, contactClassificationFilter, contactStageFilter]);
+  }, [session, contactsPage, contactSearch, contactSourceFilter, contactClassificationFilter, contactStageFilter, isPlatformAdmin]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || isPlatformAdmin) return;
     refreshInboxConversations(session.token, inboxPage).catch((err) => console.error(err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, inboxPage, inboxSearch, inboxOwnerFilter, inboxSourceFilter, inboxStageFilter, inboxServiceWindowFilter]);
+  }, [session, inboxPage, inboxSearch, inboxOwnerFilter, inboxSourceFilter, inboxStageFilter, inboxServiceWindowFilter, isPlatformAdmin]);
 
   useEffect(() => {
-    if (!session || !canManageSource) {
+    if (!session || !canManageSource || isPlatformAdmin) {
       setAssignableUsers([]);
       setAssignableUsersError(null);
       return;
@@ -426,10 +472,10 @@ export function App() {
         setAssignableUsers([]);
         setAssignableUsersError(parseApiErrorMessage(err, 'Não foi possível carregar usuários atribuíveis.'));
       });
-  }, [session, canManageSource]);
+  }, [session, canManageSource, isPlatformAdmin]);
 
   useEffect(() => {
-    if (!session || !selectedConversationId) return;
+    if (!session || !selectedConversationId || isPlatformAdmin) return;
     setInboxSendError(null);
     setInboxSendSuccess(null);
     setInboxOwnerUpdateError(null);
@@ -440,10 +486,10 @@ export function App() {
     setInboxEventsError(null);
     setInboxEventsLoading(false);
     refreshInboxDetail(session.token, selectedConversationId).catch((err) => console.error(err));
-  }, [session, selectedConversationId]);
+  }, [session, selectedConversationId, isPlatformAdmin]);
 
   useEffect(() => {
-    if (!session || !selectedConversationId || inboxDetailTab !== 'audit') return;
+    if (!session || !selectedConversationId || inboxDetailTab !== 'audit' || isPlatformAdmin) return;
     if (inboxEventsLoading || inboxEvents.length > 0 || inboxEventsError) return;
 
     setInboxEventsLoading(true);
@@ -467,7 +513,17 @@ export function App() {
       .finally(() => {
         setInboxEventsLoading(false);
       });
-  }, [session, selectedConversationId, inboxDetailTab, inboxEventsLoading, inboxEvents.length, inboxEventsError]);
+  }, [session, selectedConversationId, inboxDetailTab, inboxEventsLoading, inboxEvents.length, inboxEventsError, isPlatformAdmin]);
+
+  useEffect(() => {
+    if (!session) return;
+    setActiveView(session.user.role === 'platform_admin' ? 'adminSaas' : 'dashboard');
+  }, [session]);
+
+  useEffect(() => {
+    if (!session || !isPlatformAdmin) return;
+    refreshAdminCompanies(session.token).catch((err) => console.error(err));
+  }, [session, isPlatformAdmin]);
 
   useEffect(() => {
     if (!inboxDetail) {
@@ -525,6 +581,13 @@ export function App() {
     setStageHistoryByLead({});
     setDraggingCard(null);
     setDragOverColumnId(null);
+    setAdminCompanies([]);
+    setAdminCompaniesLoading(false);
+    setAdminCompaniesError(null);
+    setAdminCompanyCreateLoading(false);
+    setAdminCompanyCreateError(null);
+    setAdminCompanyCreateSuccess(null);
+    setAdminCompanyTokenInfo(null);
     localStorage.removeItem(STORAGE_KEY);
   }
 
@@ -745,6 +808,82 @@ export function App() {
     }
   }
 
+  function updateAdminForm(path: string, value: string | number) {
+    setAdminForm((prev) => {
+      const next: AdminCompanyCreateRequest = {
+        company: { ...prev.company },
+        admin_user: { ...prev.admin_user },
+        settings: { ...prev.settings },
+      };
+      const [group, field] = path.split('.') as ['company' | 'admin_user' | 'settings', string];
+      (next[group] as Record<string, string | number>)[field] = value;
+      return next;
+    });
+  }
+
+  function getAdminFormValidationError(): string | null {
+    if (!adminForm.company.name.trim()) return 'Informe o nome da empresa.';
+    if (!adminForm.company.slug.trim()) return 'Informe o slug da empresa.';
+    if (!adminForm.admin_user.name.trim()) return 'Informe o nome do admin inicial.';
+    if (!adminForm.admin_user.email.trim()) return 'Informe o email do admin inicial.';
+    if (!adminForm.admin_user.password.trim()) return 'Informe a senha do admin inicial.';
+    if (adminForm.settings.repeated_lead_window_days < 1) return 'Janela de lead repetido deve ser maior que zero.';
+    if (adminForm.settings.rescue_threshold_hours < 1) return 'Threshold de resgate deve ser maior que zero.';
+    if (adminForm.settings.first_response_sla_minutes < 1) return 'SLA de primeira resposta deve ser maior que zero.';
+    if (adminForm.settings.follow_up_sla_hours < 1) return 'SLA de follow-up deve ser maior que zero.';
+    if (adminForm.settings.stale_conversation_hours < 1) return 'Conversa estagnada deve ser maior que zero.';
+    return null;
+  }
+
+  async function handleCreateAdminCompany(event: React.FormEvent) {
+    event.preventDefault();
+    if (!session || !isPlatformAdmin) return;
+
+    const validationError = getAdminFormValidationError();
+    if (validationError) {
+      setAdminCompanyCreateError(validationError);
+      return;
+    }
+
+    setAdminCompanyCreateLoading(true);
+    setAdminCompanyCreateError(null);
+    setAdminCompanyCreateSuccess(null);
+    setAdminCompanyTokenInfo(null);
+
+    try {
+      const payload: AdminCompanyCreateRequest = {
+        ...adminForm,
+        company: {
+          name: adminForm.company.name.trim(),
+          slug: adminForm.company.slug.trim(),
+        },
+        admin_user: {
+          name: adminForm.admin_user.name.trim(),
+          email: adminForm.admin_user.email.trim(),
+          password: adminForm.admin_user.password,
+        },
+      };
+      const response = await createAdminCompany(session.token, payload);
+      setAdminCompanyCreateSuccess(response.message || 'Empresa criada com sucesso.');
+
+      const configured = response.data?.webhook_token_configured ?? response.webhook_token_configured ?? false;
+      const masked = response.data?.masked_webhook_token ?? response.masked_webhook_token ?? null;
+      setAdminCompanyTokenInfo({ configured, masked });
+
+      setAdminForm((prev) => ({
+        ...prev,
+        company: { name: '', slug: '' },
+        admin_user: { name: '', email: '', password: '' },
+      }));
+
+      await refreshAdminCompanies(session.token);
+    } catch (err) {
+      setAdminCompanyCreateError(parseApiErrorMessage(err, 'Não foi possível criar a empresa.'));
+    } finally {
+      setAdminCompanyCreateLoading(false);
+    }
+  }
+
   if (!session) {
     return (
       <main className="lw-login-shell">
@@ -787,14 +926,21 @@ export function App() {
     'Follow-up atrasado',
     'Leads sem responsável',
   ]);
-  const navSections: Array<{ id: ActiveView; label: string; subtitle: string }> = [
-    { id: 'dashboard', label: 'Dashboard', subtitle: 'Visão geral e métricas' },
-    { id: 'inbox', label: 'Inbox', subtitle: 'Atendimento e auditoria' },
-    { id: 'checklist', label: 'Checklist', subtitle: 'Tarefas operacionais' },
-    { id: 'kanban', label: 'Kanban', subtitle: 'Pipeline e movimentação' },
-    { id: 'contacts', label: 'Contatos', subtitle: 'Busca e exportação' },
-  ];
+  const navSections: Array<{ id: ActiveView; label: string; subtitle: string }> = isPlatformAdmin
+    ? [{ id: 'adminSaas', label: 'Admin SaaS', subtitle: 'Gerencie empresas clientes e acessos iniciais' }]
+    : [
+      { id: 'dashboard', label: 'Dashboard', subtitle: 'Visão geral e métricas' },
+      { id: 'inbox', label: 'Inbox', subtitle: 'Atendimento e auditoria' },
+      { id: 'checklist', label: 'Checklist', subtitle: 'Tarefas operacionais' },
+      { id: 'kanban', label: 'Kanban', subtitle: 'Pipeline e movimentação' },
+      { id: 'contacts', label: 'Contatos', subtitle: 'Busca e exportação' },
+    ];
   const activeNav = navSections.find((item) => item.id === activeView) ?? navSections[0];
+  const adminSummary = {
+    total: adminCompanies.length,
+    withSettings: adminCompanies.filter((item) => item.has_business_settings).length,
+    withPipelines: adminCompanies.filter((item) => item.pipelines_count > 0).length,
+  };
 
   return (
     <AppShell>
@@ -835,6 +981,140 @@ export function App() {
 
           {loading ? <LoadingState message="Carregando dados..." /> : null}
           {error ? <ErrorState message={error} /> : null}
+
+          {activeView === 'adminSaas' ? (
+            <>
+              <Section>
+                <PageHeader title="Admin SaaS" subtitle="Gerencie empresas clientes e acessos iniciais" />
+                <div className="lw-metrics-grid" style={{ marginTop: 12 }}>
+                  <MetricCard label="Total de empresas" value={adminSummary.total} />
+                  <MetricCard label="Empresas com settings" value={adminSummary.withSettings} />
+                  <MetricCard label="Empresas com pipeline" value={adminSummary.withPipelines} />
+                </div>
+              </Section>
+
+              <Section>
+                <h2 style={{ marginTop: 0 }}>Criar empresa cliente</h2>
+                <form onSubmit={(event) => void handleCreateAdminCompany(event)} className="lw-admin-form">
+                  <Card>
+                    <h3 style={{ marginTop: 0 }}>Empresa</h3>
+                    <div className="lw-admin-grid">
+                      <FormGroup label="Nome da empresa">
+                        <Input value={adminForm.company.name} onChange={(e) => updateAdminForm('company.name', e.target.value)} placeholder="Empresa Exemplo Ltda" />
+                      </FormGroup>
+                      <FormGroup label="Slug">
+                        <Input value={adminForm.company.slug} onChange={(e) => updateAdminForm('company.slug', e.target.value)} placeholder="empresa-exemplo" />
+                      </FormGroup>
+                    </div>
+                  </Card>
+
+                  <Card>
+                    <h3 style={{ marginTop: 0 }}>Admin inicial</h3>
+                    <div className="lw-admin-grid">
+                      <FormGroup label="Nome">
+                        <Input value={adminForm.admin_user.name} onChange={(e) => updateAdminForm('admin_user.name', e.target.value)} placeholder="Nome do admin" />
+                      </FormGroup>
+                      <FormGroup label="Email">
+                        <Input type="email" value={adminForm.admin_user.email} onChange={(e) => updateAdminForm('admin_user.email', e.target.value)} placeholder="admin@empresa.com" />
+                      </FormGroup>
+                      <FormGroup label="Senha">
+                        <Input type="password" value={adminForm.admin_user.password} onChange={(e) => updateAdminForm('admin_user.password', e.target.value)} placeholder="Senha temporária" />
+                      </FormGroup>
+                    </div>
+                  </Card>
+
+                  <Card>
+                    <h3 style={{ marginTop: 0 }}>Configurações operacionais</h3>
+                    <div className="lw-admin-grid">
+                      <FormGroup label="Timezone">
+                        <Input value={adminForm.settings.timezone} onChange={(e) => updateAdminForm('settings.timezone', e.target.value)} />
+                      </FormGroup>
+                      <FormGroup label="Início expediente">
+                        <Input value={adminForm.settings.workday_start_time} onChange={(e) => updateAdminForm('settings.workday_start_time', e.target.value)} />
+                      </FormGroup>
+                      <FormGroup label="Fim expediente">
+                        <Input value={adminForm.settings.workday_end_time} onChange={(e) => updateAdminForm('settings.workday_end_time', e.target.value)} />
+                      </FormGroup>
+                      <FormGroup label="Início almoço">
+                        <Input value={adminForm.settings.lunch_start_time} onChange={(e) => updateAdminForm('settings.lunch_start_time', e.target.value)} />
+                      </FormGroup>
+                      <FormGroup label="Fim almoço">
+                        <Input value={adminForm.settings.lunch_end_time} onChange={(e) => updateAdminForm('settings.lunch_end_time', e.target.value)} />
+                      </FormGroup>
+                      <FormGroup label="Dias úteis padrão">
+                        <Input value="Segunda a sexta (1,2,3,4,5)" disabled />
+                      </FormGroup>
+                      <FormGroup label="Janela lead repetido (dias)">
+                        <Input type="number" min={1} value={adminForm.settings.repeated_lead_window_days} onChange={(e) => updateAdminForm('settings.repeated_lead_window_days', Number(e.target.value || 0))} />
+                      </FormGroup>
+                      <FormGroup label="Threshold resgate (h)">
+                        <Input type="number" min={1} value={adminForm.settings.rescue_threshold_hours} onChange={(e) => updateAdminForm('settings.rescue_threshold_hours', Number(e.target.value || 0))} />
+                      </FormGroup>
+                      <FormGroup label="SLA primeira resposta (min)">
+                        <Input type="number" min={1} value={adminForm.settings.first_response_sla_minutes} onChange={(e) => updateAdminForm('settings.first_response_sla_minutes', Number(e.target.value || 0))} />
+                      </FormGroup>
+                      <FormGroup label="SLA follow-up (h)">
+                        <Input type="number" min={1} value={adminForm.settings.follow_up_sla_hours} onChange={(e) => updateAdminForm('settings.follow_up_sla_hours', Number(e.target.value || 0))} />
+                      </FormGroup>
+                      <FormGroup label="Conversa estagnada (h)">
+                        <Input type="number" min={1} value={adminForm.settings.stale_conversation_hours} onChange={(e) => updateAdminForm('settings.stale_conversation_hours', Number(e.target.value || 0))} />
+                      </FormGroup>
+                    </div>
+                  </Card>
+
+                  {adminCompanyCreateError ? <ErrorState message={adminCompanyCreateError} /> : null}
+                  {adminCompanyCreateSuccess ? <Alert variant="success">{adminCompanyCreateSuccess}</Alert> : null}
+                  {adminCompanyTokenInfo ? (
+                    <Alert variant="info">
+                      webhook_token_configured: {String(adminCompanyTokenInfo.configured)} · masked_webhook_token: {adminCompanyTokenInfo.masked || 'n/d'}
+                    </Alert>
+                  ) : null}
+                  <div>
+                    <Button type="submit" disabled={adminCompanyCreateLoading}>
+                      {adminCompanyCreateLoading ? 'Criando empresa...' : 'Criar empresa'}
+                    </Button>
+                  </div>
+                </form>
+              </Section>
+
+              <Section>
+                <h2 style={{ marginTop: 0 }}>Empresas clientes</h2>
+                {adminCompaniesLoading ? <LoadingState message="Carregando empresas..." /> : null}
+                {adminCompaniesError ? <ErrorState message={adminCompaniesError} /> : null}
+                {!adminCompaniesLoading && !adminCompaniesError && adminCompanies.length === 0 ? (
+                  <EmptyState title="Nenhuma empresa cadastrada." description="Crie a primeira empresa usando o formulário acima." />
+                ) : null}
+                {!adminCompaniesLoading && !adminCompaniesError && adminCompanies.length > 0 ? (
+                  <Table>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Slug</th>
+                        <th>Users</th>
+                        <th>Pipelines</th>
+                        <th>Business Settings</th>
+                        <th>Criada em</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminCompanies.map((company) => (
+                        <tr key={company.id}>
+                          <td>{company.id}</td>
+                          <td>{company.name}</td>
+                          <td>{company.slug}</td>
+                          <td>{company.users_count}</td>
+                          <td>{company.pipelines_count}</td>
+                          <td><Badge variant={company.has_business_settings ? 'success' : 'warning'}>{company.has_business_settings ? 'Sim' : 'Não'}</Badge></td>
+                          <td>{formatDateTime(company.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                ) : null}
+              </Section>
+            </>
+          ) : null}
 
           {activeView === 'dashboard' && overview ? (
         <Section>

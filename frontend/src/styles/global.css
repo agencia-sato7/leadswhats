@@ -331,6 +331,17 @@ body {
   grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
 }
 
+.lw-admin-form {
+  display: grid;
+  gap: var(--lw-space-3);
+}
+
+.lw-admin-grid {
+  display: grid;
+  gap: var(--lw-space-3);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .lw-login-shell {
   max-width: 430px;
   margin: 10vh auto;

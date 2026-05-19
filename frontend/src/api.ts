@@ -1,4 +1,7 @@
 import type {
+  AdminCompanyCreateRequest,
+  AdminCompanyCreateResponse,
+  AdminCompanyListItem,
   ContactItem,
   ContactsResponse,
   ChecklistTaskItem,
@@ -245,5 +248,20 @@ export function updateLeadOwner(token: string, leadId: number, ownerUserId: numb
 export function getAssignableUsers(token: string): Promise<AssignableUsersResponse> {
   return request<AssignableUsersResponse>('/users/assignable', {
     headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function getAdminCompanies(token: string): Promise<AdminCompanyListItem[]> {
+  const data = await request<{ data: AdminCompanyListItem[] }>('/admin/companies', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data.data;
+}
+
+export function createAdminCompany(token: string, payload: AdminCompanyCreateRequest): Promise<AdminCompanyCreateResponse> {
+  return request<AdminCompanyCreateResponse>('/admin/companies', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
   });
 }

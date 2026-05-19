@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'gestor' | 'sdr';
+export type Role = 'admin' | 'gestor' | 'sdr' | 'platform_admin';
 
 export type AuthUser = {
   id: number;
@@ -195,6 +195,54 @@ export type AssignableUser = {
 
 export type AssignableUsersResponse = {
   data: AssignableUser[];
+};
+
+export type AdminCompanyListItem = {
+  id: number;
+  name: string;
+  slug: string;
+  users_count: number;
+  pipelines_count: number;
+  has_business_settings: boolean;
+  created_at: string;
+};
+
+export type AdminCompanyCreateRequest = {
+  company: {
+    name: string;
+    slug: string;
+  };
+  admin_user: {
+    name: string;
+    email: string;
+    password: string;
+  };
+  settings: {
+    timezone: string;
+    workday_start_time: string;
+    workday_end_time: string;
+    lunch_start_time: string;
+    lunch_end_time: string;
+    working_days: number[];
+    repeated_lead_window_days: number;
+    rescue_threshold_hours: number;
+    first_response_sla_minutes: number;
+    follow_up_sla_hours: number;
+    stale_conversation_hours: number;
+  };
+};
+
+export type AdminCompanyCreateResponse = {
+  message?: string;
+  data?: {
+    id: number;
+    name: string;
+    slug: string;
+    webhook_token_configured?: boolean;
+    masked_webhook_token?: string | null;
+  };
+  webhook_token_configured?: boolean;
+  masked_webhook_token?: string | null;
 };
 
 export type InboxMessageItem = {
