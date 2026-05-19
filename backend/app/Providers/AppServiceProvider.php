@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Services\WhatsApp\FakeWhatsAppProvider;
+use App\Services\WhatsApp\MetaCloudWhatsAppProvider;
 use App\Services\WhatsApp\WhatsAppProviderInterface;
 use Illuminate\Support\ServiceProvider;
 use RuntimeException;
@@ -25,7 +26,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(WhatsAppProviderInterface::class, function () use ($provider) {
             return match ($provider) {
                 'fake' => app(FakeWhatsAppProvider::class),
-                default => throw new RuntimeException("WHATSAPP_PROVIDER inválido: {$provider}. Providers suportados: fake."),
+                'meta_cloud' => app(MetaCloudWhatsAppProvider::class),
+                default => throw new RuntimeException("WHATSAPP_PROVIDER inválido: {$provider}. Providers suportados: fake, meta_cloud."),
             };
         });
     }
