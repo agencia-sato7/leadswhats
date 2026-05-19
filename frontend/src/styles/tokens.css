@@ -1,0 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  --lw-color-bg: #f8fafc;
+  --lw-color-surface: #ffffff;
+  --lw-color-surface-muted: #f1f5f9;
+  --lw-color-border: #dbe2ea;
+  --lw-color-text: #0f172a;
+  --lw-color-text-soft: #475569;
+  --lw-color-primary: #0369a1;
+  --lw-color-primary-hover: #075985;
+
+  --lw-color-success: #166534;
+  --lw-color-success-bg: #f0fdf4;
+  --lw-color-warning: #92400e;
+  --lw-color-warning-bg: #fff7ed;
+  --lw-color-danger: #b91c1c;
+  --lw-color-danger-bg: #fef2f2;
+  --lw-color-info: #1d4ed8;
+  --lw-color-info-bg: #eff6ff;
+
+  --lw-space-1: 0.25rem;
+  --lw-space-2: 0.5rem;
+  --lw-space-3: 0.75rem;
+  --lw-space-4: 1rem;
+  --lw-space-5: 1.25rem;
+  --lw-space-6: 1.5rem;
+  --lw-space-8: 2rem;
+
+  --lw-radius-sm: 0.5rem;
+  --lw-radius-md: 0.75rem;
+  --lw-radius-lg: 1rem;
+
+  --lw-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.08);
+  --lw-shadow-md: 0 6px 18px rgba(15, 23, 42, 0.08);
+
+  --lw-font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}

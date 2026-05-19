@@ -20,6 +20,19 @@ import {
   sendInboxMessage,
   updateLeadOwner,
 } from './api';
+import { AppShell, PageHeader, Topbar } from './components/layout';
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  ErrorState,
+  FormGroup,
+  Input,
+  LoadingState,
+  MetricCard,
+  Section,
+} from './components/ui';
 import type {
   AuthUser,
   AssignableUser,
@@ -732,60 +745,76 @@ export function App() {
 
   if (!session) {
     return (
-      <main style={{ maxWidth: 420, margin: '40px auto', fontFamily: 'system-ui', padding: 16 }}>
-        <h1>LEADSWHATS</h1>
-        <p>Login para acessar o dashboard inicial.</p>
-        <form onSubmit={handleLogin} style={{ display: 'grid', gap: 12 }}>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha" />
-          <button type="submit" disabled={loading}>{loading ? 'Entrando...' : 'Entrar'}</button>
-        </form>
-        {error ? <p style={{ color: 'crimson' }}>{error}</p> : null}
+      <main className="lw-login-shell">
+        <Card className="lw-login-card">
+          <PageHeader title="LEADSWHATS" subtitle="Login para acessar o dashboard inicial." />
+          <form onSubmit={handleLogin} style={{ display: 'grid', gap: 12 }}>
+            <FormGroup label="Email">
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
+            </FormGroup>
+            <FormGroup label="Senha">
+              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha" />
+            </FormGroup>
+            <Button type="submit" disabled={loading}>{loading ? 'Entrando...' : 'Entrar'}</Button>
+          </form>
+          {error ? <ErrorState message={error} /> : null}
+        </Card>
       </main>
     );
   }
 
-  return (
-    <main style={{ maxWidth: 1200, margin: '20px auto', fontFamily: 'system-ui', padding: 16 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ marginBottom: 0 }}>LEADSWHATS</h1>
-          <small>{session.user.name} ({session.user.role})</small>
-        </div>
-        <button onClick={logout}>Sair</button>
-      </header>
+  const dashboardMetrics = dashboard ? [
+    { label: 'Leads novos hoje', value: dashboard.metrics.new_leads_today },
+    { label: 'Leads repetidos hoje', value: dashboard.metrics.repeat_leads_today },
+    { label: 'Tempo médio 1ª resposta', value: formatSeconds(dashboard.metrics.avg_first_response_seconds) },
+    { label: 'Leads em vácuo (+24h)', value: dashboard.metrics.vacuum_24h_open },
+    { label: 'Resgates hoje', value: dashboard.metrics.rescues_today },
+    { label: 'Conversas ativas', value: dashboard.metrics.active_conversations },
+    { label: 'Origem desconhecida', value: dashboard.metrics.unknown_source_leads },
+    { label: 'Classificações hoje', value: dashboard.metrics.manual_classifications_today },
+    { label: 'Tarefas abertas', value: dashboard.metrics.open_tasks },
+    { label: 'Follow-up em vácuo', value: dashboard.metrics.vacuum_follow_up_tasks },
+    { label: '1º atendimento atrasado', value: dashboard.metrics.waiting_first_response_tasks },
+    { label: 'Follow-up atrasado', value: dashboard.metrics.overdue_follow_up_tasks },
+    { label: 'Leads sem responsável', value: dashboard.metrics.unassigned_leads },
+    { label: 'Maior atraso (h)', value: dashboard.metrics.oldest_pending_task_hours },
+  ] : [];
 
-      {loading ? <p>Carregando dados...</p> : null}
-      {error ? <p style={{ color: 'crimson' }}>{error}</p> : null}
+  return (
+    <AppShell>
+      <Topbar
+        left={(
+          <PageHeader
+            title="LEADSWHATS"
+            subtitle={<>{session.user.name} <Badge variant="info">{session.user.role}</Badge></>}
+          />
+        )}
+        right={<Button onClick={logout}>Sair</Button>}
+      />
+
+      {loading ? <LoadingState message="Carregando dados..." /> : null}
+      {error ? <ErrorState message={error} /> : null}
 
       {overview ? (
-        <section>
+        <Section>
           <h2>Empresa</h2>
           <p><strong>{overview.company.name}</strong> ({overview.company.slug})</p>
           <p>Horário: {overview.company.work_start} às {overview.company.work_end}</p>
-        </section>
+        </Section>
       ) : null}
 
       {dashboard ? (
-        <section>
-          <h2>Dashboard Diário ({dashboard.date})</h2>
-          <ul>
-            <li>Leads novos hoje: {dashboard.metrics.new_leads_today}</li>
-            <li>Leads repetidos hoje: {dashboard.metrics.repeat_leads_today}</li>
-            <li>Tempo médio primeira resposta: {formatSeconds(dashboard.metrics.avg_first_response_seconds)}</li>
-            <li>Leads em vácuo (+24h): {dashboard.metrics.vacuum_24h_open}</li>
-            <li>Resgates hoje: {dashboard.metrics.rescues_today}</li>
-            <li>Conversas ativas: {dashboard.metrics.active_conversations}</li>
-            <li>Origem desconhecida (aberto): {dashboard.metrics.unknown_source_leads}</li>
-            <li>Classificações manuais hoje: {dashboard.metrics.manual_classifications_today}</li>
-            <li>Tarefas operacionais abertas: {dashboard.metrics.open_tasks}</li>
-            <li>Tarefas de follow-up em vácuo: {dashboard.metrics.vacuum_follow_up_tasks}</li>
-            <li>Tarefas de primeiro atendimento atrasado: {dashboard.metrics.waiting_first_response_tasks}</li>
-            <li>Tarefas de follow-up atrasado: {dashboard.metrics.overdue_follow_up_tasks}</li>
-            <li>Leads sem responsável: {dashboard.metrics.unassigned_leads}</li>
-            <li>Maior atraso de tarefa pendente (h): {dashboard.metrics.oldest_pending_task_hours}</li>
-          </ul>
-        </section>
+        <Section>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <h2 style={{ margin: 0 }}>Dashboard Diário</h2>
+            <Badge variant="neutral">{dashboard.date}</Badge>
+          </div>
+          <div className="lw-metrics-grid">
+            {dashboardMetrics.map((metric) => (
+              <MetricCard key={metric.label} label={metric.label} value={metric.value} />
+            ))}
+          </div>
+        </Section>
       ) : null}
 
       <section style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginTop: 16 }}>
@@ -831,7 +860,12 @@ export function App() {
         {inboxLoading ? <p>Carregando inbox...</p> : null}
         {inboxError ? <p style={{ color: 'crimson' }}>{inboxError}</p> : null}
 
-        {!inboxLoading && !inboxError && inboxConversations.length === 0 ? <p>Nenhuma conversa encontrada. Novas conversas aparecerão após a chegada de mensagens pelo webhook.</p> : null}
+        {!inboxLoading && !inboxError && inboxConversations.length === 0 ? (
+          <EmptyState
+            title="Nenhuma conversa encontrada."
+            description="Novas conversas aparecerão após a chegada de mensagens pelo webhook."
+          />
+        ) : null}
 
         {!inboxLoading && !inboxError && inboxConversations.length > 0 ? (
           <>
@@ -1327,6 +1361,6 @@ export function App() {
           </section>
         </>
       ) : null}
-    </main>
+    </AppShell>
   );
 }
