@@ -27,6 +27,11 @@ class Company extends Model
         return $this->hasMany(User::class);
     }
 
+    public function pipelines(): HasMany
+    {
+        return $this->hasMany(Pipeline::class);
+    }
+
     public function businessSetting(): HasOne
     {
         return $this->hasOne(CompanyBusinessSetting::class);

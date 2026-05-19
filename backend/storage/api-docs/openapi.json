@@ -21,10 +21,6 @@
       "description": "Visão inicial da conta/empresa"
     },
     {
-      "name": "Webhook",
-      "description": "Ingestao passiva WhatsApp"
-    },
-    {
       "name": "Dashboard",
       "description": "Metricas operacionais"
     },
@@ -35,6 +31,14 @@
     {
       "name": "Pipelines",
       "description": "Leitura de pipelines, Kanban e histórico de etapas"
+    },
+    {
+      "name": "SaaS Admin",
+      "description": "Administração da plataforma (multi-tenant SaaS)"
+    },
+    {
+      "name": "Webhook",
+      "description": "Ingestao passiva WhatsApp"
     }
   ],
   "components": {
@@ -100,11 +104,11 @@
               "role": {
                 "type": "string",
                 "enum": [
-              "platform_admin",
-              "admin",
-              "gestor",
-              "sdr"
-            ]
+                  "platform_admin",
+                  "admin",
+                  "gestor",
+                  "sdr"
+                ]
               },
               "company_id": {
                 "type": "integer",
@@ -3206,7 +3210,6 @@
         },
         "description": "Retorna detalhe da conversa com histórico de mensagens. A abertura da conversa registra evento de auditoria (conversation_opened)."
       }
-      
     },
     "/api/v1/inbox/conversations/{conversationId}/messages": {
       "post": {
@@ -3533,6 +3536,551 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/companies": {
+      "get": {
+        "tags": [
+          "SaaS Admin"
+        ],
+        "summary": "Lista empresas clientes da plataforma",
+        "description": "Endpoint SaaS administrativo. Retorna empresas clientes com contadores resumidos. Acesso exclusivo de platform_admin.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de empresas clientes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "users_count": {
+                            "type": "integer"
+                          },
+                          "pipelines_count": {
+                            "type": "integer"
+                          },
+                          "has_business_settings": {
+                            "type": "boolean"
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "slug",
+                          "users_count",
+                          "pipelines_count",
+                          "has_business_settings",
+                          "created_at"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": 2,
+                      "name": "Clínica Exemplo",
+                      "slug": "clinica-exemplo",
+                      "users_count": 3,
+                      "pipelines_count": 1,
+                      "has_business_settings": true,
+                      "created_at": "2026-05-19T12:00:00.000000Z"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SaaS Admin"
+        ],
+        "summary": "Cria empresa cliente com admin inicial e estrutura padrão",
+        "description": "Cria company, usuário admin (tenant), company_business_settings, webhook_token, pipeline default e colunas default em transação. Acesso exclusivo de platform_admin.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "company": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "slug": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "slug"
+                    ]
+                  },
+                  "admin_user": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "email": {
+                        "type": "string",
+                        "format": "email"
+                      },
+                      "password": {
+                        "type": "string",
+                        "minLength": 8
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "email",
+                      "password"
+                    ]
+                  },
+                  "settings": {
+                    "type": "object",
+                    "properties": {
+                      "timezone": {
+                        "type": "string"
+                      },
+                      "workday_start_time": {
+                        "type": "string",
+                        "format": "time"
+                      },
+                      "workday_end_time": {
+                        "type": "string",
+                        "format": "time"
+                      },
+                      "lunch_start_time": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "time"
+                      },
+                      "lunch_end_time": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "format": "time"
+                      },
+                      "working_days": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer"
+                        }
+                      },
+                      "repeated_lead_window_days": {
+                        "type": "integer"
+                      },
+                      "rescue_threshold_hours": {
+                        "type": "integer"
+                      },
+                      "first_response_sla_minutes": {
+                        "type": "integer"
+                      },
+                      "follow_up_sla_hours": {
+                        "type": "integer"
+                      },
+                      "stale_conversation_hours": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "timezone",
+                      "workday_start_time",
+                      "workday_end_time",
+                      "working_days",
+                      "repeated_lead_window_days",
+                      "rescue_threshold_hours",
+                      "first_response_sla_minutes",
+                      "follow_up_sla_hours",
+                      "stale_conversation_hours"
+                    ]
+                  }
+                },
+                "required": [
+                  "company",
+                  "admin_user",
+                  "settings"
+                ]
+              },
+              "example": {
+                "company": {
+                  "name": "Clínica Exemplo",
+                  "slug": "clinica-exemplo"
+                },
+                "admin_user": {
+                  "name": "Dono Cliente",
+                  "email": "dono@cliente.com",
+                  "password": "senha-temporaria"
+                },
+                "settings": {
+                  "timezone": "America/Sao_Paulo",
+                  "workday_start_time": "08:00:00",
+                  "workday_end_time": "18:00:00",
+                  "lunch_start_time": "12:00:00",
+                  "lunch_end_time": "13:00:00",
+                  "working_days": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
+                  ],
+                  "repeated_lead_window_days": 90,
+                  "rescue_threshold_hours": 24,
+                  "first_response_sla_minutes": 15,
+                  "follow_up_sla_hours": 24,
+                  "stale_conversation_hours": 48
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Empresa criada com sucesso",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Company created successfully.",
+                  "data": {
+                    "company": {
+                      "id": 2,
+                      "name": "Clínica Exemplo",
+                      "slug": "clinica-exemplo",
+                      "created_at": "2026-05-19T12:00:00.000000Z"
+                    },
+                    "admin_user": {
+                      "id": 10,
+                      "name": "Dono Cliente",
+                      "email": "dono@cliente.com",
+                      "role": "admin"
+                    },
+                    "settings": {
+                      "timezone": "America/Sao_Paulo",
+                      "webhook_token_configured": true,
+                      "masked_webhook_token": "****a1b2"
+                    },
+                    "pipeline": {
+                      "id": 4,
+                      "name": "Pipeline Comercial Padrão",
+                      "is_default": true,
+                      "columns_count": 5
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Erro de validação (slug/email duplicado, payload inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/companies/{companyId}": {
+      "get": {
+        "tags": [
+          "SaaS Admin"
+        ],
+        "summary": "Detalha empresa cliente",
+        "description": "Retorna dados da company, admins, settings resumidas e pipeline default/colunas resumidas.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detalhe da empresa",
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "company": {
+                      "id": 2,
+                      "name": "Clínica Exemplo",
+                      "slug": "clinica-exemplo",
+                      "active": true,
+                      "created_at": "2026-05-19T12:00:00.000000Z"
+                    },
+                    "admin_users": [
+                      {
+                        "id": 10,
+                        "name": "Dono Cliente",
+                        "email": "dono@cliente.com",
+                        "role": "admin",
+                        "active": true,
+                        "created_at": "2026-05-19T12:00:00.000000Z"
+                      }
+                    ],
+                    "settings": {
+                      "timezone": "America/Sao_Paulo",
+                      "workday_start_time": "08:00:00",
+                      "workday_end_time": "18:00:00",
+                      "working_days": [
+                        1,
+                        2,
+                        3,
+                        4,
+                        5
+                      ],
+                      "webhook_token_configured": true
+                    },
+                    "pipeline": {
+                      "id": 4,
+                      "name": "Pipeline Comercial Padrão",
+                      "is_default": true,
+                      "columns": [
+                        {
+                          "id": 33,
+                          "name": "Novo Contato",
+                          "position": 1,
+                          "is_terminal": false
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Empresa não encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "SaaS Admin"
+        ],
+        "summary": "Atualiza dados básicos da empresa cliente",
+        "description": "Atualiza name, slug e active da company cliente.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "slug": {
+                    "type": "string"
+                  },
+                  "active": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "example": {
+                "name": "Clínica Exemplo Atualizada",
+                "slug": "clinica-exemplo-atualizada",
+                "active": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Empresa atualizada",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Company updated successfully.",
+                  "data": {
+                    "id": 2,
+                    "name": "Clínica Exemplo Atualizada",
+                    "slug": "clinica-exemplo-atualizada",
+                    "active": true,
+                    "created_at": "2026-05-19T12:00:00.000000Z",
+                    "updated_at": "2026-05-19T12:15:00.000000Z"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado (token ausente/inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Acesso negado para este perfil",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Empresa não encontrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Erro de validação",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }

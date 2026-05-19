@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\AdminCompanyController;
 use App\Http\Controllers\Api\BootstrapController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\DashboardController;
@@ -23,6 +24,15 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth.token')->group(function () {
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
+
+        Route::get('/admin/companies', [AdminCompanyController::class, 'index'])
+            ->middleware('role:platform_admin');
+        Route::post('/admin/companies', [AdminCompanyController::class, 'store'])
+            ->middleware('role:platform_admin');
+        Route::get('/admin/companies/{companyId}', [AdminCompanyController::class, 'show'])
+            ->middleware('role:platform_admin');
+        Route::patch('/admin/companies/{companyId}', [AdminCompanyController::class, 'update'])
+            ->middleware('role:platform_admin');
 
         Route::get('/bootstrap/overview', [BootstrapController::class, 'overview'])
             ->middleware('role:admin,gestor,sdr');
