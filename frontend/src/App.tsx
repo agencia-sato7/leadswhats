@@ -244,7 +244,7 @@ export function App() {
       setDragOverColumnId(null);
     } catch (err) {
       setKanban(null);
-      setKanbanError('Não foi possível carregar o Kanban.');
+      setKanbanError(parseApiErrorMessage(err, 'Não foi possível carregar o Kanban.'));
       console.error(err);
     } finally {
       setKanbanLoading(false);
@@ -267,7 +267,7 @@ export function App() {
       setContactsMeta(response.meta);
     } catch (err) {
       setContacts([]);
-      setContactsError('Não foi possível carregar os contatos.');
+      setContactsError(parseApiErrorMessage(err, 'Não foi possível carregar os contatos.'));
       console.error(err);
     } finally {
       setContactsLoading(false);
@@ -306,7 +306,7 @@ export function App() {
       }
     } catch (err) {
       setInboxConversations([]);
-      setInboxError('Não foi possível carregar a inbox de conversas.');
+      setInboxError(parseApiErrorMessage(err, 'Não foi possível carregar a Inbox.'));
       console.error(err);
     } finally {
       setInboxLoading(false);
@@ -321,7 +321,7 @@ export function App() {
       setInboxDetail(detail);
     } catch (err) {
       setInboxDetail(null);
-      setInboxDetailError('Não foi possível carregar o histórico da conversa.');
+      setInboxDetailError(parseApiErrorMessage(err, 'Não foi possível carregar o histórico da conversa.'));
       console.error(err);
     } finally {
       setInboxDetailLoading(false);
@@ -330,13 +330,31 @@ export function App() {
 
   function parseApiErrorMessage(error: unknown, fallback: string): string {
     if (!(error instanceof Error) || !error.message) return fallback;
-    try {
-      const parsed = JSON.parse(error.message) as { message?: string };
-      if (parsed?.message) return parsed.message;
-    } catch {
-      return error.message;
+
+    const rawMessage = error.message.toLowerCase();
+    if (rawMessage.includes('failed to fetch') || rawMessage.includes('networkerror') || rawMessage.includes('network error')) {
+      return 'Não foi possível conectar à API. Verifique se o backend está em execução.';
     }
-    return fallback;
+
+    let apiMessage: string | null = null;
+    let status: number | null = null;
+
+    try {
+      const parsed = JSON.parse(error.message) as { message?: string; errors?: Record<string, string[]>; status?: number };
+      if (parsed?.message && typeof parsed.message === 'string') apiMessage = parsed.message;
+      if (parsed?.status && Number.isFinite(parsed.status)) status = Number(parsed.status);
+    } catch {
+      const statusMatch = error.message.match(/(?:Erro HTTP|HTTP)\s*(\d{3})/i);
+      if (statusMatch) status = Number(statusMatch[1]);
+    }
+
+    if (status === 401) return 'Sessão expirada ou inválida. Faça login novamente.';
+    if (status === 403) return 'Você não tem permissão para acessar esta área ou executar esta ação.';
+    if (status === 404) return 'Recurso não encontrado ou indisponível para sua empresa.';
+    if (status === 422) return apiMessage || 'Dados inválidos. Revise as informações e tente novamente.';
+    if (status === 500) return 'Erro interno da API. Tente novamente ou acione o suporte.';
+
+    return apiMessage || fallback;
   }
 
   useEffect(() => {
@@ -349,8 +367,8 @@ export function App() {
 
     refreshData(session.token)
       .catch((err) => {
-        setError('Falha ao carregar dados da API.');
-        setChecklistError('Não foi possível carregar o checklist.');
+        setError(parseApiErrorMessage(err, 'Falha ao carregar dados da API.'));
+        setChecklistError(parseApiErrorMessage(err, 'Não foi possível carregar o checklist.'));
         console.error(err);
       })
       .finally(() => {
@@ -391,7 +409,7 @@ export function App() {
       })
       .catch((err: unknown) => {
         setAssignableUsers([]);
-        setAssignableUsersError(parseApiErrorMessage(err, 'Não foi possível carregar usuários atribuíveis. Usando opções disponíveis na Inbox.'));
+        setAssignableUsersError(parseApiErrorMessage(err, 'Não foi possível carregar usuários atribuíveis.'));
       });
   }, [session, canManageSource]);
 
@@ -454,8 +472,8 @@ export function App() {
       const newSession: Session = { token: data.token, user: data.user };
       setSession(newSession);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newSession));
-    } catch {
-      setError('Credenciais inválidas ou API indisponível.');
+    } catch (err) {
+      setError(parseApiErrorMessage(err, 'Credenciais inválidas ou API indisponível.'));
     } finally {
       setLoading(false);
     }
@@ -532,7 +550,7 @@ export function App() {
         await refreshKanban(session.token, selectedPipelineId);
       }
     } catch (err) {
-      setKanbanError('Não foi possível mover o card.');
+      setKanbanError(parseApiErrorMessage(err, 'Não foi possível mover o card.'));
       console.error(err);
     } finally {
       setKanbanLoading(false);
@@ -583,7 +601,7 @@ export function App() {
       const history = await getLeadStageHistory(session.token, leadId);
       setStageHistoryByLead((prev) => ({ ...prev, [leadId]: history }));
     } catch (err) {
-      setKanbanError('Não foi possível carregar o histórico da etapa.');
+      setKanbanError(parseApiErrorMessage(err, 'Não foi possível carregar o histórico da etapa.'));
       console.error(err);
     } finally {
       setHistoryLoadingLeadId(null);
@@ -667,13 +685,13 @@ export function App() {
         try {
           await fetchInboxEvents(session.token, inboxDetail.conversation_id);
         } catch (err: unknown) {
-          setInboxEventsError(parseApiErrorMessage(err, 'Não foi possível recarregar a auditoria.'));
+          setInboxEventsError(parseApiErrorMessage(err, 'Não foi possível recarregar a auditoria da conversa.'));
         } finally {
           setInboxEventsLoading(false);
         }
       }
     } catch (err) {
-      setInboxOwnerUpdateError(parseApiErrorMessage(err, 'Não foi possível atualizar o responsável.'));
+      setInboxOwnerUpdateError(parseApiErrorMessage(err, 'Não foi possível atualizar o responsável do lead.'));
       console.error(err);
     } finally {
       setInboxOwnerUpdateLoading(false);
@@ -706,7 +724,7 @@ export function App() {
       setContactsExportSuccess('Download iniciado.');
     } catch (err) {
       console.error(err);
-      setContactsExportError('Não foi possível exportar os contatos em CSV.');
+      setContactsExportError(parseApiErrorMessage(err, 'Não foi possível exportar os contatos em CSV.'));
     } finally {
       setContactsExportLoading(false);
     }
@@ -813,7 +831,7 @@ export function App() {
         {inboxLoading ? <p>Carregando inbox...</p> : null}
         {inboxError ? <p style={{ color: 'crimson' }}>{inboxError}</p> : null}
 
-        {!inboxLoading && !inboxError && inboxConversations.length === 0 ? <p>Nenhuma conversa encontrada com os filtros atuais.</p> : null}
+        {!inboxLoading && !inboxError && inboxConversations.length === 0 ? <p>Nenhuma conversa encontrada. Novas conversas aparecerão após a chegada de mensagens pelo webhook.</p> : null}
 
         {!inboxLoading && !inboxError && inboxConversations.length > 0 ? (
           <>
@@ -888,6 +906,11 @@ export function App() {
                         {assignableUsersError ? (
                           <small style={{ color: '#8a5a00' }}>
                             {assignableUsersError}
+                          </small>
+                        ) : null}
+                        {!assignableUsersError && canManageSource && inboxAssignableOwnerOptions.length === 0 ? (
+                          <small style={{ color: '#8a5a00' }}>
+                            Nenhum usuário atribuível encontrado. Verifique usuários ativos da empresa.
                           </small>
                         ) : null}
                         {inboxOwnerUpdateError ? <small style={{ color: 'crimson' }}>{inboxOwnerUpdateError}</small> : null}
@@ -1088,7 +1111,7 @@ export function App() {
         <h2 style={{ marginTop: 0 }}>Kanban</h2>
         {!canMoveStage ? <p style={{ marginTop: 0 }}>Você está em perfil <strong>SDR</strong>: pode visualizar o Kanban, mas não pode mover cards.</p> : null}
 
-        {pipelines.length === 0 ? <p>Nenhum pipeline disponível para esta empresa.</p> : null}
+        {pipelines.length === 0 ? <p>Nenhum pipeline encontrado para esta empresa. Rode o bootstrap demo ou configure um pipeline.</p> : null}
 
         {pipelines.length > 1 ? (
           <label style={{ display: 'block', marginBottom: 12 }}>
@@ -1103,7 +1126,7 @@ export function App() {
 
         {kanbanLoading ? <p>Carregando Kanban...</p> : null}
         {kanbanError ? <p style={{ color: 'crimson' }}>{kanbanError}</p> : null}
-        {!kanbanLoading && !kanbanError && kanban && kanban.columns.length === 0 ? <p>Kanban vazio: este pipeline ainda não possui colunas.</p> : null}
+        {!kanbanLoading && !kanbanError && kanban && kanban.columns.length === 0 ? <p>Este pipeline ainda não possui colunas.</p> : null}
 
         {!kanbanLoading && !kanbanError && kanban && kanban.columns.length > 0 ? (
           <div style={{ display: 'flex', gap: 12, overflowX: 'auto', alignItems: 'flex-start', paddingBottom: 8 }}>
@@ -1125,7 +1148,7 @@ export function App() {
                 <h3 style={{ marginTop: 0, marginBottom: 8 }}>{column.name}</h3>
                 <small style={{ display: 'block', marginBottom: 10 }}>Etapa atual: {column.name}</small>
 
-                {column.cards.length === 0 ? <p style={{ margin: 0 }}>Sem cards nesta coluna.</p> : null}
+                {column.cards.length === 0 ? <p style={{ margin: 0 }}>Nenhum lead nesta etapa.</p> : null}
 
                 {column.cards.map((card) => {
                   const history = stageHistoryByLead[card.lead_id];
