@@ -77,6 +77,34 @@ class WhatsappWebhookController extends Controller
 
     public function ingestMeta(Request $request, WhatsappIngestionService $service): JsonResponse
     {
+        $signatureHeader = (string) $request->header('X-Hub-Signature-256', '');
+        $appSecret = trim((string) config('whatsapp.cloud_app_secret', ''));
+        $isProduction = (string) config('app.env') === 'production';
+
+        $shouldValidate = $isProduction || $appSecret !== '';
+
+        if ($shouldValidate) {
+            if ($signatureHeader === '') {
+                return response()->json(['message' => 'Missing signature header.'], 403);
+            }
+
+            if (!str_starts_with($signatureHeader, 'sha256=')) {
+                return response()->json(['message' => 'Invalid signature format.'], 403);
+            }
+
+            if ($appSecret === '') {
+                return response()->json(['message' => 'App secret not configured on backend.'], 403);
+            }
+
+            $signature = substr($signatureHeader, 7); // Remove 'sha256='
+            $payload = $request->getContent();
+            $calculated = hash_hmac('sha256', $payload, $appSecret);
+
+            if (!hash_equals($calculated, $signature)) {
+                return response()->json(['message' => 'Invalid signature.'], 403);
+            }
+        }
+
         $entries = $request->input('entry');
         if (!is_array($entries) || $entries === []) {
             return response()->json([

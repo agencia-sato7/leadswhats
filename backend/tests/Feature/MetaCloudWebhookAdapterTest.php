@@ -249,4 +249,70 @@ class MetaCloudWebhookAdapterTest extends TestCase
             'body' => 'Mensagem interna normalizada',
         ]);
     }
+
+    public function test_meta_post_signature_validation_bypassed_in_testing_when_secret_not_configured(): void
+    {
+        config()->set('whatsapp.cloud_app_secret', '');
+
+        $payload = ['entry' => []];
+        $this->postJson('/api/v1/webhooks/whatsapp/meta', $payload)
+            ->assertOk();
+    }
+
+    public function test_meta_post_signature_validation_fails_when_secret_configured_and_signature_missing(): void
+    {
+        config()->set('whatsapp.cloud_app_secret', 'secret-key');
+
+        $payload = ['entry' => []];
+        $this->postJson('/api/v1/webhooks/whatsapp/meta', $payload)
+            ->assertStatus(403)
+            ->assertJsonPath('message', 'Missing signature header.');
+    }
+
+    public function test_meta_post_signature_validation_fails_when_secret_configured_and_signature_invalid(): void
+    {
+        config()->set('whatsapp.cloud_app_secret', 'secret-key');
+
+        $payload = ['entry' => []];
+        $this->withHeaders(['X-Hub-Signature-256' => 'sha256=invalid-signature'])
+            ->postJson('/api/v1/webhooks/whatsapp/meta', $payload)
+            ->assertStatus(403)
+            ->assertJsonPath('message', 'Invalid signature.');
+    }
+
+    public function test_meta_post_signature_validation_passes_when_secret_configured_and_signature_valid(): void
+    {
+        config()->set('whatsapp.cloud_app_secret', 'secret-key');
+
+        $payload = ['entry' => []];
+        $payloadJson = json_encode($payload);
+        $signature = hash_hmac('sha256', $payloadJson, 'secret-key');
+
+        $this->withHeaders(['X-Hub-Signature-256' => 'sha256=' . $signature])
+            ->postJson('/api/v1/webhooks/whatsapp/meta', $payload)
+            ->assertOk();
+    }
+
+    public function test_meta_post_signature_validation_fails_in_production_when_signature_missing(): void
+    {
+        config()->set('app.env', 'production');
+        config()->set('whatsapp.cloud_app_secret', 'secret-key');
+
+        $payload = ['entry' => []];
+        $this->postJson('/api/v1/webhooks/whatsapp/meta', $payload)
+            ->assertStatus(403)
+            ->assertJsonPath('message', 'Missing signature header.');
+    }
+
+    public function test_meta_post_signature_validation_fails_in_production_when_secret_not_configured(): void
+    {
+        config()->set('app.env', 'production');
+        config()->set('whatsapp.cloud_app_secret', '');
+
+        $payload = ['entry' => []];
+        $this->withHeaders(['X-Hub-Signature-256' => 'sha256=some-signature'])
+            ->postJson('/api/v1/webhooks/whatsapp/meta', $payload)
+            ->assertStatus(403)
+            ->assertJsonPath('message', 'App secret not configured on backend.');
+    }
 }

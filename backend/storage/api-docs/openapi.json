@@ -4378,6 +4378,18 @@
           "Webhook"
         ],
         "summary": "Adapter inbound Meta Cloud API para formato interno",
+        "parameters": [
+          {
+            "name": "X-Hub-Signature-256",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Assinatura digital SHA256 do payload, gerada usando o app secret da Meta (obrigatória em produção)",
+            "example": "sha256=12345abcdef67890..."
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -4450,9 +4462,12 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Assinatura inválida, ausente ou app secret não configurado"
           }
         },
-        "description": "Converte payload oficial da Meta para webhook interno. Neste PR suporta somente mensagens text inbound. Payload sem texto e phone_number_id não mapeado retornam 200 com ignored/unmatched. Não usa BearerAuth e não usa X-Webhook-Token. Limitação atual: sem assinatura X-Hub-Signature."
+        "description": "Converte payload oficial da Meta para webhook interno. Neste PR suporta somente mensagens text inbound. Payload sem texto e phone_number_id não mapeado retornam 200 com ignored/unmatched. Não usa BearerAuth e não usa X-Webhook-Token. Valida a assinatura usando o header X-Hub-Signature-256 se configurado em local/testing ou obrigatoriamente se em production."
       }
     }
   }
