@@ -298,8 +298,10 @@ export function App() {
     }
   }
 
-  async function refreshKanban(token: string, pipelineId: number) {
-    setKanbanLoading(true);
+  async function refreshKanban(token: string, pipelineId: number, silent = false) {
+    if (!silent) {
+      setKanbanLoading(true);
+    }
     setKanbanError(null);
     try {
       const kanbanData = await getPipelineKanban(token, pipelineId);
@@ -342,7 +344,7 @@ export function App() {
         phone_number_id: data.phone_number_id ?? '',
         business_account_id: data.business_account_id ?? '',
         access_token: '',
-        webhook_verify_token: '',
+        webhook_verify_token: data.webhook_verify_token ?? '',
       });
     } catch (err) {
       setWhatsAppSettings(null);
@@ -375,8 +377,10 @@ export function App() {
     }
   }
 
-  async function refreshInboxConversations(token: string, page = 1) {
-    setInboxLoading(true);
+  async function refreshInboxConversations(token: string, page = 1, silent = false) {
+    if (!silent) {
+      setInboxLoading(true);
+    }
     setInboxError(null);
     try {
       const response = await getInboxConversations(token, {
@@ -414,8 +418,10 @@ export function App() {
     }
   }
 
-  async function refreshInboxDetail(token: string, conversationId: number) {
-    setInboxDetailLoading(true);
+  async function refreshInboxDetail(token: string, conversationId: number, silent = false) {
+    if (!silent) {
+      setInboxDetailLoading(true);
+    }
     setInboxDetailError(null);
     try {
       const detail = await getInboxConversationDetail(token, conversationId);
@@ -533,6 +539,25 @@ export function App() {
     setInboxEventsLoading(false);
     refreshInboxDetail(session.token, selectedConversationId).catch((err) => console.error(err));
   }, [session, selectedConversationId, isPlatformAdmin]);
+
+  useEffect(() => {
+    if (!session || isPlatformAdmin) return;
+
+    const interval = setInterval(() => {
+      if (activeView === 'inbox') {
+        void refreshInboxConversations(session.token, inboxPage, true).catch((err) => console.error(err));
+        if (selectedConversationId) {
+          void refreshInboxDetail(session.token, selectedConversationId, true).catch((err) => console.error(err));
+        }
+      } else if (activeView === 'kanban' && selectedPipelineId) {
+        void refreshKanban(session.token, selectedPipelineId, true).catch((err) => console.error(err));
+      } else if (activeView === 'dashboard') {
+        void refreshData(session.token).catch((err) => console.error(err));
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [session, activeView, inboxPage, selectedConversationId, selectedPipelineId, isPlatformAdmin]);
 
   useEffect(() => {
     if (!session || !selectedConversationId || inboxDetailTab !== 'audit' || isPlatformAdmin) return;
@@ -984,6 +1009,7 @@ export function App() {
 
       await updateWhatsAppSettings(session.token, payload);
       await refreshWhatsAppSettings(session.token);
+      await refreshData(session.token);
       setWhatsAppSuccess('Configuração do WhatsApp salva com sucesso.');
     } catch (err) {
       setWhatsAppError(parseApiErrorMessage(err, 'Não foi possível salvar a configuração do WhatsApp.'));
@@ -1091,7 +1117,30 @@ export function App() {
           {loading ? <LoadingState message="Carregando dados..." /> : null}
           {error ? <ErrorState message={error} /> : null}
 
-          {activeView === 'adminSaas' ? (
+          {!isPlatformAdmin && overview && overview.whatsapp_status !== 'configured' && activeView !== 'whatsappSettings' ? (
+            <Section style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
+              <Card style={{ maxWidth: 500, textAlign: 'center', padding: 32, border: '1px solid #fecaca', background: '#fef2f2', borderRadius: 8, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+                <div style={{ color: '#dc2626', fontSize: 48, marginBottom: 16 }}>⚠️</div>
+                <h3 style={{ color: '#dc2626', marginTop: 0, fontSize: 20 }}>WhatsApp Desconectado</h3>
+                <p style={{ color: '#7f1d1d', margin: '12px 0 24px', fontSize: 15, lineHeight: 1.6 }}>
+                  O sistema de atendimento, Kanban e relatórios do LeadsWhats está bloqueado porque o número de WhatsApp da empresa não está conectado e ativado.
+                </p>
+                {canManageWhatsAppSettings ? (
+                  <div>
+                    <Button onClick={() => setActiveView('whatsappSettings')} style={{ background: '#dc2626', borderColor: '#dc2626', color: '#fff', fontWeight: 'bold' }}>
+                      Ir para Configurações do WhatsApp
+                    </Button>
+                  </div>
+                ) : (
+                  <p style={{ color: '#991b1b', fontSize: 13, fontWeight: 'bold', margin: 0 }}>
+                    Por favor, entre em contato com seu gestor ou administrador para ativar a integração do WhatsApp da empresa.
+                  </p>
+                )}
+              </Card>
+            </Section>
+          ) : (
+            <>
+              {activeView === 'adminSaas' ? (
             <>
               <Section>
                 <PageHeader title="Admin SaaS" subtitle="Gerencie empresas clientes e acessos iniciais" />
@@ -1261,6 +1310,60 @@ export function App() {
                 ) : null}
                 {!whatsAppLoading && whatsAppSettings?.status === 'error' ? (
                   <Alert variant="danger">Erro de integração: {whatsAppSettings.last_error || 'sem detalhes fornecidos.'}</Alert>
+                ) : null}
+
+                {!whatsAppLoading && whatsAppSettings ? (
+                  <Card style={{ marginBottom: 20, border: '1px dashed #4f46e5', background: '#f5f3ff', padding: 16 }}>
+                    <h3 style={{ marginTop: 0, color: '#4f46e5' }}>Configurações do Webhook na Meta</h3>
+                    <p style={{ margin: '4px 0', fontSize: 14, color: '#555' }}>
+                      Para receber as mensagens do WhatsApp em tempo real, configure estes dados no painel de desenvolvedor da Meta (WhatsApp &gt; Configuração &gt; Webhook):
+                    </p>
+                    <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+                      <div>
+                        <strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>URL de Retorno (Callback URL):</strong>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <input
+                            readOnly
+                            value={`${window.location.origin}/api/v1/webhooks/whatsapp/meta`}
+                            style={{ flex: 1, padding: '8px 12px', fontSize: 13, background: '#fff', border: '1px solid #ddd', borderRadius: 4 }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${window.location.origin}/api/v1/webhooks/whatsapp/meta`);
+                              alert('URL do Webhook copiada!');
+                            }}
+                            style={{ padding: '8px 16px', fontSize: 13, cursor: 'pointer', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 4, fontWeight: 'bold' }}
+                          >
+                            Copiar URL
+                          </button>
+                        </div>
+                      </div>
+                      <div>
+                        <strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Token de Verificação (Verify Token):</strong>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <input
+                            readOnly
+                            value={whatsAppSettings?.webhook_verify_token || 'Ainda não gerado (salve as credenciais primeiro)'}
+                            style={{ flex: 1, padding: '8px 12px', fontSize: 13, background: '#fff', border: '1px solid #ddd', borderRadius: 4 }}
+                          />
+                          <button
+                            type="button"
+                            disabled={!whatsAppSettings?.webhook_verify_token}
+                            onClick={() => {
+                              if (whatsAppSettings?.webhook_verify_token) {
+                                navigator.clipboard.writeText(whatsAppSettings.webhook_verify_token);
+                                alert('Token de Verificação copiado!');
+                              }
+                            }}
+                            style={{ padding: '8px 16px', fontSize: 13, cursor: 'pointer', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 4, fontWeight: 'bold' }}
+                          >
+                            Copiar Token
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
                 ) : null}
 
                 {!whatsAppLoading ? (
@@ -1890,6 +1993,8 @@ export function App() {
           </Section>
         </>
       ) : null}
+            </>
+          )}
         </div>
       </div>
     </AppShell>

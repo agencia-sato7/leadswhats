@@ -24,6 +24,7 @@ export type OverviewResponse = {
     work_start: string;
     work_end: string;
   };
+  whatsapp_status: 'not_configured' | 'configured' | 'error';
   counts: {
     users: number;
     leads: number;
@@ -338,6 +339,7 @@ export type WhatsAppSettings = {
   business_account_id: string | null;
   access_token_configured: boolean;
   webhook_verify_token_configured: boolean;
+  webhook_verify_token?: string | null;
   connected_at: string | null;
   last_error: string | null;
 };

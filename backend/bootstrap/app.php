@@ -17,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'auth.token' => AuthenticateApiToken::class,
             'role' => EnsureUserRole::class,
+            'whatsapp.connected' => \App\Http\Middleware\EnsureWhatsAppConnected::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

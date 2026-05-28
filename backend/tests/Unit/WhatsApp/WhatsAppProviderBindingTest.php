@@ -12,6 +12,15 @@ class WhatsAppProviderBindingTest extends TestCase
 {
     use RefreshDatabase;
 
+    private ?string $originalProvider = null;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $val = getenv('WHATSAPP_PROVIDER');
+        $this->originalProvider = $val !== false ? $val : null;
+    }
+
     public function test_meta_cloud_provider_can_be_resolved_from_container(): void
     {
         putenv('WHATSAPP_PROVIDER=meta_cloud');
@@ -40,8 +49,14 @@ class WhatsAppProviderBindingTest extends TestCase
 
     protected function tearDown(): void
     {
-        putenv('WHATSAPP_PROVIDER');
-        unset($_ENV['WHATSAPP_PROVIDER'], $_SERVER['WHATSAPP_PROVIDER']);
+        if ($this->originalProvider !== null) {
+            putenv('WHATSAPP_PROVIDER=' . $this->originalProvider);
+            $_ENV['WHATSAPP_PROVIDER'] = $this->originalProvider;
+            $_SERVER['WHATSAPP_PROVIDER'] = $this->originalProvider;
+        } else {
+            putenv('WHATSAPP_PROVIDER');
+            unset($_ENV['WHATSAPP_PROVIDER'], $_SERVER['WHATSAPP_PROVIDER']);
+        }
 
         parent::tearDown();
     }

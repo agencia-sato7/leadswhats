@@ -129,6 +129,7 @@ class CompanyWhatsAppIntegrationService
             "phone_number_id" => $integration->phone_number_id,
             "business_account_id" => $integration->business_account_id,
             "webhook_verify_token_configured" => (bool) $integration->webhook_verify_token,
+            "webhook_verify_token" => $integration->webhook_verify_token,
             "access_token_configured" => (bool) $integration->access_token_encrypted,
             "connected_at" => $integration->connected_at?->toISOString(),
             "last_error" => $integration->last_error,

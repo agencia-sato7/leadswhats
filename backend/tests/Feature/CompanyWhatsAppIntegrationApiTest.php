@@ -85,7 +85,7 @@ class CompanyWhatsAppIntegrationApiTest extends TestCase
             ->assertJsonPath("data.phone_number_id", "123456")
             ->assertJsonPath("data.business_account_id", "789")
             ->assertJsonMissingPath("data.access_token")
-            ->assertJsonMissingPath("data.webhook_verify_token");
+            ->assertJsonPath("data.webhook_verify_token", "verify-token");
 
         $this->assertDatabaseHas("company_whatsapp_integrations", [
             "company_id" => $company->id,
@@ -222,7 +222,7 @@ class CompanyWhatsAppIntegrationApiTest extends TestCase
             ->assertJsonPath("data.access_token_configured", true)
             ->assertJsonPath("data.webhook_verify_token_configured", true)
             ->assertJsonMissingPath("data.access_token")
-            ->assertJsonMissingPath("data.webhook_verify_token");
+            ->assertJsonPath("data.webhook_verify_token", "verify-token");
     }
 
     private function createCompany(string $slug): Company

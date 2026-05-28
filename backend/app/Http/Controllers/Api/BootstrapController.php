@@ -22,6 +22,7 @@ class BootstrapController extends Controller
 
         return response()->json([
             'company' => $company,
+            'whatsapp_status' => $company ? ($company->whatsappIntegration?->status ?? 'not_configured') : 'not_configured',
             'counts' => [
                 'users' => $company ? $company->users()->count() : 0,
                 'leads' => Lead::where('company_id', $companyId)->count(),
