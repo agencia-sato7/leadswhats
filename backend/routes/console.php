@@ -54,6 +54,28 @@ Artisan::command('leadswhats:doctor', function () {
         $pushCheck('WHATSAPP_PROVIDER_POLICY', 'OK', 'Policy de provider válida para o ambiente.');
     }
 
+    if ($provider === 'meta_cloud') {
+        $metaVerifyToken = (string) config('whatsapp.cloud_webhook_verify_token');
+        if ($metaVerifyToken === '') {
+            $pushCheck('WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN', 'FAIL', 'Token de verificação global do webhook da Meta ausente (WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN).');
+        } else {
+            $pushCheck('WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN', 'OK', 'configurado');
+        }
+
+        if (Schema::hasTable('company_whatsapp_integrations')) {
+            $configuredCount = DB::table('company_whatsapp_integrations')
+                ->where('status', 'configured')
+                ->count();
+            if ($configuredCount === 0) {
+                $pushCheck('META_CLOUD_INTEGRATIONS', 'WARN', 'Nenhuma empresa possui integração de WhatsApp configurada.');
+            } else {
+                $pushCheck('META_CLOUD_INTEGRATIONS', 'OK', 'total_configurado=' . $configuredCount);
+            }
+        } else {
+            $pushCheck('META_CLOUD_INTEGRATIONS', 'FAIL', 'Tabela company_whatsapp_integrations ausente.');
+        }
+    }
+
     $appKey = (string) config('app.key');
     $pushCheck('APP_KEY', $appKey !== '' ? 'OK' : 'FAIL', $appKey !== '' ? 'configurada' : 'ausente');
 
