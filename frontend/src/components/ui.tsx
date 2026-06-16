@@ -78,6 +78,7 @@ export function EmptyState({ title, description }: { title: string; description?
 export function LoadingState({ message = 'Carregando...' }: { message?: string }) {
   return (
     <div className="lw-state">
+      <div className="lw-spinner" />
       <p className="lw-state-title">{message}</p>
     </div>
   );

@@ -52,7 +52,15 @@ export type DashboardSummaryResponse = {
     overdue_follow_up_tasks: number;
     unassigned_leads: number;
     oldest_pending_task_hours: number;
+    successful_conversations_today: number;
+    lost_conversations_today: number;
+    effectiveness_percentage: number;
   };
+  funnel_by_source: Array<{
+    source: string;
+    stage_name: string;
+    count: number;
+  }>;
 };
 
 export type LeadSourceItem = {
@@ -81,6 +89,7 @@ export type KanbanCard = {
   source: string;
   classification: string;
   last_message_at: string | null;
+  owner_name: string | null;
 };
 
 export type KanbanColumn = {

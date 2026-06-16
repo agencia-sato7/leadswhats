@@ -6,6 +6,7 @@ use App\Models\Conversation;
 use App\Models\Lead;
 use App\Models\LeadSourceHistory;
 use App\Models\Message;
+use Illuminate\Support\Facades\DB;
 
 class DashboardMetricsService
 {
@@ -15,7 +16,7 @@ class DashboardMetricsService
     }
 
     /**
-     * @return array{date:string,metrics:array<string,int|float>}
+     * @return array{date:string,metrics:array<string,int|float>,funnel_by_source:array<int,array{source:string,stage_name:string,count:int}>}
      */
     public function summaryForCompany(int $companyId): array
     {
@@ -84,6 +85,79 @@ class DashboardMetricsService
             ->whereNull("owner_user_id")
             ->count();
 
+        // 1. Efetividade de conversas (Sucesso vs Perdidas)
+        $successfulConversationsCount = DB::table('conversations as c')
+            ->where('c.company_id', $companyId)
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('messages as m1')
+                    ->whereColumn('m1.conversation_id', 'c.id')
+                    ->where('m1.direction', 'inbound')
+                    ->whereExists(function ($query2) {
+                        $query2->select(DB::raw(1))
+                            ->from('messages as m2')
+                            ->whereColumn('m2.conversation_id', 'm1.conversation_id')
+                            ->where('m2.direction', 'outbound')
+                            ->whereColumn('m2.sent_at', '>', 'm1.sent_at')
+                            ->whereExists(function ($query3) {
+                                $query3->select(DB::raw(1))
+                                    ->from('messages as m3')
+                                    ->whereColumn('m3.conversation_id', 'm2.conversation_id')
+                                    ->where('m3.direction', 'inbound')
+                                    ->whereColumn('m3.sent_at', '>', 'm2.sent_at');
+                            });
+                    });
+            })
+            ->count();
+
+        $lostConversationsCount = DB::table('conversations as c')
+            ->where('c.company_id', $companyId)
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('messages as m')
+                    ->whereColumn('m.conversation_id', 'c.id')
+                    ->where('m.direction', 'outbound');
+            })
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('messages as ml')
+                    ->whereColumn('ml.conversation_id', 'c.id')
+                    ->whereRaw('ml.id = (SELECT MAX(id) FROM messages WHERE conversation_id = c.id)')
+                    ->where('ml.direction', 'outbound')
+                    ->where('ml.sent_at', '<=', now()->subHours(24));
+            })
+            ->count();
+
+        $effectivenessPercentage = ($successfulConversationsCount + $lostConversationsCount) > 0
+            ? (int) round(($successfulConversationsCount / ($successfulConversationsCount + $lostConversationsCount)) * 100)
+            : 0;
+
+        // 2. Matriz de Funil por Origem
+        $latestStageIds = DB::table('lead_stage_histories')
+            ->selectRaw('MAX(id) as id')
+            ->where('company_id', $companyId)
+            ->groupBy('lead_id');
+
+        $latestStages = DB::table('lead_stage_histories as lsh')
+            ->select('lsh.lead_id', 'lsh.to_column_id')
+            ->joinSub($latestStageIds, 'latest', 'lsh.id', '=', 'latest.id');
+
+        $funnelBySource = DB::table('leads as l')
+            ->joinSub($latestStages, 'latest_stage', 'l.id', '=', 'latest_stage.lead_id')
+            ->join('kanban_columns as kc', 'kc.id', '=', 'latest_stage.to_column_id')
+            ->select('l.source', 'kc.name as stage_name', DB::raw('count(*) as count'))
+            ->where('l.company_id', $companyId)
+            ->groupBy('l.source', 'kc.name')
+            ->get()
+            ->map(function ($row) {
+                return [
+                    'source' => (string) $row->source,
+                    'stage_name' => (string) $row->stage_name,
+                    'count' => (int) $row->count,
+                ];
+            })
+            ->all();
+
         return [
             "date" => today()->toDateString(),
             "metrics" => [
@@ -101,7 +175,11 @@ class DashboardMetricsService
                 "overdue_follow_up_tasks" => $overdueFollowUpTasks,
                 "unassigned_leads" => $unassignedLeads,
                 "oldest_pending_task_hours" => round($oldestPendingTaskHours, 2),
+                "successful_conversations_today" => $successfulConversationsCount,
+                "lost_conversations_today" => $lostConversationsCount,
+                "effectiveness_percentage" => $effectivenessPercentage,
             ],
+            "funnel_by_source" => $funnelBySource,
         ];
     }
 }

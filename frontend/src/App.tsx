@@ -98,9 +98,15 @@ function getFriendlyAuditEventType(eventType: InboxConversationEvent['event_type
 
 export function App() {
   type ActiveView = 'dashboard' | 'inbox' | 'checklist' | 'kanban' | 'contacts' | 'adminSaas' | 'whatsappSettings';
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('leadswhats_theme') as 'light' | 'dark') || 'dark');
   const [email, setEmail] = useState('gestor@empresa.local');
   const [password, setPassword] = useState('12345678');
   const [session, setSession] = useState<Session | null>(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('leadswhats_theme', theme);
+  }, [theme]);
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [dashboard, setDashboard] = useState<DashboardSummaryResponse | null>(null);
   const [unknownLeads, setUnknownLeads] = useState<LeadSourceItem[]>([]);
@@ -1023,7 +1029,7 @@ export function App() {
       <main className="lw-login-shell">
         <Card className="lw-login-card">
           <PageHeader title="LEADSWHATS" subtitle="Login para acessar o dashboard inicial." />
-          <form onSubmit={handleLogin} style={{ display: 'grid', gap: 12 }}>
+          <form onSubmit={handleLogin} className="lw-grid-3">
             <FormGroup label="Email">
               <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
             </FormGroup>
@@ -1041,6 +1047,9 @@ export function App() {
   const dashboardMetrics = dashboard ? [
     { label: 'Leads novos hoje', value: dashboard.metrics.new_leads_today },
     { label: 'Leads repetidos hoje', value: dashboard.metrics.repeat_leads_today },
+    { label: 'Conversas com sucesso', value: dashboard.metrics.successful_conversations_today },
+    { label: 'Conversas perdidas', value: dashboard.metrics.lost_conversations_today },
+    { label: 'Efetividade de conversas', value: `${dashboard.metrics.effectiveness_percentage}%` },
     { label: 'Tempo médio 1ª resposta', value: formatSeconds(dashboard.metrics.avg_first_response_seconds) },
     { label: 'Leads em vácuo (+24h)', value: dashboard.metrics.vacuum_24h_open },
     { label: 'Resgates hoje', value: dashboard.metrics.rescues_today },
@@ -1100,6 +1109,13 @@ export function App() {
           <div className="lw-side-user">
             <small>{session.user.name}</small>
             <Badge variant="info">{session.user.role}</Badge>
+            <button
+              type="button"
+              className="lw-theme-toggle lw-mt-2"
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            >
+              {theme === 'dark' ? '☀️ Modo Claro' : '🌙 Modo Escuro'}
+            </button>
           </div>
         </Sidebar>
 
@@ -1118,33 +1134,33 @@ export function App() {
           {error ? <ErrorState message={error} /> : null}
 
           {!isPlatformAdmin && overview && overview.whatsapp_status !== 'configured' && activeView !== 'whatsappSettings' ? (
-            <Section style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', padding: 24 }}>
-              <Card style={{ maxWidth: 500, textAlign: 'center', padding: 32, border: '1px solid #fecaca', background: '#fef2f2', borderRadius: 8, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-                <div style={{ color: '#dc2626', fontSize: 48, marginBottom: 16 }}>⚠️</div>
-                <h3 style={{ color: '#dc2626', marginTop: 0, fontSize: 20 }}>WhatsApp Desconectado</h3>
-                <p style={{ color: '#7f1d1d', margin: '12px 0 24px', fontSize: 15, lineHeight: 1.6 }}>
+            <div className="lw-disconnected-wrap">
+              <div className="lw-disconnected-card">
+                <div className="icon">⚠️</div>
+                <h3>WhatsApp Desconectado</h3>
+                <p>
                   O sistema de atendimento, Kanban e relatórios do LeadsWhats está bloqueado porque o número de WhatsApp da empresa não está conectado e ativado.
                 </p>
                 {canManageWhatsAppSettings ? (
                   <div>
-                    <Button onClick={() => setActiveView('whatsappSettings')} style={{ background: '#dc2626', borderColor: '#dc2626', color: '#fff', fontWeight: 'bold' }}>
+                    <Button onClick={() => setActiveView('whatsappSettings')}>
                       Ir para Configurações do WhatsApp
                     </Button>
                   </div>
                 ) : (
-                  <p style={{ color: '#991b1b', fontSize: 13, fontWeight: 'bold', margin: 0 }}>
+                  <p className="lw-m-0 lw-font-bold">
                     Por favor, entre em contato com seu gestor ou administrador para ativar a integração do WhatsApp da empresa.
                   </p>
                 )}
-              </Card>
-            </Section>
+              </div>
+            </div>
           ) : (
             <>
               {activeView === 'adminSaas' ? (
             <>
               <Section>
                 <PageHeader title="Admin SaaS" subtitle="Gerencie empresas clientes e acessos iniciais" />
-                <div className="lw-metrics-grid" style={{ marginTop: 12 }}>
+                <div className="lw-metrics-grid lw-mt-3">
                   <MetricCard label="Total de empresas" value={adminSummary.total} />
                   <MetricCard label="Empresas com settings" value={adminSummary.withSettings} />
                   <MetricCard label="Empresas com pipeline" value={adminSummary.withPipelines} />
@@ -1152,10 +1168,10 @@ export function App() {
               </Section>
 
               <Section>
-                <h2 style={{ marginTop: 0 }}>Criar empresa cliente</h2>
+                <h2>Criar empresa cliente</h2>
                 <form onSubmit={(event) => void handleCreateAdminCompany(event)} className="lw-admin-form">
                   <Card>
-                    <h3 style={{ marginTop: 0 }}>Empresa</h3>
+                    <h3>Empresa</h3>
                     <div className="lw-admin-grid">
                       <FormGroup label="Nome da empresa">
                         <Input value={adminForm.company.name} onChange={(e) => updateAdminForm('company.name', e.target.value)} placeholder="Empresa Exemplo Ltda" />
@@ -1167,7 +1183,7 @@ export function App() {
                   </Card>
 
                   <Card>
-                    <h3 style={{ marginTop: 0 }}>Admin inicial</h3>
+                    <h3>Admin inicial</h3>
                     <div className="lw-admin-grid">
                       <FormGroup label="Nome">
                         <Input value={adminForm.admin_user.name} onChange={(e) => updateAdminForm('admin_user.name', e.target.value)} placeholder="Nome do admin" />
@@ -1182,7 +1198,7 @@ export function App() {
                   </Card>
 
                   <Card>
-                    <h3 style={{ marginTop: 0 }}>Configurações operacionais</h3>
+                    <h3>Configurações operacionais</h3>
                     <div className="lw-admin-grid">
                       <FormGroup label="Timezone">
                         <Input value={adminForm.settings.timezone} onChange={(e) => updateAdminForm('settings.timezone', e.target.value)} />
@@ -1236,7 +1252,7 @@ export function App() {
               </Section>
 
               <Section>
-                <h2 style={{ marginTop: 0 }}>Empresas clientes</h2>
+                <h2>Empresas clientes</h2>
                 {adminCompaniesLoading ? <LoadingState message="Carregando empresas..." /> : null}
                 {adminCompaniesError ? <ErrorState message={adminCompaniesError} /> : null}
                 {!adminCompaniesLoading && !adminCompaniesError && adminCompanies.length === 0 ? (
@@ -1278,7 +1294,7 @@ export function App() {
             <>
               <Section>
                 <PageHeader title="Configuração WhatsApp" subtitle="Configure o canal de atendimento da empresa" />
-                <div className="lw-metrics-grid" style={{ marginTop: 12 }}>
+                <div className="lw-metrics-grid lw-mt-3">
                   <MetricCard
                     label="Status da integração"
                     value={whatsAppSettings?.status ?? 'not_configured'}
@@ -1313,41 +1329,38 @@ export function App() {
                 ) : null}
 
                 {!whatsAppLoading && whatsAppSettings ? (
-                  <Card style={{ marginBottom: 20, border: '1px dashed #4f46e5', background: '#f5f3ff', padding: 16 }}>
-                    <h3 style={{ marginTop: 0, color: '#4f46e5' }}>Configurações do Webhook na Meta</h3>
-                    <p style={{ margin: '4px 0', fontSize: 14, color: '#555' }}>
+                  <div className="lw-webhook-card">
+                    <h3>Configurações do Webhook na Meta</h3>
+                    <p>
                       Para receber as mensagens do WhatsApp em tempo real, configure estes dados no painel de desenvolvedor da Meta (WhatsApp &gt; Configuração &gt; Webhook):
                     </p>
-                    <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
+                    <div className="lw-grid-3 lw-mt-3">
                       <div>
-                        <strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>URL de Retorno (Callback URL):</strong>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <input
+                        <span className="lw-form-label lw-mb-2">URL de Retorno (Callback URL):</span>
+                        <div className="lw-flex-align-center-gap">
+                          <Input
                             readOnly
                             value={`${window.location.origin}/api/v1/webhooks/whatsapp/meta`}
-                            style={{ flex: 1, padding: '8px 12px', fontSize: 13, background: '#fff', border: '1px solid #ddd', borderRadius: 4 }}
                           />
-                          <button
+                          <Button
                             type="button"
                             onClick={() => {
                               navigator.clipboard.writeText(`${window.location.origin}/api/v1/webhooks/whatsapp/meta`);
                               alert('URL do Webhook copiada!');
                             }}
-                            style={{ padding: '8px 16px', fontSize: 13, cursor: 'pointer', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 4, fontWeight: 'bold' }}
                           >
                             Copiar URL
-                          </button>
+                          </Button>
                         </div>
                       </div>
                       <div>
-                        <strong style={{ fontSize: 13, display: 'block', marginBottom: 4 }}>Token de Verificação (Verify Token):</strong>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <input
+                        <span className="lw-form-label lw-mb-2">Token de Verificação (Verify Token):</span>
+                        <div className="lw-flex-align-center-gap">
+                          <Input
                             readOnly
                             value={whatsAppSettings?.webhook_verify_token || 'Ainda não gerado (salve as credenciais primeiro)'}
-                            style={{ flex: 1, padding: '8px 12px', fontSize: 13, background: '#fff', border: '1px solid #ddd', borderRadius: 4 }}
                           />
-                          <button
+                          <Button
                             type="button"
                             disabled={!whatsAppSettings?.webhook_verify_token}
                             onClick={() => {
@@ -1356,14 +1369,13 @@ export function App() {
                                 alert('Token de Verificação copiado!');
                               }
                             }}
-                            style={{ padding: '8px 16px', fontSize: 13, cursor: 'pointer', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 4, fontWeight: 'bold' }}
                           >
                             Copiar Token
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     </div>
-                  </Card>
+                  </div>
                 ) : null}
 
                 {!whatsAppLoading ? (
@@ -1429,35 +1441,92 @@ export function App() {
       ) : null}
 
       {activeView === 'dashboard' && dashboard ? (
-        <Section className="lw-dashboard-section">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <h2 style={{ margin: 0 }}>Dashboard Diário</h2>
-            <Badge variant="neutral">{dashboard.date}</Badge>
-          </div>
-          <div className="lw-metrics-grid">
-            {dashboardMetrics.map((metric) => (
-              <MetricCard
-                key={metric.label}
-                label={metric.label}
-                value={metric.value}
-                variant={riskMetricLabels.has(metric.label) ? 'risk' : 'default'}
-              />
-            ))}
-          </div>
-        </Section>
+        <div className="lw-stack">
+          <Section className="lw-dashboard-section">
+            <div className="lw-flex-align-center-gap lw-mb-4">
+              <h2 className="lw-m-0">Dashboard Diário</h2>
+              <Badge variant="info">{dashboard.date}</Badge>
+            </div>
+            <div className="lw-metrics-grid">
+              {dashboardMetrics.map((metric) => (
+                <MetricCard
+                  key={metric.label}
+                  label={metric.label}
+                  value={metric.value}
+                  variant={riskMetricLabels.has(metric.label) ? 'risk' : 'default'}
+                />
+              ))}
+            </div>
+          </Section>
+
+          {dashboard.funnel_by_source && dashboard.funnel_by_source.length > 0 ? (
+            <Section>
+              <h3 className="lw-funnel-title">
+                Inteligência de Marketing: Distribuição do Funil por Origem
+              </h3>
+              <div className="lw-table-wrap">
+                <table className="lw-table">
+                  <thead>
+                    <tr>
+                      <th>Origem</th>
+                      {Array.from(new Set(dashboard.funnel_by_source.map((item) => item.stage_name))).map((stage) => (
+                        <th key={stage} className="lw-text-center">
+                          {stage}
+                        </th>
+                      ))}
+                      <th className="lw-text-center lw-font-bold">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from(new Set(dashboard.funnel_by_source.map((item) => item.source))).map((source) => {
+                      const stages = Array.from(new Set(dashboard.funnel_by_source.map((item) => item.stage_name)));
+                      let rowTotal = 0;
+                      return (
+                        <tr key={source}>
+                          <td>
+                            <Badge variant="info">
+                              {source.charAt(0).toUpperCase() + source.slice(1)}
+                            </Badge>
+                          </td>
+                          {stages.map((stage) => {
+                            const count = dashboard.funnel_by_source.find((item) => item.source === source && item.stage_name === stage)?.count || 0;
+                            rowTotal += count;
+                            return (
+                              <td key={stage} className={`lw-text-center ${count === 0 ? 'lw-opacity-40' : ''}`}>
+                                {count}
+                              </td>
+                            );
+                          })}
+                          <td className="lw-text-center lw-font-bold lw-color-primary">
+                            {rowTotal}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Section>
+          ) : (
+            <Section>
+              <h3 className="lw-funnel-title lw-mb-3">Inteligência de Marketing: Distribuição do Funil por Origem</h3>
+              <EmptyState title="Sem dados de funil cruzados no momento." description="Leads novos com origem e estágio definidos alimentarão esta matriz." />
+            </Section>
+          )}
+        </div>
       ) : null}
 
       {activeView === 'inbox' ? (
       <Section>
-        <h2 style={{ marginTop: 0 }}>Inbox / Atendimento</h2>
+        <h2>Inbox / Atendimento</h2>
 
-        <form onSubmit={(event) => void applyInboxFilters(event)} style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <form onSubmit={(event) => void applyInboxFilters(event)} className="lw-grid-2 lw-mb-3">
+          <div className="lw-flex-wrap-gap">
             <input
               value={inboxSearchInput}
               onChange={(event) => setInboxSearchInput(event.target.value)}
               placeholder="Buscar conversa por nome ou telefone"
-              style={{ minWidth: 260 }}
+              className="lw-input lw-min-width-260"
             />
             <select value={inboxOwnerFilter} onChange={(event) => setInboxOwnerFilter(event.target.value ? Number(event.target.value) : '')}>
               <option value="">Todos os responsáveis</option>
@@ -1488,8 +1557,8 @@ export function App() {
           </div>
         </form>
 
-        {inboxLoading ? <p>Carregando inbox...</p> : null}
-        {inboxError ? <p style={{ color: 'crimson' }}>{inboxError}</p> : null}
+        {inboxLoading ? <p className="lw-text-sm-soft">Carregando inbox...</p> : null}
+        {inboxError ? <ErrorState message={inboxError} /> : null}
 
         {!inboxLoading && !inboxError && inboxConversations.length === 0 ? (
           <EmptyState
@@ -1500,8 +1569,8 @@ export function App() {
 
         {!inboxLoading && !inboxError && inboxConversations.length > 0 ? (
           <>
-            <div className="lw-inbox-split" style={{ gap: 12, alignItems: 'start' }}>
-              <aside style={{ border: '1px solid #eee', borderRadius: 8, maxHeight: 520, overflow: 'auto' }}>
+            <div className="lw-inbox-split">
+              <aside className="lw-inbox-sidebar">
                 {inboxConversations.map((conversation) => {
                   const isSelected = selectedConversationId === conversation.conversation_id;
                   return (
@@ -1509,20 +1578,12 @@ export function App() {
                       key={conversation.conversation_id}
                       type="button"
                       onClick={() => setSelectedConversationId(conversation.conversation_id)}
-                      style={{
-                        width: '100%',
-                        textAlign: 'left',
-                        border: 'none',
-                        borderBottom: '1px solid #eee',
-                        background: isSelected ? '#eef5ff' : '#fff',
-                        padding: 10,
-                        cursor: 'pointer',
-                      }}
+                      className={`lw-inbox-conv-btn ${isSelected ? 'lw-inbox-conv-btn--selected' : ''}`}
                     >
-                      <p style={{ margin: 0 }}><strong>{conversation.lead_name || conversation.phone}</strong></p>
-                      <small style={{ display: 'block' }}>{conversation.phone}</small>
-                      <small style={{ display: 'block' }}>Origem: {conversation.source}</small>
-                      <small style={{ display: 'block' }}>
+                      <p><strong>{conversation.lead_name || conversation.phone}</strong></p>
+                      <small>{conversation.phone}</small>
+                      <small>Origem: {conversation.source}</small>
+                      <small>
                         Última: {conversation.last_message_direction || 'sem direção'} · {formatDateTime(conversation.last_message_at)}
                       </small>
                     </button>
@@ -1530,30 +1591,32 @@ export function App() {
                 })}
               </aside>
 
-              <div style={{ border: '1px solid #eee', borderRadius: 8, padding: 12, minHeight: 300 }}>
-                {inboxDetailLoading ? <p>Carregando conversa...</p> : null}
-                {inboxDetailError ? <p style={{ color: 'crimson' }}>{inboxDetailError}</p> : null}
+              <div className="lw-inbox-detail-pane">
+                {inboxDetailLoading ? <p className="lw-text-sm-soft">Carregando conversa...</p> : null}
+                {inboxDetailError ? <ErrorState message={inboxDetailError} /> : null}
 
-                {!inboxDetailLoading && !inboxDetailError && !inboxDetail ? <p>Selecione uma conversa para ver o histórico.</p> : null}
+                {!inboxDetailLoading && !inboxDetailError && !inboxDetail ? <p className="lw-text-sm-soft">Selecione uma conversa para ver o histórico.</p> : null}
 
                 {!inboxDetailLoading && !inboxDetailError && inboxDetail ? (
                   <>
-                    <h3 style={{ marginTop: 0 }}>Conversa #{inboxDetail.conversation_id}</h3>
-                    <small style={{ display: 'block' }}><strong>Lead:</strong> {inboxDetail.lead.lead_name || 'Sem nome'}</small>
-                    <small style={{ display: 'block' }}><strong>Telefone:</strong> {inboxDetail.lead.phone}</small>
-                    <small style={{ display: 'block' }}><strong>Origem:</strong> {inboxDetail.lead.source}</small>
-                    <small style={{ display: 'block' }}><strong>Etapa:</strong> {inboxDetail.lead.current_stage || 'Sem etapa'}</small>
-                    <small style={{ display: 'block' }}><strong>Responsável:</strong> {inboxDetail.owner.owner_name || 'Sem responsável'}</small>
+                    <h3>Conversa #{inboxDetail.conversation_id}</h3>
+                    <div className="lw-inbox-detail-info">
+                      <small><strong>Lead:</strong> {inboxDetail.lead.lead_name || 'Sem nome'}</small>
+                      <small><strong>Telefone:</strong> {inboxDetail.lead.phone}</small>
+                      <small><strong>Origem:</strong> {inboxDetail.lead.source}</small>
+                      <small><strong>Etapa:</strong> {inboxDetail.lead.current_stage || 'Sem etapa'}</small>
+                      <small><strong>Responsável:</strong> {inboxDetail.owner.owner_name || 'Sem responsável'}</small>
+                    </div>
                     {canManageSource ? (
-                      <form onSubmit={(event) => void handleUpdateInboxOwner(event)} style={{ marginTop: 8, marginBottom: 8, display: 'grid', gap: 6 }}>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                          <label>
+                      <form onSubmit={(event) => void handleUpdateInboxOwner(event)} className="lw-grid-2 lw-mt-2 lw-mb-2">
+                        <div className="lw-flex-wrap-gap lw-flex-align-center-gap">
+                          <label className="lw-flex-align-center-gap lw-m-0">
                             Alterar responsável:
                             <select
                               value={inboxOwnerSelection}
                               onChange={(event) => setInboxOwnerSelection(event.target.value ? Number(event.target.value) : '')}
                               disabled={inboxOwnerUpdateLoading}
-                              style={{ marginLeft: 8 }}
+                              className="lw-select lw-max-width-280"
                             >
                               <option value="">Sem responsável</option>
                               {inboxAssignableOwnerOptions.map((owner) => (
@@ -1565,46 +1628,40 @@ export function App() {
                             {inboxOwnerUpdateLoading ? 'Atualizando...' : 'Salvar responsável'}
                           </button>
                         </div>
-                        <small style={{ color: '#555' }}>
+                        <small className="lw-text-xs-muted">
                           Motivo aplicado: "Alterado pela Inbox".
                         </small>
                         {assignableUsersError ? (
-                          <small style={{ color: '#8a5a00' }}>
+                          <small className="lw-text-xs-warning">
                             {assignableUsersError}
                           </small>
                         ) : null}
                         {!assignableUsersError && canManageSource && inboxAssignableOwnerOptions.length === 0 ? (
-                          <small style={{ color: '#8a5a00' }}>
+                          <small className="lw-text-xs-warning">
                             Nenhum usuário atribuível encontrado. Verifique usuários ativos da empresa.
                           </small>
                         ) : null}
-                        {inboxOwnerUpdateError ? <small style={{ color: 'crimson' }}>{inboxOwnerUpdateError}</small> : null}
-                        {inboxOwnerUpdateSuccess ? <small style={{ color: '#1b7f3b' }}>{inboxOwnerUpdateSuccess}</small> : null}
+                        {inboxOwnerUpdateError ? <small className="lw-text-xs-danger">{inboxOwnerUpdateError}</small> : null}
+                        {inboxOwnerUpdateSuccess ? <small className="lw-text-xs-success">{inboxOwnerUpdateSuccess}</small> : null}
                       </form>
                     ) : null}
-                    <small style={{ display: 'block', marginBottom: 10 }}>
+                    <small className="lw-inbox-detail-window">
                       <strong>Janela:</strong> {inboxDetail.service_window_open ? 'Aberta' : 'Fechada'}
                       {inboxDetail.service_window_expires_at ? ` · expira em ${formatDateTime(inboxDetail.service_window_expires_at)}` : ''}
                     </small>
 
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                    <div className="lw-flex-wrap-gap lw-mb-2">
                       <button
                         type="button"
                         onClick={() => setInboxDetailTab('messages')}
-                        style={{
-                          border: '1px solid #ddd',
-                          background: inboxDetailTab === 'messages' ? '#eef5ff' : '#fff',
-                        }}
+                        className={`lw-tab-button ${inboxDetailTab === 'messages' ? 'lw-tab-button--active' : ''}`}
                       >
                         Mensagens
                       </button>
                       <button
                         type="button"
                         onClick={() => setInboxDetailTab('audit')}
-                        style={{
-                          border: '1px solid #ddd',
-                          background: inboxDetailTab === 'audit' ? '#eef5ff' : '#fff',
-                        }}
+                        className={`lw-tab-button ${inboxDetailTab === 'audit' ? 'lw-tab-button--active' : ''}`}
                       >
                         Auditoria
                       </button>
@@ -1612,41 +1669,36 @@ export function App() {
 
                     {inboxDetailTab === 'messages' ? (
                       <>
-                        <div style={{ display: 'grid', gap: 8, maxHeight: 360, overflow: 'auto', paddingRight: 4 }}>
+                        <div className="lw-inbox-messages-list">
                           {inboxDetail.messages.map((message) => (
                             <div
                               key={message.id}
-                              style={{
-                                border: '1px solid #ddd',
-                                borderRadius: 8,
-                                padding: 8,
-                                background: message.direction === 'inbound' ? '#f4fff4' : '#f5f8ff',
-                              }}
+                              className={`lw-chat-bubble ${message.direction === 'inbound' ? 'lw-chat-bubble--inbound' : 'lw-chat-bubble--outbound'}`}
                             >
-                              <small style={{ display: 'block' }}>
+                              <small>
                                 <strong>{message.direction === 'inbound' ? 'Cliente' : 'Time'}</strong> · {formatDateTime(message.sent_at)}
                               </small>
-                              <p style={{ margin: '6px 0' }}>{message.body || 'Mensagem sem texto'}</p>
-                              <small style={{ display: 'block' }}>provider: {message.provider || 'n/d'} · id externo: {message.external_message_id || 'n/d'}</small>
+                              <p>{message.body || 'Mensagem sem texto'}</p>
+                              <small>provider: {message.provider || 'n/d'} · id externo: {message.external_message_id || 'n/d'}</small>
                             </div>
                           ))}
                         </div>
 
-                        <form onSubmit={(event) => void handleInboxSendMessage(event)} style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+                        <form onSubmit={(event) => void handleInboxSendMessage(event)} className="lw-grid-2 lw-mt-3">
                           {!inboxDetail.service_window_open ? (
-                            <small style={{ color: '#8a5a00' }}>
+                            <small className="lw-text-xs-warning">
                               Janela de atendimento fechada. O envio será habilitado após nova mensagem inbound do cliente.
                             </small>
                           ) : null}
-                          {inboxSendError ? <small style={{ color: 'crimson' }}>{inboxSendError}</small> : null}
-                          {inboxSendSuccess ? <small style={{ color: '#1b7f3b' }}>{inboxSendSuccess}</small> : null}
+                          {inboxSendError ? <small className="lw-text-xs-danger">{inboxSendError}</small> : null}
+                          {inboxSendSuccess ? <small className="lw-text-xs-success">{inboxSendSuccess}</small> : null}
                           <textarea
                             value={inboxReplyBody}
                             onChange={(event) => setInboxReplyBody(event.target.value)}
                             placeholder={inboxDetail.service_window_open ? 'Digite sua resposta...' : 'Envio indisponível com janela fechada'}
                             disabled={inboxSendLoading || !inboxDetail.service_window_open}
                             rows={3}
-                            style={{ width: '100%', padding: 8, resize: 'vertical' }}
+                            className="lw-textarea"
                           />
                           <div>
                             <button
@@ -1661,30 +1713,30 @@ export function App() {
                     ) : null}
 
                     {inboxDetailTab === 'audit' ? (
-                      <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto', paddingRight: 4 }}>
-                        {inboxEventsLoading ? <p>Carregando auditoria...</p> : null}
-                        {inboxEventsError ? <p style={{ color: 'crimson' }}>{inboxEventsError}</p> : null}
+                      <div className="lw-inbox-messages-list">
+                        {inboxEventsLoading ? <p className="lw-text-sm-soft">Carregando auditoria...</p> : null}
+                        {inboxEventsError ? <ErrorState message={inboxEventsError} /> : null}
                         {!inboxEventsLoading && !inboxEventsError && inboxEvents.length === 0 ? (
-                          <p>Nenhum evento de auditoria encontrado para esta conversa.</p>
+                          <p className="lw-text-sm-soft">Nenhum evento de auditoria encontrado para esta conversa.</p>
                         ) : null}
                         {!inboxEventsLoading && !inboxEventsError && inboxEvents.length > 0 ? (
                           inboxEvents.map((event) => (
-                            <div key={`${event.event_type}-${event.event_id}`} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 8 }}>
-                              <small style={{ display: 'block' }}>
+                            <div key={`${event.event_type}-${event.event_id}`} className="lw-audit-item">
+                              <small>
                                 <strong>{getFriendlyAuditEventType(event.event_type)}</strong> · {formatDateTime(event.occurred_at)}
                               </small>
                               {event.event_type === 'conversation_opened' ? (
-                                <p style={{ margin: '6px 0' }}>
+                                <p>
                                   Conversa aberta por {event.user_name || 'usuário não identificado'}
                                 </p>
                               ) : null}
                               {event.event_type === 'message_sent' ? (
                                 <>
-                                  <p style={{ margin: '6px 0' }}>
+                                  <p>
                                     Mensagem enviada por {event.user_name || 'usuário não identificado'}
                                   </p>
                                   {(event.metadata?.provider || event.metadata?.external_message_id) ? (
-                                    <small style={{ color: '#555' }}>
+                                    <small>
                                       provider: {event.metadata?.provider || 'n/d'} · id externo: {event.metadata?.external_message_id || 'n/d'}
                                     </small>
                                   ) : null}
@@ -1692,17 +1744,17 @@ export function App() {
                               ) : null}
                               {event.event_type === 'stage_changed' ? (
                                 <>
-                                  <p style={{ margin: '6px 0' }}>
+                                  <p>
                                     Etapa alterada por {event.user_name || 'usuário não identificado'}
                                   </p>
-                                  <small style={{ display: 'block' }}>
+                                  <small>
                                     de {event.metadata?.from_column_name || 'Sem etapa'} para {event.metadata?.to_column_name || 'Sem etapa'}
                                   </small>
-                                  <small style={{ display: 'block' }}>
+                                  <small>
                                     move_source: {event.metadata?.move_source || 'n/d'}
                                   </small>
                                   {event.metadata?.reason ? (
-                                    <small style={{ display: 'block' }}>
+                                    <small>
                                       motivo: {event.metadata.reason}
                                     </small>
                                   ) : null}
@@ -1710,14 +1762,14 @@ export function App() {
                               ) : null}
                               {(event.event_type === 'owner_assigned' || event.event_type === 'owner_changed' || event.event_type === 'owner_removed') ? (
                                 <>
-                                  <p style={{ margin: '6px 0' }}>
+                                  <p>
                                     {event.event_type === 'owner_assigned' ? 'Responsável atribuído' : event.event_type === 'owner_changed' ? 'Responsável alterado' : 'Responsável removido'} por {event.user_name || 'usuário não identificado'}
                                   </p>
-                                  <small style={{ display: 'block' }}>
+                                  <small>
                                     anterior: {event.metadata?.previous_owner_name || 'Sem responsável'} · novo: {event.metadata?.new_owner_name || 'Sem responsável'}
                                   </small>
                                   {event.metadata?.reason ? (
-                                    <small style={{ display: 'block' }}>
+                                    <small>
                                       motivo: {event.metadata.reason}
                                     </small>
                                   ) : null}
@@ -1733,11 +1785,11 @@ export function App() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+            <div className="lw-flex-align-center-gap lw-mt-3">
               <button onClick={() => changeInboxPage(inboxMeta.page - 1)} disabled={inboxMeta.page <= 1 || inboxLoading}>Anterior</button>
               <small>Página {inboxMeta.page} de {Math.max(inboxMeta.last_page, 1)}</small>
               <button onClick={() => changeInboxPage(inboxMeta.page + 1)} disabled={inboxMeta.page >= inboxMeta.last_page || inboxLoading}>Próxima</button>
-              <small style={{ marginLeft: 8 }}>Total: {inboxMeta.total}</small>
+              <small className="lw-text-xs-muted">Total: {inboxMeta.total}</small>
             </div>
           </>
         ) : null}
@@ -1746,25 +1798,25 @@ export function App() {
 
       {activeView === 'checklist' ? (
       <Section>
-        <h2 style={{ marginTop: 0 }}>Checklist do Dia</h2>
+        <h2>Checklist do Dia</h2>
         {checklistLoading ? <p>Carregando checklist...</p> : null}
-        {checklistError ? <p style={{ color: 'crimson' }}>{checklistError}</p> : null}
-        {copyFeedback ? <p style={{ color: '#1b7f3b' }}>{copyFeedback}</p> : null}
+        {checklistError ? <p className="lw-text-xs-danger">{checklistError}</p> : null}
+        {copyFeedback ? <p className="lw-text-xs-success">{copyFeedback}</p> : null}
 
         {!checklistLoading && !checklistError && checklistItems.length === 0 ? <p>Nenhuma tarefa operacional pendente no momento.</p> : null}
 
         {!checklistLoading && !checklistError && checklistItems.length > 0 ? (
-          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
+          <div className="lw-contacts-grid">
             {checklistItems.map((item) => (
-              <div key={`${item.lead_id}-${item.conversation_id}-${item.task_type}`} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 10 }}>
-                <p style={{ margin: 0 }}><strong>{item.lead_name || item.phone}</strong></p>
-                <small style={{ display: 'block' }}>Telefone: {item.phone}</small>
-                <small style={{ display: 'block' }}>Source: {item.source}</small>
-                <small style={{ display: 'block' }}>Etapa atual: {item.current_stage || 'Sem etapa'}</small>
-                <small style={{ display: 'block' }}>Tarefa: {item.task_label}</small>
-                <small style={{ display: 'block' }}>Horas desde última mensagem: {item.hours_since_last_message}</small>
-                <small style={{ display: 'block', marginBottom: 8 }}>Prioridade: <strong>{item.priority}</strong></small>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div key={`${item.lead_id}-${item.conversation_id}-${item.task_type}`} className="lw-contact-card">
+                <p><strong>{item.lead_name || item.phone}</strong></p>
+                <small>Telefone: {item.phone}</small>
+                <small>Source: {item.source}</small>
+                <small>Etapa atual: {item.current_stage || 'Sem etapa'}</small>
+                <small>Tarefa: {item.task_label}</small>
+                <small>Horas desde última mensagem: {item.hours_since_last_message}</small>
+                <small className="lw-mb-2">Prioridade: <strong>{item.priority}</strong></small>
+                <div className="lw-flex-wrap-gap">
                   <button onClick={() => void copyText(item.phone, 'Telefone copiado!')}>Copiar telefone</button>
                   <button onClick={() => void copyText(CHECKLIST_DEFAULT_MESSAGE, 'Mensagem padrão copiada!')}>Copiar mensagem padrão</button>
                 </div>
@@ -1778,26 +1830,26 @@ export function App() {
       {activeView === 'kanban' ? (
       <Section className="lw-kanban-section">
         <div className="lw-kanban-header">
-          <h2 style={{ marginTop: 0 }}>Kanban</h2>
+          <h2>Kanban</h2>
           {selectedPipelineId ? <Badge variant="info">Pipeline #{selectedPipelineId}</Badge> : null}
         </div>
-        {!canMoveStage ? <p style={{ marginTop: 0 }}>Você está em perfil <strong>SDR</strong>: pode visualizar o Kanban, mas não pode mover cards.</p> : null}
+        {!canMoveStage ? <p className="lw-m-0 lw-mb-4">Você está em perfil <strong>SDR</strong>: pode visualizar o Kanban, mas não pode mover cards.</p> : null}
 
         {pipelines.length === 0 ? <p>Nenhum pipeline encontrado para esta empresa. Rode o bootstrap demo ou configure um pipeline.</p> : null}
 
         {pipelines.length > 1 ? (
-          <label style={{ display: 'block', marginBottom: 12 }}>
+          <label className="lw-form-label lw-mb-3">
             Pipeline:
-            <select className="lw-select" style={{ marginLeft: 8, maxWidth: 280 }} value={selectedPipelineId ?? ''} onChange={(e) => setSelectedPipelineId(Number(e.target.value))}>
+            <select className="lw-select lw-max-width-280 lw-mt-1" value={selectedPipelineId ?? ''} onChange={(e) => setSelectedPipelineId(Number(e.target.value))}>
               {pipelines.map((pipeline) => <option key={pipeline.id} value={pipeline.id}>{pipeline.name}</option>)}
             </select>
           </label>
         ) : null}
 
-        {pipelines.length === 1 && selectedPipelineId ? <p style={{ marginTop: 0 }}><strong>Pipeline:</strong> {pipelines[0].name}</p> : null}
+        {pipelines.length === 1 && selectedPipelineId ? <p className="lw-m-0 lw-mb-3"><strong>Pipeline:</strong> {pipelines[0].name}</p> : null}
 
         {kanbanLoading ? <p>Carregando Kanban...</p> : null}
-        {kanbanError ? <p style={{ color: 'crimson' }}>{kanbanError}</p> : null}
+        {kanbanError ? <p className="lw-text-xs-danger">{kanbanError}</p> : null}
         {!kanbanLoading && !kanbanError && kanban && kanban.columns.length === 0 ? <p>Este pipeline ainda não possui colunas.</p> : null}
 
         {!kanbanLoading && !kanbanError && kanban && kanban.columns.length > 0 ? (
@@ -1811,11 +1863,11 @@ export function App() {
                 className={`lw-kanban-column ${dragOverColumnId === column.id ? 'lw-kanban-column--drag-over' : ''}`}
               >
                 <div className="lw-kanban-column-header">
-                  <h3 style={{ marginTop: 0, marginBottom: 8 }}>{column.name}</h3>
+                  <h3>{column.name}</h3>
                   <Badge variant="neutral">{column.cards.length}</Badge>
                 </div>
-                <small style={{ display: 'block', marginBottom: 10 }}>Etapa atual: {column.name}</small>
-                {column.rule ? <small style={{ display: 'block', marginBottom: 10, color: '#64748b' }}>Regra: {column.rule}</small> : null}
+                <small className="lw-display-block lw-mb-2">Etapa atual: {column.name}</small>
+                {column.rule ? <small className="lw-display-block lw-text-xs-muted lw-mb-2">Regra: {column.rule}</small> : null}
 
                 {column.cards.length === 0 ? <EmptyState title="Sem leads nesta etapa." /> : null}
 
@@ -1830,40 +1882,43 @@ export function App() {
                       onMouseDown={() => { if (canMoveStage) setPressedCardId(card.lead_id); }}
                       onMouseUp={() => setPressedCardId(null)}
                       onMouseLeave={() => setPressedCardId(null)}
-                      className={`lw-kanban-card ${draggingCard?.leadId === card.lead_id || pressedCardId === card.lead_id ? 'lw-kanban-card--active' : ''}`}
-                      style={{
-                        cursor: canMoveStage
-                          ? (draggingCard?.leadId === card.lead_id || pressedCardId === card.lead_id ? 'grabbing' : 'grab')
-                          : 'default',
-                      }}
+                      className={`lw-kanban-card ${draggingCard?.leadId === card.lead_id || pressedCardId === card.lead_id ? 'lw-kanban-card--active' : ''} ${!canMoveStage ? 'lw-kanban-card--static' : ''}`}
                     >
-                      <p style={{ margin: 0 }}><strong>{card.name || card.phone}</strong></p>
-                      <small style={{ display: 'block' }}>Telefone: {card.phone}</small>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, marginBottom: 6 }}>
+                      <p><strong>{card.name || card.phone}</strong></p>
+                      <small>{card.phone}</small>
+                      <div className="lw-flex-wrap-gap lw-mt-2 lw-mb-2">
                         <Badge variant="info">{card.source}</Badge>
-                        <Badge variant={card.classification === 'lead_novo' ? 'success' : 'warning'}>{card.classification}</Badge>
+                        <Badge variant={card.classification === 'lead_novo' ? 'success' : 'warning'}>{card.classification === 'lead_novo' ? 'Novo' : 'Recomprado'}</Badge>
+                        {card.last_message_at && (Date.now() - new Date(card.last_message_at).getTime()) > 24 * 60 * 60 * 1000 ? (
+                          <Badge variant="danger">Inativo +24h</Badge>
+                        ) : null}
                       </div>
-                      <small style={{ display: 'block' }}>Última mensagem: {card.last_message_at || 'Sem registro'}</small>
-                      <small style={{ display: 'block' }}>Responsável: n/d</small>
-                      <small style={{ display: 'block', marginBottom: 8 }}>Etapa atual: {column.name}</small>
-                      {canMoveStage ? <small style={{ display: 'block', marginBottom: 8, color: '#555' }}>Arrastar para mover</small> : null}
+                      
+                      <div className="lw-kanban-card-details">
+                        <span>💬 Última: {card.last_message_at ? formatDateTime(card.last_message_at) : 'Sem registro'}</span>
+                        <span>👤 Responsável: {card.owner_name || 'Sem responsável'}</span>
+                      </div>
 
-                      <button onClick={() => handleToggleHistory(card.lead_id)} disabled={historyLoadingLeadId === card.lead_id}>
-                        {history ? 'Ocultar histórico' : 'Ver histórico'}
+                      <button
+                        onClick={() => handleToggleHistory(card.lead_id)}
+                        disabled={historyLoadingLeadId === card.lead_id}
+                        className="lw-button-link"
+                      >
+                        {history ? 'Ocultar histórico' : '🕒 Ver histórico de etapas'}
                       </button>
 
                       {historyLoadingLeadId === card.lead_id ? <p>Carregando histórico...</p> : null}
 
                       {history ? (
-                        <div style={{ marginTop: 8 }}>
+                        <div className="lw-mt-2">
                           {history.length === 0 ? <small>Sem histórico de etapa.</small> : null}
                           {history.slice(0, 5).map((item) => (
-                            <div key={item.id} style={{ borderTop: '1px solid #eee', marginTop: 6, paddingTop: 6 }}>
-                              <small style={{ display: 'block' }}>
+                            <div key={item.id} className="lw-history-item">
+                              <small>
                                 {item.from_column_name || 'Sem etapa'} → {item.to_column_name || columnNameById[item.to_column_id] || 'Etapa'}
                               </small>
-                              <small style={{ display: 'block' }}>Quando: {item.moved_at}</small>
-                              {item.reason ? <small style={{ display: 'block' }}>Motivo: {item.reason}</small> : null}
+                              <small>Quando: {item.moved_at}</small>
+                              {item.reason ? <small>Motivo: {item.reason}</small> : null}
                             </div>
                           ))}
                         </div>
@@ -1880,12 +1935,12 @@ export function App() {
 
       {activeView === 'contacts' ? (
       <Section>
-        <h2 style={{ marginTop: 0 }}>Contatos</h2>
+        <h2>Contatos</h2>
 
-        <form onSubmit={(event) => void applyContactsFilters(event)} style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <input value={contactSearchInput} onChange={(event) => setContactSearchInput(event.target.value)} placeholder="Buscar por nome ou telefone" style={{ minWidth: 260 }} />
-            <select value={contactSourceFilter} onChange={(event) => setContactSourceFilter(event.target.value)}>
+        <form onSubmit={(event) => void applyContactsFilters(event)} className="lw-grid-2 lw-mb-3">
+          <div className="lw-flex-wrap-gap">
+            <input value={contactSearchInput} onChange={(event) => setContactSearchInput(event.target.value)} placeholder="Buscar por nome ou telefone" className="lw-input lw-min-width-260" />
+            <select className="lw-select" value={contactSourceFilter} onChange={(event) => setContactSourceFilter(event.target.value)}>
               <option value="">Todas as origens</option>
               <option value="instagram">instagram</option>
               <option value="google">google</option>
@@ -1893,12 +1948,12 @@ export function App() {
               <option value="indicacao">indicacao</option>
               <option value="desconhecido">desconhecido</option>
             </select>
-            <select value={contactClassificationFilter} onChange={(event) => setContactClassificationFilter(event.target.value as '' | 'lead_novo' | 'lead_repetido')}>
+            <select className="lw-select" value={contactClassificationFilter} onChange={(event) => setContactClassificationFilter(event.target.value as '' | 'lead_novo' | 'lead_repetido')}>
               <option value="">Todas as classificações</option>
               <option value="lead_novo">lead_novo</option>
               <option value="lead_repetido">lead_repetido</option>
             </select>
-            <select value={contactStageFilter} onChange={(event) => setContactStageFilter(event.target.value ? Number(event.target.value) : '')}>
+            <select className="lw-select" value={contactStageFilter} onChange={(event) => setContactStageFilter(event.target.value ? Number(event.target.value) : '')}>
               <option value="">Todas as etapas</option>
               {(kanban?.columns ?? []).map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
             </select>
@@ -1912,34 +1967,34 @@ export function App() {
         </form>
 
         {contactsLoading ? <p>Carregando contatos...</p> : null}
-        {contactsError ? <p style={{ color: 'crimson' }}>{contactsError}</p> : null}
-        {contactsExportError ? <p style={{ color: 'crimson' }}>{contactsExportError}</p> : null}
-        {contactsExportSuccess ? <p style={{ color: '#1b7f3b' }}>{contactsExportSuccess}</p> : null}
+        {contactsError ? <p className="lw-text-xs-danger">{contactsError}</p> : null}
+        {contactsExportError ? <p className="lw-text-xs-danger">{contactsExportError}</p> : null}
+        {contactsExportSuccess ? <p className="lw-text-xs-success">{contactsExportSuccess}</p> : null}
 
         {!contactsLoading && !contactsError && contacts.length === 0 ? <p>Nenhum contato encontrado com os filtros atuais.</p> : null}
 
         {!contactsLoading && !contactsError && contacts.length > 0 ? (
           <>
-            <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
+            <div className="lw-contacts-grid">
               {contacts.map((contact) => (
-                <div key={contact.lead_id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 10 }}>
-                  <p style={{ margin: 0 }}><strong>{contact.name || contact.phone}</strong></p>
-                  <small style={{ display: 'block' }}>Telefone: {contact.phone}</small>
-                  <small style={{ display: 'block' }}>Origem: {contact.source}</small>
-                  <small style={{ display: 'block' }}>Classificação: {contact.classification}</small>
-                  <small style={{ display: 'block' }}>Etapa atual: {contact.current_stage || 'Sem etapa'}</small>
-                  <small style={{ display: 'block' }}>Última mensagem: {formatDateTime(contact.last_message_at)}</small>
-                  <small style={{ display: 'block', marginBottom: 8 }}>Criado em: {formatDateTime(contact.created_at)}</small>
+                <div key={contact.lead_id} className="lw-contact-card">
+                  <p><strong>{contact.name || contact.phone}</strong></p>
+                  <small>Telefone: {contact.phone}</small>
+                  <small>Origem: {contact.source}</small>
+                  <small>Classificação: {contact.classification}</small>
+                  <small>Etapa atual: {contact.current_stage || 'Sem etapa'}</small>
+                  <small>Última mensagem: {formatDateTime(contact.last_message_at)}</small>
+                  <small className="lw-mb-2">Criado em: {formatDateTime(contact.created_at)}</small>
                   <button onClick={() => void copyText(contact.phone, 'Telefone copiado!')}>Copiar telefone</button>
                 </div>
               ))}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+            <div className="lw-flex-align-center-gap lw-mt-3">
               <button onClick={() => changeContactsPage(contactsMeta.page - 1)} disabled={contactsMeta.page <= 1 || contactsLoading}>Anterior</button>
               <small>Página {contactsMeta.page} de {Math.max(contactsMeta.last_page, 1)}</small>
               <button onClick={() => changeContactsPage(contactsMeta.page + 1)} disabled={contactsMeta.page >= contactsMeta.last_page || contactsLoading}>Próxima</button>
-              <small style={{ marginLeft: 8 }}>Total: {contactsMeta.total}</small>
+              <small className="lw-text-xs-muted">Total: {contactsMeta.total}</small>
             </div>
           </>
         ) : null}
@@ -1962,10 +2017,10 @@ export function App() {
             <h2>Origem Pendente (Desconhecido)</h2>
             {unknownLeads.length === 0 ? <p>Nenhum lead pendente de classificação.</p> : null}
             {unknownLeads.map((lead) => (
-              <div key={lead.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 10 }}>
-                <p style={{ margin: 0 }}><strong>{lead.name || 'Sem nome'}</strong> - {lead.phone_e164}</p>
+              <div key={lead.id} className="lw-pending-classify-card">
+                <p><strong>{lead.name || 'Sem nome'}</strong> - {lead.phone_e164}</p>
                 <small>Última mensagem: {lead.last_inbound_at || lead.created_at}</small>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                <div className="lw-flex-wrap-gap lw-mt-2">
                   {QUICK_SOURCES.map((source) => (
                     <button key={source} onClick={() => quickClassify(lead.id, source)} disabled={loading}>{source}</button>
                   ))}
@@ -1978,10 +2033,10 @@ export function App() {
             <h2>Leads Recentes (Reclassificar)</h2>
             {recentLeads.length === 0 ? <p>Nenhum lead recente.</p> : null}
             {recentLeads.map((lead) => (
-              <div key={lead.id} style={{ border: '1px solid #ddd', borderRadius: 8, padding: 12, marginBottom: 10 }}>
-                <p style={{ margin: 0 }}><strong>{lead.name || 'Sem nome'}</strong> - {lead.phone_e164}</p>
+              <div key={lead.id} className="lw-pending-classify-card">
+                <p><strong>{lead.name || 'Sem nome'}</strong> - {lead.phone_e164}</p>
                 <small>Origem atual: <strong>{lead.source}</strong> ({lead.source_method})</small>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                <div className="lw-flex-wrap-gap lw-mt-2">
                   {QUICK_SOURCES.map((source) => (
                     <button key={source} onClick={() => quickClassify(lead.id, source)} disabled={loading || lead.source === source}>
                       Trocar para {source}

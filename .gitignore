@@ -17,3 +17,18 @@ backend/bootstrap/cache/*.php
 
 # Local env
 backend/.env
+
+# Local AI/editor tooling
+.agent/
+.antigravitycli/
+.claude/
+.codebuddy/
+.continue/
+.cursor/
+.gemini/
+.kiro/
+.opencode/
+.qoder/
+.roo/
+.trae/
+.windsurf/

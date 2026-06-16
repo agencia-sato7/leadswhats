@@ -67,9 +67,17 @@ class PipelineKanbanService
         $leadIds = $latestStages->pluck("lead_id")->unique()->values()->all();
 
         $leads = Lead::query()
-            ->where("company_id", $companyId)
-            ->whereIn("id", $leadIds)
-            ->get(["id", "name", "phone_e164", "source", "is_repeat_lead"]);
+            ->where("leads.company_id", $companyId)
+            ->whereIn("leads.id", $leadIds)
+            ->leftJoin("users", "users.id", "=", "leads.owner_user_id")
+            ->get([
+                "leads.id",
+                "leads.name",
+                "leads.phone_e164",
+                "leads.source",
+                "leads.is_repeat_lead",
+                "users.name as owner_name"
+            ]);
 
         $lastMessageAtByLead = Conversation::query()
             ->where("company_id", $companyId)
@@ -101,6 +109,7 @@ class PipelineKanbanService
                     "source" => $lead->source,
                     "classification" => $lead->is_repeat_lead ? "lead_repetido" : "lead_novo",
                     "last_message_at" => $lastMessageAtByLead[$lead->id] ?? null,
+                    "owner_name" => $lead->owner_name,
                 ];
             }
 

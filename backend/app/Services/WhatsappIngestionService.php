@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\Message;
+use App\Services\Domain\AiKanbanMovementService;
 use App\Services\Domain\ConversationResolverService;
 use App\Services\Domain\FirstResponseCalculatorService;
 use App\Services\Domain\KanbanInitialPlacementService;
@@ -22,6 +23,7 @@ class WhatsappIngestionService
         private readonly RescueDetectorService $rescueDetector,
         private readonly LeadSourceService $leadSourceService,
         private readonly KanbanInitialPlacementService $kanbanInitialPlacementService,
+        private readonly AiKanbanMovementService $aiKanbanMovementService,
     ) {
     }
 
@@ -129,6 +131,8 @@ class WhatsappIngestionService
         $conversation->save();
 
         $lead->save();
+
+        $this->aiKanbanMovementService->evaluateAndMove($company->id, $lead->id);
 
         return [
             "lead_id" => $lead->id,

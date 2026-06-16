@@ -1,98 +1,126 @@
-# LEADSWHATS MVP (sem IA)
+# LEADSWHATS
 
-Stack:
-- Backend: Laravel (container `laravelsail/php84-composer`)
-- Frontend: React + TypeScript (Vite)
-- DB: PostgreSQL 16
-- Cache/Queue: Redis 7
+LEADSWHATS e um SaaS B2B multiempresa para monitoramento passivo de WhatsApp, Revenue Intelligence, Auto-CRM e dashboards comerciais.
 
-## Subir ambiente local
+Stack atual:
+- Backend: Laravel
+- Frontend: React + TypeScript + Vite
+- Infra local: Docker Compose
+- Cache: Redis
+- Banco disponivel no Compose: PostgreSQL 16
+
+## Requisitos
+
+Antes de subir o projeto localmente, garanta:
+- Docker e Docker Compose instalados
+- Porta `8000` livre para a API
+- Porta `5173` livre para o frontend
+- Porta `5433` livre para o PostgreSQL local do Compose
+- Porta `6380` livre para o Redis local do Compose
+
+## Subindo o projeto local
+
+1. Clone o repositorio.
+2. Entre na pasta do projeto.
+3. Suba os containers:
 
 ```bash
-# opção direta
-docker compose up -d
-
-# opção via atalho
 make up
 ```
 
-Na primeira subida:
-- o backend cria automaticamente o projeto Laravel em `./backend`
-- o frontend cria automaticamente o Vite React TS em `./frontend`
-
-## Acessos
-
-- API/Laravel: http://localhost:8000
-- API Docs (Swagger): http://localhost:8000/api/docs
-- Frontend React: http://localhost:5173
-- PostgreSQL: `localhost:5433` (`leadswhats/leadswhats`)
-- Redis: `localhost:6380`
-
-## Setup inicial do MVP local
+Alternativa sem `make`:
 
 ```bash
-docker compose exec backend php artisan migrate
+docker compose up -d
+```
+
+Na primeira subida, o ambiente instala dependencias do frontend e sobe os servicos definidos no `docker-compose.yml`.
+
+## Endpoints locais
+
+- API Laravel: `http://localhost:8000`
+- Swagger / OpenAPI: `http://localhost:8000/api/docs`
+- Frontend: `http://localhost:5173`
+- PostgreSQL do Compose: `localhost:5433`
+- Redis do Compose: `localhost:6380`
+
+## Setup inicial apos subir os containers
+
+Gere a chave da aplicacao, rode migrations e carregue os dados demo:
+
+```bash
+make key
+make migrate
 docker compose exec backend php artisan leadswhats:demo-bootstrap
 docker compose exec backend php artisan leadswhats:doctor
 ```
 
-Opcional (validação de build frontend):
+## Usuarios de demo
 
-```bash
-docker compose exec frontend sh -lc 'cd /app && npm run build'
-```
+- `platform@leadswhats.local` / `12345678`
+- `admin@leadswhats.local` / `12345678`
+- `gestor@empresa.local` / `12345678`
+- `sdr@empresa.local` / `12345678`
 
-## Reset do ambiente local
+Use essas credenciais apenas em ambiente local.
 
-```bash
-docker compose exec backend php artisan migrate:fresh
-docker compose exec backend php artisan leadswhats:demo-bootstrap
-docker compose exec backend php artisan leadswhats:doctor
-```
-
-## Comandos úteis
+## Comandos uteis
 
 ```bash
 make status
 make logs
 make backend-shell
 make frontend-shell
-make key
-make migrate
 make down
 ```
 
-## Usuários demo (bootstrap)
+Reset completo do banco local:
 
-- `platform@leadswhats.local` / `12345678` (`platform_admin`)
-- `admin@leadswhats.local` / `12345678` (`admin`)
-- `gestor@empresa.local` / `12345678` (`gestor`)
-- `sdr@empresa.local` / `12345678` (`sdr`)
+```bash
+docker compose exec backend php artisan migrate:fresh --seed
+docker compose exec backend php artisan leadswhats:demo-bootstrap
+```
 
-Notas de papel:
-- `platform_admin` é papel de administração SaaS da plataforma LEADSWHATS (global).
-- `admin` continua sendo administrador da empresa cliente (tenant).
+## Testes e validacoes
 
-Aviso de segurança:
-- Essas credenciais são apenas para ambiente local/demo.
-- Não use essas credenciais em produção.
-- Em qualquer ambiente real, altere imediatamente usuários e senhas padrão.
+Backend:
 
-## Webhook seguro (X-Webhook-Token)
+```bash
+docker compose exec backend php artisan test
+```
 
-Contrato de ingestão:
-- endpoint: `POST /api/v1/webhooks/whatsapp`
-- payload mantém `company_slug`
-- autenticação por header `X-Webhook-Token`
-- idempotência por `company_slug + provider + external_message_id`
+Build do frontend:
 
-Como obter/conferir token demo/local:
-- O comando configura `company_business_settings`, pipeline padrão e colunas padrão da empresa demo.
-- O `webhook_token` é gerado/configurado para uso local/demo quando estiver vazio (formato `demo_<random>`).
-- Após rodar o comando, a saída mostra apenas o sufixo mascarado do token (ex.: `****abcd`) para conferência rápida.
-- Se precisar confirmar o token completo localmente, consulte `company_business_settings.webhook_token` da empresa `empresa-demo` no banco.
+```bash
+docker compose exec frontend sh -lc 'cd /app && npm run build'
+```
 
-Exemplo inbound:
+Validacao do OpenAPI:
+
+```bash
+jq empty backend/storage/api-docs/openapi.json
+```
+
+## Observacoes importantes
+
+- O projeto foi pensado para operacao multi-tenant por `company_id`.
+- O monitoramento de WhatsApp e passivo: o sistema nao deve enviar mensagens comerciais para leads.
+- O perfil `sdr` nao pode acessar dados de outros vendedores nem alterar configuracoes estrategicas.
+- O `docker-compose.yml` atual expoe PostgreSQL e Redis para desenvolvimento local.
+- O backend local hoje sobe com a configuracao definida no proprio `docker-compose.yml`. Se o time decidir mudar a conexao padrao do banco, atualize esse arquivo e as variaveis de ambiente em conjunto.
+
+## Webhook de ingestao
+
+Endpoint:
+
+```text
+POST /api/v1/webhooks/whatsapp
+```
+
+Autenticacao:
+- Header `X-Webhook-Token`
+
+Exemplo:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/webhooks/whatsapp \
@@ -105,94 +133,20 @@ curl -X POST http://localhost:8000/api/v1/webhooks/whatsapp \
     "provider": "whatsapp-cloud",
     "external_message_id": "wamid.1234567890",
     "channel": "text",
-    "body": "Olá, vi vocês no Instagram",
+    "body": "Ola, vi voces no Instagram",
     "source": "instagram",
     "sent_at": "2026-05-06T10:00:00-03:00"
   }'
 ```
 
-Substitua `<TOKEN_DEMO_GERADO>` pelo token configurado para a empresa demo.
+## Troubleshooting rapido
 
-Exemplo outbound (ingestão passiva de evento enviado):
+- Se o frontend abrir sem dados, rode `docker compose exec backend php artisan leadswhats:demo-bootstrap`.
+- Se a API nao responder, confira `make status` e `make logs`.
+- Se o webhook retornar `401`, valide o `X-Webhook-Token` da empresa demo.
+- Se algum container falhar na primeira subida por download de imagem ou dependencias, rode `make up` novamente.
 
-```bash
-curl -X POST http://localhost:8000/api/v1/webhooks/whatsapp \
-  -H 'Content-Type: application/json' \
-  -H 'X-Webhook-Token: <TOKEN_DEMO_GERADO>' \
-  -d '{
-    "company_slug": "empresa-demo",
-    "phone": "(11) 98888-1111",
-    "direction": "outbound",
-    "provider": "whatsapp-cloud",
-    "external_message_id": "wamid.outbound.1234567890",
-    "channel": "text",
-    "body": "Olá! Recebemos sua mensagem.",
-    "source": "instagram",
-    "sent_at": "2026-05-06T10:05:00-03:00"
-  }'
-```
+## Documentacao adicional
 
-Idempotência:
-- Reenviar o mesmo `external_message_id` para a mesma empresa/provedor retorna sucesso idempotente.
-- O campo `data.duplicated` vem `true` em replay duplicado.
-
-## Fluxo de demo do MVP
-
-Roteiro detalhado: `docs/MVP_DEMO.md`.
-
-Resumo:
-1. Login como `gestor`.
-2. Disparar webhook inbound para criar lead/conversa.
-3. Ver lead no Kanban.
-4. Ver conversa na Inbox.
-5. Atribuir responsável.
-6. Responder na Inbox (provider fake/local).
-7. Abrir aba Auditoria.
-8. Ver checklist/riscos.
-9. Mover card no Kanban.
-10. Ver contatos e exportar CSV.
-
-## Limitações conscientes do MVP
-
-- Sem IA.
-- Provider WhatsApp fake/local por padrão.
-- Envio real WhatsApp depende de provider real futuro.
-- Templates WhatsApp não implementados.
-- Sem transcrição automática de áudio.
-- Sem relatórios PDF automáticos.
-
-## Comandos de validação
-
-```bash
-docker compose exec backend php artisan test
-jq empty backend/storage/api-docs/openapi.json
-docker compose exec frontend sh -lc 'cd /app && npm run build'
-docker compose exec backend php artisan leadswhats:doctor
-```
-
-## Troubleshooting
-
-- Frontend sem dados:
-  rode `docker compose exec backend php artisan leadswhats:demo-bootstrap`.
-- Banco sem seed/bootstrap:
-  sintoma: telas sem dados e base sem empresas/usuários/settings.
-  ação: rode `docker compose exec backend php artisan migrate` e depois `docker compose exec backend php artisan leadswhats:demo-bootstrap`.
-- Nenhum pipeline disponível:
-  sintoma: Kanban exibe ausência de pipeline.
-  ação: rode `docker compose exec backend php artisan leadswhats:demo-bootstrap` e confirme pipeline default e colunas para a empresa.
-- `401` no webhook:
-  confira `X-Webhook-Token` da empresa em `company_business_settings.webhook_token`.
-- Token webhook inválido:
-  sintoma: `POST /api/v1/webhooks/whatsapp` retorna `401`.
-  ação: confirme o header `X-Webhook-Token`, use `<TOKEN_DEMO_GERADO>` e valide o token configurado em `company_business_settings`.
-- Provider fake em produção:
-  `leadswhats:doctor` deve falhar com `WHATSAPP_PROVIDER_POLICY`.
-- Sessão expirada:
-  faça login novamente.
-- Backend/API fora do ar:
-  sintoma: frontend mostra erro de conexão com API.
-  ação: execute `docker compose ps`, verifique `docker compose logs backend` e suba serviços com `docker compose up -d`.
-
-## Observação final
-
-Se algum container não subir na primeira vez por download de imagem/dependências, rode `make up` novamente.
+- Demo do MVP: [docs/MVP_DEMO.md](docs/MVP_DEMO.md)
+- Integracao WhatsApp Cloud: [docs/WHATSAPP_META_CLOUD.md](docs/WHATSAPP_META_CLOUD.md)

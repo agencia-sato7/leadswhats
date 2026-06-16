@@ -325,4 +325,147 @@ class DashboardSummaryTest extends TestCase
 
         Carbon::setTestNow();
     }
+
+    public function test_dashboard_summary_calculates_effectiveness_and_funnel_by_source(): void
+    {
+        Carbon::setTestNow("2026-05-10 12:00:00");
+
+        $company = Company::create([
+            "name" => "Company S",
+            "slug" => "company-s",
+            "timezone" => "America/Sao_Paulo",
+        ]);
+
+        $user = User::create([
+            "company_id" => $company->id,
+            "name" => "Gestor S",
+            "email" => "gestor.s@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "gestor",
+            "active" => true,
+        ]);
+
+        // Pipeline e colunas
+        $pipeline = \App\Models\Pipeline::create([
+            "company_id" => $company->id,
+            "name" => "Vendas",
+            "is_default" => true,
+        ]);
+
+        $column1 = \App\Models\KanbanColumn::create([
+            "company_id" => $company->id,
+            "pipeline_id" => $pipeline->id,
+            "name" => "Novo Lead",
+            "position" => 1,
+        ]);
+
+        $column2 = \App\Models\KanbanColumn::create([
+            "company_id" => $company->id,
+            "pipeline_id" => $pipeline->id,
+            "name" => "Qualificado",
+            "position" => 2,
+        ]);
+
+        // Lead 1: Sucesso (Inbound -> Outbound -> Inbound)
+        $lead1 = Lead::create([
+            "company_id" => $company->id,
+            "name" => "Lead 1",
+            "phone_e164" => "+5511999990001",
+            "source" => "instagram",
+        ]);
+
+        $conv1 = Conversation::create([
+            "company_id" => $company->id,
+            "lead_id" => $lead1->id,
+            "status" => "active",
+            "started_at" => Carbon::parse("2026-05-10 09:00:00"),
+        ]);
+
+        Message::create([
+            "company_id" => $company->id,
+            "lead_id" => $lead1->id,
+            "conversation_id" => $conv1->id,
+            "direction" => "inbound",
+            "sent_at" => Carbon::parse("2026-05-10 09:00:00"),
+        ]);
+
+        Message::create([
+            "company_id" => $company->id,
+            "lead_id" => $lead1->id,
+            "conversation_id" => $conv1->id,
+            "direction" => "outbound",
+            "sent_at" => Carbon::parse("2026-05-10 09:05:00"),
+        ]);
+
+        Message::create([
+            "company_id" => $company->id,
+            "lead_id" => $lead1->id,
+            "conversation_id" => $conv1->id,
+            "direction" => "inbound",
+            "sent_at" => Carbon::parse("2026-05-10 09:10:00"),
+        ]);
+
+        // Registrar estágio para Lead 1
+        \App\Models\LeadStageHistory::create([
+            "company_id" => $company->id,
+            "lead_id" => $lead1->id,
+            "to_column_id" => $column2->id,
+            "moved_at" => Carbon::parse("2026-05-10 09:15:00"),
+        ]);
+
+        // Lead 2: Perdido (Outbound > 24h sem resposta)
+        $lead2 = Lead::create([
+            "company_id" => $company->id,
+            "name" => "Lead 2",
+            "phone_e164" => "+5511999990002",
+            "source" => "google",
+        ]);
+
+        $conv2 = Conversation::create([
+            "company_id" => $company->id,
+            "lead_id" => $lead2->id,
+            "status" => "active",
+            "started_at" => Carbon::parse("2026-05-08 09:00:00"),
+        ]);
+
+        Message::create([
+            "company_id" => $company->id,
+            "lead_id" => $lead2->id,
+            "conversation_id" => $conv2->id,
+            "direction" => "outbound",
+            "sent_at" => Carbon::parse("2026-05-08 09:00:00"),
+        ]);
+
+        // Registrar estágio para Lead 2
+        \App\Models\LeadStageHistory::create([
+            "company_id" => $company->id,
+            "lead_id" => $lead2->id,
+            "to_column_id" => $column1->id,
+            "moved_at" => Carbon::parse("2026-05-08 09:00:00"),
+        ]);
+
+        $token = $this->postJson("/api/v1/auth/login", [
+            "email" => $user->email,
+            "password" => "12345678",
+        ])->json("token");
+
+        $response = $this->withHeaders([
+            "Authorization" => "Bearer " . $token,
+        ])->getJson("/api/v1/dashboard/summary");
+
+        $response->assertOk()
+            ->assertJsonPath("metrics.successful_conversations_today", 1)
+            ->assertJsonPath("metrics.lost_conversations_today", 1)
+            ->assertJsonPath("metrics.effectiveness_percentage", 50)
+            ->assertJsonStructure([
+                "funnel_by_source" => [
+                    "*" => ["source", "stage_name", "count"]
+                ]
+            ]);
+
+        $funnelData = $response->json("funnel_by_source");
+        $this->assertCount(2, $funnelData);
+
+        Carbon::setTestNow();
+    }
 }
