@@ -33,11 +33,29 @@ class EnsureWhatsAppConnected
             ->where('company_id', $user->company_id)
             ->first();
 
-        if (!$integration || $integration->status !== CompanyWhatsAppIntegrationService::STATUS_CONFIGURED) {
+        if (!$integration) {
             return response()->json([
                 'message' => 'WhatsApp desconectado. Ative a integração com o WhatsApp para continuar.',
                 'error_code' => 'whatsapp_disconnected'
             ], 403);
+        }
+
+        // Check based on integration type
+        if ($integration->integration_type === CompanyWhatsAppIntegrationService::INTEGRATION_TYPE_BAILEYS_QR) {
+            if ($integration->session_status !== CompanyWhatsAppIntegrationService::SESSION_STATUS_CONNECTED) {
+                return response()->json([
+                    'message' => 'WhatsApp desconectado. Escaneie o QR code para conectar.',
+                    'error_code' => 'whatsapp_disconnected'
+                ], 403);
+            }
+        } else {
+            // Meta Cloud
+            if ($integration->status !== CompanyWhatsAppIntegrationService::STATUS_CONFIGURED) {
+                return response()->json([
+                    'message' => 'WhatsApp desconectado. Ative a integração com o WhatsApp para continuar.',
+                    'error_code' => 'whatsapp_disconnected'
+                ], 403);
+            }
         }
 
         return $next($request);

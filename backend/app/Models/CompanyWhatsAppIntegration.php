@@ -15,12 +15,16 @@ class CompanyWhatsAppIntegration extends Model
     protected $fillable = [
         "company_id",
         "provider",
+        "integration_type",
         "status",
+        "session_status",
         "phone_number",
         "phone_number_id",
         "business_account_id",
         "access_token_encrypted",
         "webhook_verify_token",
+        "qr_code_base64",
+        "baileys_phone",
         "connected_at",
         "last_error",
     ];

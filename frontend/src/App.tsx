@@ -23,6 +23,9 @@ import {
   sendInboxMessage,
   updateWhatsAppSettings,
   updateLeadOwner,
+  startQrSession,
+  getQrStatus,
+  logoutQrSession,
 } from './api';
 import { AppShell, PageHeader, Sidebar, Topbar } from './components/layout';
 import {
@@ -181,6 +184,9 @@ export function App() {
   const [whatsAppSaving, setWhatsAppSaving] = useState(false);
   const [whatsAppError, setWhatsAppError] = useState<string | null>(null);
   const [whatsAppSuccess, setWhatsAppSuccess] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState<string | null>(null);
+  const [qrPolling, setQrPolling] = useState<ReturnType<typeof setInterval> | null>(null);
   const [whatsAppForm, setWhatsAppForm] = useState<WhatsAppSettingsUpdateRequest>({
     provider: 'meta_cloud',
     phone_number: '',
@@ -496,6 +502,47 @@ export function App() {
     if (!session || !canManageWhatsAppSettings || activeView !== 'whatsappSettings') return;
     refreshWhatsAppSettings(session.token).catch((err) => console.error(err));
   }, [session, canManageWhatsAppSettings, activeView]);
+
+  // Poll QR status when on whatsappSettings page and session is connecting
+  useEffect(() => {
+    if (!session || !canManageWhatsAppSettings || activeView !== 'whatsappSettings') {
+      if (qrPolling) {
+        clearInterval(qrPolling);
+        setQrPolling(null);
+      }
+      return;
+    }
+
+    if (whatsAppSettings?.session_status === 'connecting') {
+      if (!qrPolling) {
+        const interval = setInterval(async () => {
+          try {
+            const updated = await getQrStatus(session.token);
+            setWhatsAppSettings(updated);
+            if (updated.session_status === 'connected') {
+              clearInterval(interval);
+              setQrPolling(null);
+            }
+          } catch {
+            // Silently retry
+          }
+        }, 2000);
+        setQrPolling(interval);
+      }
+    } else {
+      if (qrPolling) {
+        clearInterval(qrPolling);
+        setQrPolling(null);
+      }
+    }
+
+    return () => {
+      if (qrPolling) {
+        clearInterval(qrPolling);
+        setQrPolling(null);
+      }
+    };
+  }, [session, canManageWhatsAppSettings, activeView, whatsAppSettings?.session_status]);
 
   useEffect(() => {
     if (!session || !selectedPipelineId || isPlatformAdmin) return;
@@ -1292,7 +1339,7 @@ export function App() {
 
           {activeView === 'whatsappSettings' && canManageWhatsAppSettings ? (
             <>
-              <Section>
+              {/* <Section>
                 <PageHeader title="Configuração WhatsApp" subtitle="Configure o canal de atendimento da empresa" />
                 <div className="lw-metrics-grid lw-mt-3">
                   <MetricCard
@@ -1312,9 +1359,9 @@ export function App() {
                     variant={whatsAppSettings?.webhook_verify_token_configured ? 'default' : 'risk'}
                   />
                 </div>
-              </Section>
+              </Section> */}
 
-              <Section>
+              {/* <Section>
                 {whatsAppLoading ? <LoadingState message="Carregando configurações do WhatsApp..." /> : null}
                 {whatsAppError ? <ErrorState message={whatsAppError} /> : null}
                 {whatsAppSuccess ? <Alert variant="success">{whatsAppSuccess}</Alert> : null}
@@ -1428,6 +1475,104 @@ export function App() {
                 {!whatsAppLoading && !whatsAppSettings ? (
                   <EmptyState title="Configuração indisponível no momento." description="Tente recarregar a página e salvar novamente." />
                 ) : null}
+              </Section> */}
+
+              {/* QR Code Section */}
+              <Section>
+                <h2>Conexão via QR Code (WhatsApp Web)</h2>
+                <p>Escaneie o QR code abaixo com o WhatsApp do seu celular para conectar a empresa.</p>
+
+                {qrError ? <ErrorState message={qrError} /> : null}
+
+                {whatsAppSettings?.integration_type === 'baileys_qr' && whatsAppSettings?.session_status === 'connected' ? (
+                  <Card>
+                    <div className="lw-flex-align-center-gap lw-mb-2">
+                      <Badge variant="success">Conectado</Badge>
+                      {whatsAppSettings.baileys_phone ? (
+                        <span>Telefone: <strong>{whatsAppSettings.baileys_phone}</strong></span>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      disabled={qrLoading}
+                      onClick={async () => {
+                        if (!session) return;
+                        setQrLoading(true);
+                        setQrError(null);
+                        try {
+                          await logoutQrSession(session.token);
+                          await refreshWhatsAppSettings(session.token);
+                        } catch (err) {
+                          setQrError('Não foi possível desconectar.');
+                        } finally {
+                          setQrLoading(false);
+                        }
+                      }}
+                    >
+                      {qrLoading ? 'Desconectando...' : 'Desconectar WhatsApp'}
+                    </Button>
+                  </Card>
+                ) : whatsAppSettings?.session_status === 'connecting' && whatsAppSettings?.qr_code_base64 ? (
+                  <Card>
+                    <div className="lw-flex-align-center-gap lw-mb-2">
+                      <Badge variant="warning">Conectando...</Badge>
+                      <span>Escaneie o QR code com o WhatsApp do celular</span>
+                    </div>
+                    <div className="lw-qr-code-container">
+                      <img
+                        src={whatsAppSettings.qr_code_base64}
+                        alt="QR Code WhatsApp"
+                        className="lw-qr-code-image"
+                        style={{ maxWidth: '300px', height: 'auto' }}
+                      />
+                    </div>
+                    <p className="lw-text-sm-soft lw-mt-2">
+                      Abra o WhatsApp no celular {'>'} Menu (três pontos) {'>'} WhatsApp Web {'>'} Escaneie o QR code
+                    </p>
+                    <Button
+                      type="button"
+                      disabled={qrLoading}
+                      onClick={async () => {
+                        if (!session) return;
+                        setQrLoading(true);
+                        setQrError(null);
+                        try {
+                          await logoutQrSession(session.token);
+                          await refreshWhatsAppSettings(session.token);
+                        } catch (err) {
+                          setQrError('Não foi possível cancelar.');
+                        } finally {
+                          setQrLoading(false);
+                        }
+                      }}
+                    >
+                      {qrLoading ? 'Cancelando...' : 'Cancelar conexão'}
+                    </Button>
+                  </Card>
+                ) : (
+                  <Card>
+                    <p>Clique no botão abaixo para gerar um QR code e conectar o WhatsApp da empresa.</p>
+                    <Button
+                      type="button"
+                      disabled={qrLoading}
+                      onClick={async () => {
+                        if (!session) return;
+                        setQrLoading(true);
+                        setQrError(null);
+                        try {
+                          await startQrSession(session.token);
+                          await refreshWhatsAppSettings(session.token);
+                        } catch (err) {
+                          setQrError('Não foi possível iniciar a sessão QR.');
+                        } finally {
+                          setQrLoading(false);
+                        }
+                      }}
+                    >
+                      {qrLoading ? 'Iniciando...' : 'Conectar via QR Code'}
+                    </Button>
+                  </Card>
+                )}
               </Section>
             </>
           ) : null}

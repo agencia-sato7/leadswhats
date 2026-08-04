@@ -9,6 +9,7 @@ class DynamicWhatsAppProvider implements WhatsAppProviderInterface
 {
     public function __construct(
         private readonly MetaCloudWhatsAppProvider $metaCloudProvider,
+        private readonly BaileysWhatsAppProvider $baileysProvider,
     ) {
     }
 
@@ -30,10 +31,30 @@ class DynamicWhatsAppProvider implements WhatsAppProviderInterface
             ->where("company_id", $companyId)
             ->first();
 
-        if ($integration && $integration->status === CompanyWhatsAppIntegrationService::STATUS_CONFIGURED) {
-            if ($integration->provider === CompanyWhatsAppIntegrationService::PROVIDER_META_CLOUD) {
-                return $this->metaCloudProvider->sendTextMessage($toPhone, $body, $context);
+        if (!$integration) {
+            return WhatsAppSendResult::failure(
+                provider: "dynamic",
+                errorCode: "whatsapp_disconnected",
+                errorMessage: "WhatsApp integration not configured or disconnected for this company."
+            );
+        }
+
+        // Route based on integration type
+        if ($integration->integration_type === CompanyWhatsAppIntegrationService::INTEGRATION_TYPE_BAILEYS_QR) {
+            if ($integration->session_status === "connected") {
+                return $this->baileysProvider->sendTextMessage($toPhone, $body, $context);
             }
+
+            return WhatsAppSendResult::failure(
+                provider: "dynamic",
+                errorCode: "whatsapp_disconnected",
+                errorMessage: "WhatsApp QR session is not connected for this company."
+            );
+        }
+
+        // Default: Meta Cloud
+        if ($integration->status === CompanyWhatsAppIntegrationService::STATUS_CONFIGURED) {
+            return $this->metaCloudProvider->sendTextMessage($toPhone, $body, $context);
         }
 
         return WhatsAppSendResult::failure(

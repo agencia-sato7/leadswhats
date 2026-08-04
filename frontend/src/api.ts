@@ -25,7 +25,7 @@ import type {
   WhatsAppSettingsUpdateResponse,
 } from './types';
 
-const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE = 'https://leadswhats.appsato7.com.br/api/v1';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -283,6 +283,31 @@ export async function updateWhatsAppSettings(token: string, payload: WhatsAppSet
     method: 'PUT',
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
+  });
+  return data.data;
+}
+
+// === QR Code Session API ===
+
+export async function startQrSession(token: string): Promise<WhatsAppSettings> {
+  const data = await request<WhatsAppSettingsResponse>('/whatsapp/qr/start', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data.data;
+}
+
+export async function getQrStatus(token: string): Promise<WhatsAppSettings> {
+  const data = await request<WhatsAppSettingsResponse>('/whatsapp/qr/status', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return data.data;
+}
+
+export async function logoutQrSession(token: string): Promise<WhatsAppSettings> {
+  const data = await request<WhatsAppSettingsResponse>('/whatsapp/qr/logout', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
   });
   return data.data;
 }

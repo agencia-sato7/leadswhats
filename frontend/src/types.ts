@@ -342,13 +342,17 @@ export type LeadOwnerUpdateResponse = {
 
 export type WhatsAppSettings = {
   provider: 'meta_cloud';
+  integration_type: 'meta_cloud' | 'baileys_qr';
   status: 'not_configured' | 'configured' | 'error';
+  session_status: 'disconnected' | 'connecting' | 'connected' | 'error' | null;
   phone_number: string | null;
   phone_number_id: string | null;
   business_account_id: string | null;
   access_token_configured: boolean;
   webhook_verify_token_configured: boolean;
   webhook_verify_token?: string | null;
+  qr_code_base64: string | null;
+  baileys_phone: string | null;
   connected_at: string | null;
   last_error: string | null;
 };

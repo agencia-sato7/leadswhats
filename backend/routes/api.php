@@ -16,6 +16,8 @@ use App\Http\Controllers\Api\TaskChecklistController;
 use App\Http\Controllers\Api\SettingsWhatsAppController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WhatsappWebhookController;
+use App\Http\Controllers\Api\WhatsAppQrController;
+use App\Http\Controllers\Api\BaileysWebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -23,6 +25,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/webhooks/whatsapp', [WhatsappWebhookController::class, 'ingest']);
     Route::get('/webhooks/whatsapp/meta', [WhatsappWebhookController::class, 'verifyMeta']);
     Route::post('/webhooks/whatsapp/meta', [WhatsappWebhookController::class, 'ingestMeta']);
+    Route::post('/webhooks/whatsapp/baileys', [BaileysWebhookController::class, 'ingest']);
 
     Route::middleware('auth.token')->group(function () {
         Route::get('/auth/me', [AuthController::class, 'me']);
@@ -43,6 +46,13 @@ Route::prefix('v1')->group(function () {
         Route::get('/settings/whatsapp', [SettingsWhatsAppController::class, 'show'])
             ->middleware('role:admin,gestor');
         Route::put('/settings/whatsapp', [SettingsWhatsAppController::class, 'update'])
+            ->middleware('role:admin,gestor');
+
+        Route::post('/whatsapp/qr/start', [WhatsAppQrController::class, 'start'])
+            ->middleware('role:admin,gestor');
+        Route::get('/whatsapp/qr/status', [WhatsAppQrController::class, 'status'])
+            ->middleware('role:admin,gestor,sdr');
+        Route::post('/whatsapp/qr/logout', [WhatsAppQrController::class, 'logout'])
             ->middleware('role:admin,gestor');
 
         Route::middleware('whatsapp.connected')->group(function () {
