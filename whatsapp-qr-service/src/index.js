@@ -1,13 +1,15 @@
 import express from 'express';
 import { makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
+import { isJidUser, isLidUser, isJidGroup, isJidStatusBroadcast, isJidNewsletter, jidDecode } from '@whiskeysockets/baileys/lib/WABinary/jid-utils.js';
 import pino from 'pino';
 import QRCode from 'qrcode';
-import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, rmSync, readFileSync, writeFileSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SESSIONS_DIR = join(__dirname, '..', 'sessions');
+const LID_MAP_FILE = join(SESSIONS_DIR, 'lid_map.json');
 const LARAVEL_WEBHOOK_URL = process.env.LARAVEL_WEBHOOK_URL || 'http://backend:8000/api/v1/webhooks/whatsapp/baileys';
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const LARAVEL_API_TOKEN = process.env.LARAVEL_API_TOKEN || '';
@@ -30,6 +32,30 @@ app.use(express.json());
 
 // Store active sessions: { [companyId]: { socket, qrCode, status, phone } }
 const sessions = {};
+
+// LID → phone JID mapping (in-memory, persisted to file)
+const lidMap = {};
+
+function loadLidMap() {
+  try {
+    if (existsSync(LID_MAP_FILE)) {
+      const raw = readFileSync(LID_MAP_FILE, 'utf-8');
+      const parsed = JSON.parse(raw);
+      Object.assign(lidMap, parsed);
+      console.log(`Loaded ${Object.keys(lidMap).length} LID mappings`);
+    }
+  } catch (err) {
+    console.error('Failed to load LID map:', err.message);
+  }
+}
+
+function saveLidMap() {
+  try {
+    writeFileSync(LID_MAP_FILE, JSON.stringify(lidMap, null, 2));
+  } catch (err) {
+    console.error('Failed to save LID map:', err.message);
+  }
+}
 
 function getSessionDir(companyId) {
   return join(SESSIONS_DIR, `company_${companyId}`);
@@ -60,14 +86,104 @@ async function notifyLaravel(companyId, event, data) {
     if (LARAVEL_API_TOKEN) {
       headers['Authorization'] = `Bearer ${LARAVEL_API_TOKEN}`;
     }
-    await fetch(LARAVEL_WEBHOOK_URL, {
+    const response = await fetch(LARAVEL_WEBHOOK_URL, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
     });
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => '');
+      console.error(`[${companyId}] Webhook ${event} returned ${response.status}: ${errorBody.substring(0, 200)}`);
+    }
   } catch (err) {
-    console.error(`[${companyId}] Failed to notify Laravel:`, err.message);
+    console.error(`[${companyId}] Failed to notify Laravel (${event}):`, err.message);
   }
+}
+
+/**
+ * Extracts the phone number from a JID or LID.
+ * For @s.whatsapp.net JIDs, returns the numeric phone.
+ * For @lid JIDs, tries the LID→phone mapping; falls back to the LID numeric part.
+ */
+function resolvePhone(remoteJid) {
+  if (!remoteJid) {
+    return '';
+  }
+
+  // Normal phone JID
+  if (isJidUser(remoteJid)) {
+    return jidDecode(remoteJid)?.user || remoteJid.replace('@s.whatsapp.net', '');
+  }
+
+  // LID JID — try mapping, fall back to numeric LID
+  if (isLidUser(remoteJid)) {
+    const mappedJid = lidMap[remoteJid];
+    if (mappedJid && isJidUser(mappedJid)) {
+      return jidDecode(mappedJid)?.user || mappedJid.replace('@s.whatsapp.net', '');
+    }
+    // Fallback: use the LID numeric part as a unique identifier
+    return jidDecode(remoteJid)?.user || remoteJid.replace('@lid', '');
+  }
+
+  return '';
+}
+
+/**
+ * Extracts text body from a Baileys message object, handling multiple
+ * message types and unwrapping ephemeralMessage / viewOnceMessage wrappers.
+ */
+function extractBody(message) {
+  if (!message?.message) {
+    return '';
+  }
+
+  let msg = message.message;
+
+  // Unwrap ephemeralMessage
+  if (msg.ephemeralMessage?.message) {
+    msg = msg.ephemeralMessage.message;
+  }
+
+  // Unwrap viewOnceMessage
+  if (msg.viewOnceMessage?.message) {
+    msg = msg.viewOnceMessage.message;
+  }
+
+  // Unwrap viewOnceMessageV2 (extension)
+  if (msg.viewOnceMessageV2?.message) {
+    msg = msg.viewOnceMessageV2.message;
+  }
+
+  // Text messages
+  const text =
+    msg.conversation ||
+    msg.extendedTextMessage?.text ||
+    msg.imageMessage?.caption ||
+    msg.videoMessage?.caption ||
+    msg.documentMessage?.caption ||
+    msg.templateMessage?.hydratedFourRowTemplate?.hydratedTitleText ||
+    msg.templateMessage?.hydratedTemplate?.hydratedTitleText ||
+    '';
+
+  // If no text but there is media, use a placeholder so the lead is still captured
+  if (!text) {
+    if (msg.imageMessage) return '[Imagem]';
+    if (msg.videoMessage) return '[Vídeo]';
+    if (msg.audioMessage) {
+      return msg.audioMessage.ptt ? '[Áudio]' : '[Áudio]';
+    }
+    if (msg.stickerMessage) return '[Sticker]';
+    if (msg.documentMessage) return '[Documento]';
+    if (msg.contactMessage) return '[Contato]';
+    if (msg.locationMessage) return '[Localização]';
+    if (msg.liveLocationMessage) return '[Localização ao vivo]';
+    if (msg.buttonsMessage) return '[Mensagem com botões]';
+    if (msg.listMessage) return '[Mensagem de lista]';
+    if (msg.reactionMessage) return '[Reação]';
+  }
+
+  return text || '';
 }
 
 async function startSession(companyId) {
@@ -107,6 +223,15 @@ async function startSession(companyId) {
   };
 
   socket.ev.on('creds.update', saveCreds);
+
+  // Build LID → phone mapping from WhatsApp's phone number sharing
+  socket.ev.on('chats.phoneNumberShare', ({ lid, jid }) => {
+    if (lid && jid) {
+      lidMap[lid] = jid;
+      saveLidMap();
+      console.log(`[${companyId}] LID mapping: ${lid} → ${jid}`);
+    }
+  });
 
   socket.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -175,21 +300,31 @@ async function startSession(companyId) {
   });
 
   socket.ev.on('messages.upsert', async (msg) => {
+    // Only process real-time messages ('notify'), skip history sync ('append')
+    if (msg.type && msg.type !== 'notify') {
+      return;
+    }
+
     const messages = msg.messages || [];
     for (const message of messages) {
       if (!message.key || message.key.fromMe) continue;
 
-      const body = message.message?.conversation ||
-        message.message?.extendedTextMessage?.text ||
-        message.message?.imageMessage?.caption ||
-        '';
+      const remoteJid = message.key.remoteJid || '';
+
+      // Skip non-chat messages: status broadcast, groups, newsletters, bots
+      if (isJidStatusBroadcast(remoteJid)) continue;
+      if (isJidGroup(remoteJid)) continue;
+      if (isJidNewsletter(remoteJid)) continue;
+      if (remoteJid === 'status@broadcast') continue;
+
+      const body = extractBody(message);
 
       if (!body) continue;
 
-      const phone = message.key.remoteJid?.replace('@s.whatsapp.net', '') || '';
+      const phone = resolvePhone(remoteJid);
       const messageId = message.key.id || '';
 
-      console.log(`[${companyId}] Message from ${phone}: ${body.substring(0, 50)}`);
+      console.log(`[${companyId}] Message from ${phone} (jid: ${remoteJid}): ${body.substring(0, 50)}`);
 
       await notifyLaravel(companyId, 'message_received', {
         phone,
@@ -202,6 +337,30 @@ async function startSession(companyId) {
   });
 
   return getSessionState(companyId);
+}
+
+/**
+ * Scans the sessions directory and restores any existing sessions on startup.
+ */
+async function restoreSessions() {
+  if (!existsSync(SESSIONS_DIR)) {
+    return;
+  }
+
+  const entries = readdirSync(SESSIONS_DIR, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory() && entry.name.startsWith('company_')) {
+      const companyId = parseInt(entry.name.replace('company_', ''), 10);
+      if (companyId && !sessions[companyId]) {
+        console.log(`Restoring session for company ${companyId}...`);
+        try {
+          await startSession(companyId);
+        } catch (err) {
+          console.error(`Failed to restore session ${companyId}:`, err.message);
+        }
+      }
+    }
+  }
 }
 
 async function stopSession(companyId) {
@@ -296,8 +455,12 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', sessions: Object.keys(sessions).length });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`WhatsApp QR Service running on port ${PORT}`);
   console.log(`Sessions directory: ${SESSIONS_DIR}`);
   console.log(`Laravel webhook URL: ${LARAVEL_WEBHOOK_URL}`);
+
+  // Load LID mapping and restore sessions on startup
+  loadLidMap();
+  await restoreSessions();
 });

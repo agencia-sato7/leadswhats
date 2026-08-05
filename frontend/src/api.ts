@@ -23,6 +23,11 @@ import type {
   WhatsAppSettingsResponse,
   WhatsAppSettingsUpdateRequest,
   WhatsAppSettingsUpdateResponse,
+  IntelligenceSourceSummaryResponse,
+  CreativeRankingResponse,
+  ClassifySourceAiResponse,
+  AnalyzeCreativeAiResponse,
+  SaveIntelligenceSettingsResponse,
 } from './types';
 
 const API_BASE = 'https://leadswhats.appsato7.com.br/api/v1';
@@ -310,4 +315,68 @@ export async function logoutQrSession(token: string): Promise<WhatsAppSettings> 
     headers: { Authorization: `Bearer ${token}` },
   });
   return data.data;
+}
+
+// ==== Inteligência de Marketing ====
+
+export function getIntelligenceSourceSummary(token: string): Promise<IntelligenceSourceSummaryResponse> {
+  return request<IntelligenceSourceSummaryResponse>('/intelligence/sources/summary', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function getCreativeRanking(token: string): Promise<CreativeRankingResponse> {
+  return request<CreativeRankingResponse>('/intelligence/creatives', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function classifySourceWithAi(token: string, leadId: number): Promise<ClassifySourceAiResponse> {
+  return request<ClassifySourceAiResponse>(`/intelligence/leads/${leadId}/classify-source`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function analyzeCreativeWithAi(token: string, leadId: number): Promise<AnalyzeCreativeAiResponse> {
+  return request<AnalyzeCreativeAiResponse>(`/intelligence/leads/${leadId}/analyze-creative`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function saveIntelligenceSettings(
+  token: string,
+  lookalikeExportStageIds: number[],
+): Promise<SaveIntelligenceSettingsResponse> {
+  return request<SaveIntelligenceSettingsResponse>('/intelligence/settings', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ lookalike_export_stage_ids: lookalikeExportStageIds }),
+  });
+}
+
+export async function exportLookalikeCsv(
+  token: string,
+  stageIds?: number[],
+): Promise<Blob> {
+  const query = new URLSearchParams();
+  if (stageIds && stageIds.length > 0) {
+    query.set('stage_ids', stageIds.join(','));
+  }
+
+  const path = query.size > 0 ? `/intelligence/lookalike/export?${query.toString()}` : '/intelligence/lookalike/export';
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Erro HTTP ${res.status}`);
+  }
+
+  return res.blob();
 }
