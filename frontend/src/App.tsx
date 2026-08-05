@@ -26,6 +26,12 @@ import {
   startQrSession,
   getQrStatus,
   logoutQrSession,
+  getIntelligenceSourceSummary,
+  getCreativeRanking,
+  classifySourceWithAi,
+  analyzeCreativeWithAi,
+  saveIntelligenceSettings,
+  exportLookalikeCsv,
 } from './api';
 import { AppShell, PageHeader, Sidebar, Topbar } from './components/layout';
 import {
@@ -63,6 +69,8 @@ import type {
   PipelineListItem,
   WhatsAppSettings,
   WhatsAppSettingsUpdateRequest,
+  IntelligenceSourceSummaryResponse,
+  CreativeRankItem,
 } from './types';
 
 type Session = {
@@ -100,7 +108,7 @@ function getFriendlyAuditEventType(eventType: InboxConversationEvent['event_type
 }
 
 export function App() {
-  type ActiveView = 'dashboard' | 'inbox' | 'checklist' | 'kanban' | 'contacts' | 'adminSaas' | 'whatsappSettings';
+  type ActiveView = 'dashboard' | 'inbox' | 'checklist' | 'kanban' | 'contacts' | 'intelligence' | 'adminSaas' | 'whatsappSettings';
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('leadswhats_theme') as 'light' | 'dark') || 'dark');
   const [email, setEmail] = useState('gestor@empresa.local');
   const [password, setPassword] = useState('12345678');
@@ -172,6 +180,17 @@ export function App() {
   const [dragOverColumnId, setDragOverColumnId] = useState<number | null>(null);
   const [pressedCardId, setPressedCardId] = useState<number | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
+  const [intelligenceSummary, setIntelligenceSummary] = useState<IntelligenceSourceSummaryResponse['data'] | null>(null);
+  const [creativeRanking, setCreativeRanking] = useState<CreativeRankItem[]>([]);
+  const [intelligenceTab, setIntelligenceTab] = useState<'origem' | 'criativos' | 'lookalike'>('origem');
+  const [intelligenceLoading, setIntelligenceLoading] = useState(false);
+  const [intelligenceError, setIntelligenceError] = useState<string | null>(null);
+  const [lookalikeStageSelection, setLookalikeStageSelection] = useState<number[]>([]);
+  const [lookalikeSaving, setLookalikeSaving] = useState(false);
+  const [lookalikeExportLoading, setLookalikeExportLoading] = useState(false);
+  const [lookalikeExportError, setLookalikeExportError] = useState<string | null>(null);
+  const [lookalikeExportSuccess, setLookalikeExportSuccess] = useState<string | null>(null);
+  const [intelligenceActionFeedback, setIntelligenceActionFeedback] = useState<string | null>(null);
   const [adminCompanies, setAdminCompanies] = useState<AdminCompanyListItem[]>([]);
   const [adminCompaniesLoading, setAdminCompaniesLoading] = useState(false);
   const [adminCompaniesError, setAdminCompaniesError] = useState<string | null>(null);
@@ -309,6 +328,27 @@ export function App() {
       setRecentLeads([]);
     }
   }
+
+  async function refreshIntelligence(token: string) {
+    setIntelligenceLoading(true);
+    setIntelligenceError(null);
+    try {
+      const [summaryData, rankingData] = await Promise.all([
+        getIntelligenceSourceSummary(token),
+        getCreativeRanking(token),
+      ]);
+      setIntelligenceSummary(summaryData.data);
+      setCreativeRanking(rankingData.data);
+    } catch (err) {
+      setIntelligenceSummary(null);
+      setCreativeRanking([]);
+      setIntelligenceError(parseApiErrorMessage(err, 'Não foi possível carregar a área de Inteligência.'));
+      console.error(err);
+    } finally {
+      setIntelligenceLoading(false);
+    }
+  }
+
 
   async function refreshKanban(token: string, pipelineId: number, silent = false) {
     if (!silent) {
@@ -503,6 +543,12 @@ export function App() {
     refreshWhatsAppSettings(session.token).catch((err) => console.error(err));
   }, [session, canManageWhatsAppSettings, activeView]);
 
+  useEffect(() => {
+    if (!session || !canManageSource || activeView !== 'intelligence') return;
+    refreshIntelligence(session.token).catch((err) => console.error(err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, canManageSource, activeView]);
+
   // Poll QR status when on whatsappSettings page and session is connecting
   useEffect(() => {
     if (!session || !canManageWhatsAppSettings || activeView !== 'whatsappSettings') {
@@ -606,6 +652,8 @@ export function App() {
         void refreshKanban(session.token, selectedPipelineId, true).catch((err) => console.error(err));
       } else if (activeView === 'dashboard') {
         void refreshData(session.token).catch((err) => console.error(err));
+      } else if (activeView === 'intelligence') {
+        void refreshIntelligence(session.token).catch((err) => console.error(err));
       }
     }, 5000);
 
@@ -658,6 +706,7 @@ export function App() {
         'checklist',
         'kanban',
         'contacts',
+        ...(canManageSource ? (['intelligence'] as ActiveView[]) : []),
         ...(canManageWhatsAppSettings ? (['whatsappSettings'] as ActiveView[]) : []),
       ];
 
@@ -732,6 +781,11 @@ export function App() {
     setWhatsAppSettings(null);
     setWhatsAppLoading(false);
     setWhatsAppSaving(false);
+    setIntelligenceSummary(null);
+    setCreativeRanking([]);
+    setIntelligenceError(null);
+    setIntelligenceActionFeedback(null);
+    setLookalikeStageSelection([]);
     setWhatsAppError(null);
     setWhatsAppSuccess(null);
     localStorage.removeItem(STORAGE_KEY);
@@ -954,6 +1008,80 @@ export function App() {
     }
   }
 
+  async function handleIntelligenceClassifySource(leadId: number) {
+    if (!session || !canManageSource) return;
+    setIntelligenceActionFeedback(null);
+    try {
+      const res = await classifySourceWithAi(session.token, leadId);
+      setIntelligenceActionFeedback(res.message);
+      await refreshIntelligence(session.token);
+      await refreshData(session.token);
+    } catch (err) {
+      setIntelligenceError(parseApiErrorMessage(err, 'Não foi possível classificar a origem com IA.'));
+    }
+  }
+
+  async function handleIntelligenceAnalyzeCreative(leadId: number) {
+    if (!session || !canManageSource) return;
+    setIntelligenceActionFeedback(null);
+    try {
+      const res = await analyzeCreativeWithAi(session.token, leadId);
+      setIntelligenceActionFeedback(res.message);
+      await refreshIntelligence(session.token);
+    } catch (err) {
+      setIntelligenceError(parseApiErrorMessage(err, 'Não foi possível analisar o criativo com IA.'));
+    }
+  }
+
+  function toggleLookalikeStage(stageId: number) {
+    setLookalikeStageSelection((prev) =>
+      prev.includes(stageId) ? prev.filter((id) => id !== stageId) : [...prev, stageId],
+    );
+  }
+
+  async function handleSaveLookalikeSettings() {
+    if (!session || !canManageSource) return;
+    setLookalikeSaving(true);
+    setIntelligenceError(null);
+    try {
+      await saveIntelligenceSettings(session.token, lookalikeStageSelection);
+      setIntelligenceActionFeedback('Configuração de Lookalike salva.');
+    } catch (err) {
+      setIntelligenceError(parseApiErrorMessage(err, 'Não foi possível salvar as configurações.'));
+    } finally {
+      setLookalikeSaving(false);
+    }
+  }
+
+  async function handleExportLookalikeCsv() {
+    if (!session || !canManageSource) return;
+    setLookalikeExportLoading(true);
+    setLookalikeExportError(null);
+    setLookalikeExportSuccess(null);
+    try {
+      const stageIds = lookalikeStageSelection.length > 0 ? lookalikeStageSelection : undefined;
+      const csvBlob = await exportLookalikeCsv(session.token, stageIds);
+
+      const fileUrl = URL.createObjectURL(csvBlob);
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.download = 'lookalike-export.csv';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(fileUrl);
+
+      setLookalikeExportSuccess('Download iniciado.');
+    } catch (err) {
+      console.error(err);
+      setLookalikeExportError(parseApiErrorMessage(err, 'Não foi possível exportar o CSV de Lookalike.'));
+    } finally {
+      setLookalikeExportLoading(false);
+    }
+  }
+
+
+
   function updateAdminForm(path: string, value: string | number) {
     setAdminForm((prev) => {
       const next: AdminCompanyCreateRequest = {
@@ -1124,6 +1252,7 @@ export function App() {
       { id: 'checklist', label: 'Checklist', subtitle: 'Tarefas operacionais' },
       { id: 'kanban', label: 'Kanban', subtitle: 'Pipeline e movimentação' },
       { id: 'contacts', label: 'Contatos', subtitle: 'Busca e exportação' },
+      ...(canManageSource ? [{ id: 'intelligence' as ActiveView, label: 'Inteligência', subtitle: 'Origem, criativos e Lookalike' }] : []),
       ...(canManageWhatsAppSettings ? [{ id: 'whatsappSettings' as ActiveView, label: 'WhatsApp', subtitle: 'Configuração da integração da empresa' }] : []),
     ];
   const activeNav = navSections.find((item) => item.id === activeView) ?? navSections[0];
@@ -2145,6 +2274,168 @@ export function App() {
         ) : null}
       </Section>
       ) : null}
+
+      {activeView === 'intelligence' && canManageSource ? (
+        <Section>
+          <div className="lw-flex-align-center-gap lw-mb-3">
+            <h2 className="lw-m-0">Inteligência de Marketing</h2>
+            <Badge variant="info">OpenAI</Badge>
+          </div>
+
+          {intelligenceError ? <ErrorState message={intelligenceError} /> : null}
+          {intelligenceActionFeedback ? <Alert variant="success">{intelligenceActionFeedback}</Alert> : null}
+          {intelligenceLoading ? <LoadingState message="Carregando inteligência..." /> : null}
+
+          <div className="lw-flex-wrap-gap lw-mb-3">
+            <button
+              className={`lw-tab-button ${intelligenceTab === 'origem' ? 'lw-tab-button--active' : ''}`}
+              onClick={() => setIntelligenceTab('origem')}
+            >
+              Origem
+            </button>
+            <button
+              className={`lw-tab-button ${intelligenceTab === 'criativos' ? 'lw-tab-button--active' : ''}`}
+              onClick={() => setIntelligenceTab('criativos')}
+            >
+              Criativos (Anúncios)
+            </button>
+            <button
+              className={`lw-tab-button ${intelligenceTab === 'lookalike' ? 'lw-tab-button--active' : ''}`}
+              onClick={() => setIntelligenceTab('lookalike')}
+            >
+              Lookalike
+            </button>
+          </div>
+
+          {intelligenceTab === 'origem' ? (
+            <>
+              <h3 className="lw-funnel-title">Distribuição do Funil por Origem</h3>
+              {intelligenceSummary && intelligenceSummary.funnel.length > 0 ? (
+                <div className="lw-table-wrap">
+                  <table className="lw-table">
+                    <thead>
+                      <tr>
+                        <th>Origem</th>
+                        {Array.from(new Set(intelligenceSummary.funnel.map((item) => item.stage_name))).map((stage) => (
+                          <th key={stage} className="lw-text-center">{stage}</th>
+                        ))}
+                        <th className="lw-text-center lw-font-bold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from(new Set(intelligenceSummary.funnel.map((item) => item.source))).map((source) => {
+                        const stages = Array.from(new Set(intelligenceSummary.funnel.map((item) => item.stage_name)));
+                        let rowTotal = 0;
+                        return (
+                          <tr key={source}>
+                            <td><Badge variant="info">{source.charAt(0).toUpperCase() + source.slice(1)}</Badge></td>
+                            {stages.map((stage) => {
+                              const count = intelligenceSummary.funnel.find((item) => item.source === source && item.stage_name === stage)?.count || 0;
+                              rowTotal += count;
+                              return (
+                                <td key={stage} className={`lw-text-center ${count === 0 ? 'lw-opacity-40' : ''}`}>{count}</td>
+                              );
+                            })}
+                            <td className="lw-text-center lw-font-bold lw-color-primary">{rowTotal}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState title="Sem dados de funil cruzados." description="Leads com origem e estágio definidos alimentarão esta matriz." />
+              )}
+
+              <h3 className="lw-funnel-title lw-mt-4">Volume por Origem</h3>
+              {intelligenceSummary && intelligenceSummary.by_source.length > 0 ? (
+                <div className="lw-metrics-grid">
+                  {intelligenceSummary.by_source.map((bySource) => (
+                    <MetricCard
+                      key={bySource.source}
+                      label={bySource.source.charAt(0).toUpperCase() + bySource.source.slice(1)}
+                      value={bySource.total_leads}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState title="Sem volume por origem." />
+              )}
+            </>
+          ) : null}
+
+          {intelligenceTab === 'criativos' ? (
+            <>
+              <h3 className="lw-funnel-title">Ranking de Criativos (Anúncios) por Vendas</h3>
+              {creativeRanking.length === 0 ? (
+                <EmptyState
+                  title="Nenhum criativo analisado ainda."
+                  description="Quando um lead enviar um link rastreado (ad_id/utm), a IA descreve o anúncio e ele aparece aqui."
+                />
+              ) : (
+                <div className="lw-contacts-grid">
+                  {creativeRanking.map((creative) => (
+                    <div key={creative.creative_id} className="lw-contact-card">
+                      <p><strong>Criativo: {creative.creative_id}</strong></p>
+                      <small>Plataforma: {creative.platform || 'n/d'}</small>
+                      {creative.headline ? <small>Headline: {creative.headline}</small> : null}
+                      {creative.cta ? <small>CTA: {creative.cta}</small> : null}
+                      {creative.description ? <small>Descrição: {creative.description}</small> : null}
+                      <small className="lw-mt-2">Leads gerados: <strong>{creative.leads_count}</strong></small>
+                      <small>Chegaram à venda: <strong>{creative.terminal_leads}</strong></small>
+                      {creative.creative_url ? (
+                        <a href={creative.creative_url} target="_blank" rel="noreferrer" className="lw-button-link">Ver link do anúncio</a>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : null}
+
+          {intelligenceTab === 'lookalike' ? (
+            <>
+              <h3 className="lw-funnel-title">Exportação para Lookalike (Público Semelhante)</h3>
+              <p>
+                Selecione as etapas finais do funil (ex: Agendou Visita, Venda Fechada) para exportar um CSV
+                com os telefones e dados dos leads altamente qualificados.
+              </p>
+              <div className="lw-flex-wrap-gap lw-mt-3 lw-mb-3">
+                {(kanban?.columns ?? []).map((column) => (
+                  <label key={column.id} className="lw-flex-align-center-gap">
+                    <input
+                      type="checkbox"
+                      checked={lookalikeStageSelection.includes(column.id)}
+                      onChange={() => toggleLookalikeStage(column.id)}
+                    />
+                    {column.name}
+                  </label>
+                ))}
+              </div>
+              {kanban && kanban.columns.length === 0 ? (
+                <p className="lw-text-sm-soft">Nenhuma coluna disponível. Configure o Kanban primeiro.</p>
+              ) : null}
+              <div className="lw-flex-wrap-gap">
+                <button type="button" onClick={() => void handleSaveLookalikeSettings()} disabled={lookalikeSaving}>
+                  {lookalikeSaving ? 'Salvando...' : 'Salvar etapas do Lookalike'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleExportLookalikeCsv()}
+                  disabled={lookalikeExportLoading}
+                >
+                  {lookalikeExportLoading ? 'Exportando...' : 'Exportar CSV p/ Lookalike'}
+                </button>
+              </div>
+              {lookalikeExportError ? <p className="lw-text-xs-danger lw-mt-2">{lookalikeExportError}</p> : null}
+              {lookalikeExportSuccess ? <p className="lw-text-xs-success lw-mt-2">{lookalikeExportSuccess}</p> : null}
+            </>
+          ) : null}
+        </Section>
+      ) : null}
+
+
+
 
       {activeView === 'dashboard' && !canManageSource ? (
         <Section>

@@ -80,7 +80,7 @@ services:
         if [ ! -d vendor ]; then
           composer install --no-interaction
         fi &&
-        php artisan key:generate --no-interaction --force &&
+        php artisan key:generate --no-interaction &&
         php artisan migrate --force &&
         php artisan db:seed --force &&
         php artisan serve --host=0.0.0.0 --port=9000
@@ -116,7 +116,7 @@ services:
     environment:
       PORT: "3001"
       LARAVEL_WEBHOOK_URL: "http://backend:9000/api/v1/webhooks/whatsapp/baileys"
-    command: sh -lc "apk add --no-cache git python3 make g++ && npm install --ignore-scripts && npm run dev"
+    command: sh -lc "apk add --no-cache git python3 make g++ && npm install --ignore-scripts && npm start"
     ports:
       - "3001:3001"
     networks:

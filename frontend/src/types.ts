@@ -374,3 +374,73 @@ export type WhatsAppSettingsUpdateRequest = {
 export type WhatsAppSettingsUpdateResponse = {
   data: WhatsAppSettings;
 };
+
+// ==== Inteligência de Marketing ====
+
+export type IntelligenceStageCount = {
+  stage_name: string;
+  count: number;
+};
+
+export type IntelligenceBySource = {
+  source: string;
+  total_leads: number;
+  stages: IntelligenceStageCount[];
+};
+
+export type IntelligenceFunnelRow = {
+  source: string;
+  stage_name: string;
+  count: number;
+};
+
+export type IntelligenceSourceSummaryResponse = {
+  data: {
+    funnel: IntelligenceFunnelRow[];
+    by_source: IntelligenceBySource[];
+  };
+};
+
+export type CreativeRankItem = {
+  creative_id: string;
+  creative_url: string;
+  platform: string | null;
+  description: string | null;
+  headline: string | null;
+  cta: string | null;
+  image_url: string | null;
+  leads_count: number;
+  terminal_leads: number;
+};
+
+export type CreativeRankingResponse = {
+  data: CreativeRankItem[];
+};
+
+export type ClassifySourceAiResponse = {
+  message: string;
+  data: {
+    applied: boolean;
+    source: string;
+    confidence: number;
+    reason: string;
+  };
+};
+
+export type AnalyzeCreativeAiResponse = {
+  message: string;
+  data: {
+    analyzed: boolean;
+    creative_id: string | null;
+    platform: string | null;
+    status: string;
+    reason: string;
+  };
+};
+
+export type SaveIntelligenceSettingsResponse = {
+  message: string;
+  data: {
+    lookalike_export_stage_ids: number[];
+  };
+};

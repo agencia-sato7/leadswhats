@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WhatsappWebhookController;
 use App\Http\Controllers\Api\WhatsAppQrController;
 use App\Http\Controllers\Api\BaileysWebhookController;
+use App\Http\Controllers\Api\MarketingIntelligenceController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -113,6 +114,20 @@ Route::prefix('v1')->group(function () {
                 ->middleware('role:admin,gestor');
 
             Route::patch('/leads/{leadId}/source', [LeadSourceController::class, 'classify'])
+                ->middleware('role:admin,gestor');
+
+            // ==== Inteligência de Marketing (Origem, Criativos e Lookalike) ====
+            Route::get('/intelligence/sources/summary', [MarketingIntelligenceController::class, 'sourcesSummary'])
+                ->middleware('role:admin,gestor');
+            Route::get('/intelligence/creatives', [MarketingIntelligenceController::class, 'creativeRanking'])
+                ->middleware('role:admin,gestor');
+            Route::post('/intelligence/leads/{lead}/classify-source', [MarketingIntelligenceController::class, 'classifySourceByAi'])
+                ->middleware('role:admin,gestor');
+            Route::post('/intelligence/leads/{lead}/analyze-creative', [MarketingIntelligenceController::class, 'analyzeCreativeByAi'])
+                ->middleware('role:admin,gestor');
+            Route::post('/intelligence/settings', [MarketingIntelligenceController::class, 'saveSettings'])
+                ->middleware('role:admin,gestor');
+            Route::get('/intelligence/lookalike/export', [MarketingIntelligenceController::class, 'lookalikeExport'])
                 ->middleware('role:admin,gestor');
         });
     });

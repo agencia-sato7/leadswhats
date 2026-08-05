@@ -54,6 +54,7 @@ class CompanySettingsService
                 'follow_up_sla_hours' => self::DEFAULT_FOLLOW_UP_SLA_HOURS,
                 'stale_conversation_hours' => self::DEFAULT_STALE_CONVERSATION_HOURS,
                 'webhook_token' => null,
+                'lookalike_export_stage_ids' => [],
             ];
         }
 
@@ -72,6 +73,9 @@ class CompanySettingsService
             'follow_up_sla_hours' => (int) ($settings->follow_up_sla_hours ?: self::DEFAULT_FOLLOW_UP_SLA_HOURS),
             'stale_conversation_hours' => (int) ($settings->stale_conversation_hours ?: self::DEFAULT_STALE_CONVERSATION_HOURS),
             'webhook_token' => $settings->webhook_token,
+            'lookalike_export_stage_ids' => is_array($settings->lookalike_export_stage_ids)
+                ? array_values($settings->lookalike_export_stage_ids)
+                : [],
         ];
     }
 
@@ -139,6 +143,14 @@ class CompanySettingsService
     }
 
     /**
+     * @return int[]
+     */
+    public function lookalikeExportStageIds(int $companyId): array
+    {
+        return (array) $this->getForCompany($companyId)['lookalike_export_stage_ids'];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function defaults(): array
@@ -156,6 +168,7 @@ class CompanySettingsService
             'follow_up_sla_hours' => self::DEFAULT_FOLLOW_UP_SLA_HOURS,
             'stale_conversation_hours' => self::DEFAULT_STALE_CONVERSATION_HOURS,
             'webhook_token' => null,
+            'lookalike_export_stage_ids' => [],
         ];
     }
 

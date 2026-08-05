@@ -11,8 +11,10 @@ use App\Services\Domain\FirstResponseCalculatorService;
 use App\Services\Domain\KanbanInitialPlacementService;
 use App\Services\Domain\LeadClassifierService;
 use App\Services\Domain\LeadSourceService;
+use App\Services\Domain\MarketingIntelligenceService;
 use App\Services\Domain\RescueDetectorService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class WhatsappIngestionService
 {
@@ -24,6 +26,7 @@ class WhatsappIngestionService
         private readonly LeadSourceService $leadSourceService,
         private readonly KanbanInitialPlacementService $kanbanInitialPlacementService,
         private readonly AiKanbanMovementService $aiKanbanMovementService,
+        private readonly MarketingIntelligenceService $marketingIntelligenceService,
     ) {
     }
 
@@ -132,6 +135,8 @@ class WhatsappIngestionService
 
         $lead->save();
 
+        $this->applyAiIntelligenceIfNeeded($lead, $direction);
+
         $this->aiKanbanMovementService->evaluateAndMove($company->id, $lead->id);
 
         return [
@@ -147,10 +152,66 @@ class WhatsappIngestionService
     {
         $digits = preg_replace("/\\D+/", "", $phone);
 
+        // Detect likely-unresolved LID identifiers (very long numeric strings, >15 digits).
+        // These are not real phone numbers but WhatsApp Linked Identity fallbacks.
+        // We still store them so the lead is captured, but log a warning for follow-up.
+        if (strlen($digits) > 15) {
+            Log::warning("Phone looks like an unresolved LID identifier: {$phone} (digits: {$digits})");
+        }
+
         if (str_starts_with($digits, "55")) {
             return "+" . $digits;
         }
 
         return "+55" . $digits;
+    }
+
+    /**
+     * Uses AI marketing intelligence on new inbound leads whose origin was not
+     * tracked by the incoming payload, so the lead can be attributed to a
+     * Facebook/Instagram/Google/TikTok campaign automatically.
+     */
+    private function applyAiIntelligenceIfNeeded(Lead $lead, string $direction): void
+    {
+        if ($direction !== "inbound") {
+            return;
+        }
+
+        // Only attempt automatic classification when the source is unknown.
+        if ($lead->source !== "desconhecido" && $lead->source !== "meta_cloud" && $lead->source !== "whatsapp_qr") {
+            // Still try to detect a tracked creative link.
+            $this->tryDetectCreative($lead);
+            return;
+        }
+
+        $result = $this->marketingIntelligenceService->classifyLeadSourceByAi($lead);
+        $lead->refresh();
+
+        $this->tryDetectCreative($lead);
+    }
+
+    private function tryDetectCreative(Lead $lead): void
+    {
+        if ($lead->creative_url) {
+            return;
+        }
+
+        $firstMessage = \App\Models\Message::query()
+            ->where("company_id", $lead->company_id)
+            ->where("lead_id", $lead->id)
+            ->where("direction", "inbound")
+            ->orderBy("sent_at")
+            ->orderBy("id")
+            ->value("body");
+
+        if (!$firstMessage || !preg_match('/https?:\/\/[^\s]+/i', (string) $firstMessage)) {
+            return;
+        }
+
+        try {
+            $this->marketingIntelligenceService->analyzeLeadCreative($lead);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Falha ao analisar criativo via IA: " . $e->getMessage());
+        }
     }
 }

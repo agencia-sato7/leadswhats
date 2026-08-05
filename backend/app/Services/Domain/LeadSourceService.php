@@ -33,6 +33,15 @@ class LeadSourceService
         $this->trackAndApplyChange($lead, $source, 'auto', 'Reentrada detectada com origem rastreada.', null);
     }
 
+    public function applyAiSource(Lead $lead, string $source, string $reason): void
+    {
+        if ($source === 'desconhecido' || $lead->source === $source) {
+            return;
+        }
+
+        $this->trackAndApplyChange($lead, $source, 'auto', $reason, null);
+    }
+
     public function classifyManual(Lead $lead, string $newSource, ?int $changedByUserId, ?string $reason): void
     {
         if ($lead->source !== $newSource) {
@@ -71,5 +80,6 @@ class LeadSourceService
         $lead->source = $newSource;
         $lead->source_method = $changeType;
         $lead->source_updated_at = now();
+        $lead->save();
     }
 }
