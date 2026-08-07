@@ -20,7 +20,6 @@ import {
   getWhatsAppSettings,
   login,
   moveLeadStage,
-  sendInboxMessage,
   updateWhatsAppSettings,
   updateLeadOwner,
   startQrSession,
@@ -46,6 +45,7 @@ import {
   Input,
   LoadingState,
   MetricCard,
+  Modal,
   Select,
   Section,
 } from './components/ui';
@@ -95,6 +95,12 @@ function formatDateTime(value: string | null | undefined): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString('pt-BR');
+}
+
+function formatPhoneDisplay(phone: string | null | undefined): string {
+  if (!phone) return 'Aguardando identificação do WhatsApp';
+  if (phone.startsWith('lid:')) return 'Aguardando identificação do WhatsApp';
+  return phone;
 }
 
 function getFriendlyAuditEventType(eventType: InboxConversationEvent['event_type']): string {
@@ -156,10 +162,6 @@ export function App() {
   const [inboxSourceFilter, setInboxSourceFilter] = useState('');
   const [inboxStageFilter, setInboxStageFilter] = useState<number | ''>('');
   const [inboxServiceWindowFilter, setInboxServiceWindowFilter] = useState<'' | 'true' | 'false'>('');
-  const [inboxReplyBody, setInboxReplyBody] = useState('');
-  const [inboxSendLoading, setInboxSendLoading] = useState(false);
-  const [inboxSendError, setInboxSendError] = useState<string | null>(null);
-  const [inboxSendSuccess, setInboxSendSuccess] = useState<string | null>(null);
   const [inboxDetailTab, setInboxDetailTab] = useState<'messages' | 'audit'>('messages');
   const [inboxEvents, setInboxEvents] = useState<InboxConversationEvent[]>([]);
   const [inboxEventsLoading, setInboxEventsLoading] = useState(false);
@@ -454,12 +456,13 @@ export function App() {
         return;
       }
 
-      const selectedStillExists = selectedConversationId
-        ? response.data.some((item) => item.conversation_id === selectedConversationId)
-        : false;
-
-      if (!selectedStillExists) {
-        setSelectedConversationId(response.data[0].conversation_id);
+      // Só fechamos o modal se a conversa selecionada tiver sumido da lista (ex: filtro mudou).
+      // Nunca selecionamos uma conversa sozinhos — o modal só abre por clique explícito do usuário.
+      if (selectedConversationId) {
+        const selectedStillExists = response.data.some((item) => item.conversation_id === selectedConversationId);
+        if (!selectedStillExists) {
+          setSelectedConversationId(null);
+        }
       }
     } catch (err) {
       setInboxConversations([]);
@@ -627,8 +630,6 @@ export function App() {
 
   useEffect(() => {
     if (!session || !selectedConversationId || isPlatformAdmin) return;
-    setInboxSendError(null);
-    setInboxSendSuccess(null);
     setInboxOwnerUpdateError(null);
     setInboxOwnerUpdateSuccess(null);
     setInboxOwnerSelection('');
@@ -754,10 +755,6 @@ export function App() {
     setInboxConversations([]);
     setInboxDetail(null);
     setSelectedConversationId(null);
-    setInboxReplyBody('');
-    setInboxSendLoading(false);
-    setInboxSendError(null);
-    setInboxSendSuccess(null);
     setInboxDetailTab('messages');
     setInboxEvents([]);
     setInboxEventsLoading(false);
@@ -906,39 +903,6 @@ export function App() {
   function changeInboxPage(nextPage: number) {
     if (nextPage < 1 || nextPage > inboxMeta.last_page) return;
     setInboxPage(nextPage);
-  }
-
-  async function handleInboxSendMessage(event: React.FormEvent) {
-    event.preventDefault();
-    if (!session || !selectedConversationId || !inboxDetail || inboxSendLoading) return;
-
-    setInboxSendError(null);
-    setInboxSendSuccess(null);
-
-    if (!inboxDetail.service_window_open) {
-      setInboxSendError('Janela de atendimento fechada. Aguarde nova mensagem inbound para enviar.');
-      return;
-    }
-
-    const body = inboxReplyBody.trim();
-    if (!body) {
-      setInboxSendError('Digite uma mensagem antes de enviar.');
-      return;
-    }
-
-    setInboxSendLoading(true);
-    try {
-      await sendInboxMessage(session.token, selectedConversationId, body);
-      setInboxReplyBody('');
-      setInboxSendSuccess('Mensagem enviada com sucesso.');
-      await refreshInboxDetail(session.token, selectedConversationId);
-      await refreshInboxConversations(session.token, inboxPage);
-    } catch (err) {
-      setInboxSendError(parseApiErrorMessage(err, 'Não foi possível enviar a mensagem.'));
-      console.error(err);
-    } finally {
-      setInboxSendLoading(false);
-    }
   }
 
   async function handleUpdateInboxOwner(event: React.FormEvent) {
@@ -1843,40 +1807,49 @@ export function App() {
 
         {!inboxLoading && !inboxError && inboxConversations.length > 0 ? (
           <>
-            <div className="lw-inbox-split">
-              <aside className="lw-inbox-sidebar">
-                {inboxConversations.map((conversation) => {
-                  const isSelected = selectedConversationId === conversation.conversation_id;
-                  return (
-                    <button
-                      key={conversation.conversation_id}
-                      type="button"
-                      onClick={() => setSelectedConversationId(conversation.conversation_id)}
-                      className={`lw-inbox-conv-btn ${isSelected ? 'lw-inbox-conv-btn--selected' : ''}`}
-                    >
-                      <p><strong>{conversation.lead_name || conversation.phone}</strong></p>
-                      <small>{conversation.phone}</small>
-                      <small>Origem: {conversation.source}</small>
-                      <small>
-                        Última: {conversation.last_message_direction || 'sem direção'} · {formatDateTime(conversation.last_message_at)}
-                      </small>
-                    </button>
-                  );
-                })}
-              </aside>
+            <div className="lw-inbox-list">
+              {inboxConversations.map((conversation) => (
+                <button
+                  key={conversation.conversation_id}
+                  type="button"
+                  onClick={() => setSelectedConversationId(conversation.conversation_id)}
+                  className="lw-inbox-list-row"
+                >
+                  <div className="lw-inbox-list-row-main">
+                    <p><strong>{conversation.lead_name || formatPhoneDisplay(conversation.phone)}</strong></p>
+                    {conversation.lead_name ? <small>{formatPhoneDisplay(conversation.phone)}</small> : null}
+                  </div>
+                  <div className="lw-inbox-list-row-meta">
+                    <span>Origem: {conversation.source}</span>
+                    <span>
+                      Última: {conversation.last_message_direction || 'sem direção'} · {formatDateTime(conversation.last_message_at)}
+                    </span>
+                  </div>
+                  <span className="lw-inbox-list-row-arrow">→</span>
+                </button>
+              ))}
+              <div className="lw-inbox-list-pagination">
+                <button onClick={() => changeInboxPage(inboxMeta.page - 1)} disabled={inboxMeta.page <= 1 || inboxLoading}>Anterior</button>
+                <small>Página {inboxMeta.page} de {Math.max(inboxMeta.last_page, 1)}</small>
+                <button onClick={() => changeInboxPage(inboxMeta.page + 1)} disabled={inboxMeta.page >= inboxMeta.last_page || inboxLoading}>Próxima</button>
+                <small className="lw-text-xs-muted">Total: {inboxMeta.total}</small>
+              </div>
+            </div>
 
-              <div className="lw-inbox-detail-pane">
+            <Modal
+              open={selectedConversationId !== null}
+              onClose={() => setSelectedConversationId(null)}
+              title={inboxDetail ? `Conversa #${inboxDetail.conversation_id}` : 'Conversa'}
+            >
+              <>
                 {inboxDetailLoading ? <p className="lw-text-sm-soft">Carregando conversa...</p> : null}
                 {inboxDetailError ? <ErrorState message={inboxDetailError} /> : null}
 
-                {!inboxDetailLoading && !inboxDetailError && !inboxDetail ? <p className="lw-text-sm-soft">Selecione uma conversa para ver o histórico.</p> : null}
-
                 {!inboxDetailLoading && !inboxDetailError && inboxDetail ? (
                   <>
-                    <h3>Conversa #{inboxDetail.conversation_id}</h3>
                     <div className="lw-inbox-detail-info">
                       <small><strong>Lead:</strong> {inboxDetail.lead.lead_name || 'Sem nome'}</small>
-                      <small><strong>Telefone:</strong> {inboxDetail.lead.phone}</small>
+                      <small><strong>Telefone:</strong> {formatPhoneDisplay(inboxDetail.lead.phone)}</small>
                       <small><strong>Origem:</strong> {inboxDetail.lead.source}</small>
                       <small><strong>Etapa:</strong> {inboxDetail.lead.current_stage || 'Sem etapa'}</small>
                       <small><strong>Responsável:</strong> {inboxDetail.owner.owner_name || 'Sem responsável'}</small>
@@ -1942,48 +1915,20 @@ export function App() {
                     </div>
 
                     {inboxDetailTab === 'messages' ? (
-                      <>
-                        <div className="lw-inbox-messages-list">
-                          {inboxDetail.messages.map((message) => (
-                            <div
-                              key={message.id}
-                              className={`lw-chat-bubble ${message.direction === 'inbound' ? 'lw-chat-bubble--inbound' : 'lw-chat-bubble--outbound'}`}
-                            >
-                              <small>
-                                <strong>{message.direction === 'inbound' ? 'Cliente' : 'Time'}</strong> · {formatDateTime(message.sent_at)}
-                              </small>
-                              <p>{message.body || 'Mensagem sem texto'}</p>
-                              <small>provider: {message.provider || 'n/d'} · id externo: {message.external_message_id || 'n/d'}</small>
-                            </div>
-                          ))}
-                        </div>
-
-                        <form onSubmit={(event) => void handleInboxSendMessage(event)} className="lw-grid-2 lw-mt-3">
-                          {!inboxDetail.service_window_open ? (
-                            <small className="lw-text-xs-warning">
-                              Janela de atendimento fechada. O envio será habilitado após nova mensagem inbound do cliente.
+                      <div className="lw-inbox-messages-list">
+                        {inboxDetail.messages.map((message) => (
+                          <div
+                            key={message.id}
+                            className={`lw-chat-bubble ${message.direction === 'inbound' ? 'lw-chat-bubble--inbound' : 'lw-chat-bubble--outbound'}`}
+                          >
+                            <small>
+                              <strong>{message.direction === 'inbound' ? 'Cliente' : 'Time'}</strong> · {formatDateTime(message.sent_at)}
                             </small>
-                          ) : null}
-                          {inboxSendError ? <small className="lw-text-xs-danger">{inboxSendError}</small> : null}
-                          {inboxSendSuccess ? <small className="lw-text-xs-success">{inboxSendSuccess}</small> : null}
-                          <textarea
-                            value={inboxReplyBody}
-                            onChange={(event) => setInboxReplyBody(event.target.value)}
-                            placeholder={inboxDetail.service_window_open ? 'Digite sua resposta...' : 'Envio indisponível com janela fechada'}
-                            disabled={inboxSendLoading || !inboxDetail.service_window_open}
-                            rows={3}
-                            className="lw-textarea"
-                          />
-                          <div>
-                            <button
-                              type="submit"
-                              disabled={inboxSendLoading || !inboxDetail.service_window_open || inboxReplyBody.trim().length === 0}
-                            >
-                              {inboxSendLoading ? 'Enviando...' : 'Enviar'}
-                            </button>
+                            <p>{message.body || 'Mensagem sem texto'}</p>
+                            <small>provider: {message.provider || 'n/d'} · id externo: {message.external_message_id || 'n/d'}</small>
                           </div>
-                        </form>
-                      </>
+                        ))}
+                      </div>
                     ) : null}
 
                     {inboxDetailTab === 'audit' ? (
@@ -2056,15 +2001,8 @@ export function App() {
                     ) : null}
                   </>
                 ) : null}
-              </div>
-            </div>
-
-            <div className="lw-flex-align-center-gap lw-mt-3">
-              <button onClick={() => changeInboxPage(inboxMeta.page - 1)} disabled={inboxMeta.page <= 1 || inboxLoading}>Anterior</button>
-              <small>Página {inboxMeta.page} de {Math.max(inboxMeta.last_page, 1)}</small>
-              <button onClick={() => changeInboxPage(inboxMeta.page + 1)} disabled={inboxMeta.page >= inboxMeta.last_page || inboxLoading}>Próxima</button>
-              <small className="lw-text-xs-muted">Total: {inboxMeta.total}</small>
-            </div>
+              </>
+            </Modal>
           </>
         ) : null}
       </Section>
@@ -2083,15 +2021,15 @@ export function App() {
           <div className="lw-contacts-grid">
             {checklistItems.map((item) => (
               <div key={`${item.lead_id}-${item.conversation_id}-${item.task_type}`} className="lw-contact-card">
-                <p><strong>{item.lead_name || item.phone}</strong></p>
-                <small>Telefone: {item.phone}</small>
+                <p><strong>{item.lead_name || formatPhoneDisplay(item.phone)}</strong></p>
+                <small>Telefone: {formatPhoneDisplay(item.phone)}</small>
                 <small>Source: {item.source}</small>
                 <small>Etapa atual: {item.current_stage || 'Sem etapa'}</small>
                 <small>Tarefa: {item.task_label}</small>
                 <small>Horas desde última mensagem: {item.hours_since_last_message}</small>
                 <small className="lw-mb-2">Prioridade: <strong>{item.priority}</strong></small>
                 <div className="lw-flex-wrap-gap">
-                  <button onClick={() => void copyText(item.phone, 'Telefone copiado!')}>Copiar telefone</button>
+                  <button disabled={item.phone.startsWith('lid:')} onClick={() => void copyText(item.phone, 'Telefone copiado!')}>Copiar telefone</button>
                   <button onClick={() => void copyText(CHECKLIST_DEFAULT_MESSAGE, 'Mensagem padrão copiada!')}>Copiar mensagem padrão</button>
                 </div>
               </div>
@@ -2158,8 +2096,8 @@ export function App() {
                       onMouseLeave={() => setPressedCardId(null)}
                       className={`lw-kanban-card ${draggingCard?.leadId === card.lead_id || pressedCardId === card.lead_id ? 'lw-kanban-card--active' : ''} ${!canMoveStage ? 'lw-kanban-card--static' : ''}`}
                     >
-                      <p><strong>{card.name || card.phone}</strong></p>
-                      <small>{card.phone}</small>
+                      <p><strong>{card.name || formatPhoneDisplay(card.phone)}</strong></p>
+                      <small>{formatPhoneDisplay(card.phone)}</small>
                       <div className="lw-flex-wrap-gap lw-mt-2 lw-mb-2">
                         <Badge variant="info">{card.source}</Badge>
                         <Badge variant={card.classification === 'lead_novo' ? 'success' : 'warning'}>{card.classification === 'lead_novo' ? 'Novo' : 'Recomprado'}</Badge>
@@ -2252,14 +2190,14 @@ export function App() {
             <div className="lw-contacts-grid">
               {contacts.map((contact) => (
                 <div key={contact.lead_id} className="lw-contact-card">
-                  <p><strong>{contact.name || contact.phone}</strong></p>
-                  <small>Telefone: {contact.phone}</small>
+                  <p><strong>{contact.name || formatPhoneDisplay(contact.phone)}</strong></p>
+                  <small>Telefone: {formatPhoneDisplay(contact.phone)}</small>
                   <small>Origem: {contact.source}</small>
                   <small>Classificação: {contact.classification}</small>
                   <small>Etapa atual: {contact.current_stage || 'Sem etapa'}</small>
                   <small>Última mensagem: {formatDateTime(contact.last_message_at)}</small>
                   <small className="lw-mb-2">Criado em: {formatDateTime(contact.created_at)}</small>
-                  <button onClick={() => void copyText(contact.phone, 'Telefone copiado!')}>Copiar telefone</button>
+                  <button disabled={contact.phone.startsWith('lid:')} onClick={() => void copyText(contact.phone, 'Telefone copiado!')}>Copiar telefone</button>
                 </div>
               ))}
             </div>

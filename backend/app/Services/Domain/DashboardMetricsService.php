@@ -6,6 +6,7 @@ use App\Models\Conversation;
 use App\Models\Lead;
 use App\Models\LeadSourceHistory;
 use App\Models\Message;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 class DashboardMetricsService
@@ -20,20 +21,41 @@ class DashboardMetricsService
      */
     public function summaryForCompany(int $companyId): array
     {
+        return $this->buildSummary($companyId, null);
+    }
+
+    /**
+     * Regra da Privacidade: um SDR só pode ver o próprio desempenho, nunca o da equipe inteira.
+     *
+     * @return array{date:string,metrics:array<string,int|float>,funnel_by_source:array<int,array{source:string,stage_name:string,count:int}>}
+     */
+    public function summaryForUser(User $user): array
+    {
+        return $this->buildSummary((int) $user->company_id, $user);
+    }
+
+    /**
+     * @return array{date:string,metrics:array<string,int|float>,funnel_by_source:array<int,array{source:string,stage_name:string,count:int}>}
+     */
+    private function buildSummary(int $companyId, ?User $scopeUser): array
+    {
         $todayStart = now()->startOfDay();
 
         $newLeadsToday = Lead::where("company_id", $companyId)
             ->whereDate("created_at", today())
             ->where("is_repeat_lead", false)
+            ->when($scopeUser, fn ($query) => $query->where("owner_user_id", $scopeUser->id))
             ->count();
 
         $repeatLeadsToday = Lead::where("company_id", $companyId)
             ->whereDate("created_at", today())
             ->where("is_repeat_lead", true)
+            ->when($scopeUser, fn ($query) => $query->where("owner_user_id", $scopeUser->id))
             ->count();
 
         $avgResponseSeconds = (int) round((float) Lead::where("company_id", $companyId)
             ->whereNotNull("first_response_seconds")
+            ->when($scopeUser, fn ($query) => $query->where("owner_user_id", $scopeUser->id))
             ->avg("first_response_seconds"));
 
         $vacuum24hCount = Lead::where("company_id", $companyId)
@@ -43,28 +65,46 @@ class DashboardMetricsService
                     ->orWhereColumn("last_inbound_at", "<", "last_outbound_at");
             })
             ->where("last_outbound_at", "<=", now()->subHours(24))
+            ->when($scopeUser, fn ($query) => $query->where("owner_user_id", $scopeUser->id))
             ->count();
 
         $rescuesToday = Message::where("company_id", $companyId)
             ->where("direction", "outbound")
             ->where("is_rescue", true)
             ->where("sent_at", ">=", $todayStart)
+            ->when($scopeUser, function ($query) use ($companyId, $scopeUser) {
+                $query->where(function ($ownerQuery) use ($companyId, $scopeUser) {
+                    $ownerQuery->whereIn("lead_id", Lead::where("company_id", $companyId)
+                        ->where("owner_user_id", $scopeUser->id)
+                        ->select("id"))
+                        ->orWhereIn("conversation_id", Conversation::where("company_id", $companyId)
+                            ->where("owner_user_id", $scopeUser->id)
+                            ->select("id"));
+                });
+            })
             ->count();
 
         $activeConversations = Conversation::where("company_id", $companyId)
             ->where("status", "active")
+            ->when($scopeUser, fn ($query) => $query->where("owner_user_id", $scopeUser->id))
             ->count();
 
         $unknownSourceLeads = Lead::where("company_id", $companyId)
             ->where("source", "desconhecido")
+            ->when($scopeUser, fn ($query) => $query->where("owner_user_id", $scopeUser->id))
             ->count();
 
         $manualClassificationsToday = LeadSourceHistory::where("company_id", $companyId)
             ->where("change_type", "manual")
             ->where("changed_at", ">=", $todayStart)
+            ->when($scopeUser, fn ($query) => $query->whereIn("lead_id", Lead::where("company_id", $companyId)
+                ->where("owner_user_id", $scopeUser->id)
+                ->select("id")))
             ->count();
 
-        $checklistItems = $this->operationalChecklistService->checklistForCompany($companyId);
+        $checklistItems = $scopeUser
+            ? $this->operationalChecklistService->checklistForUser($scopeUser)
+            : $this->operationalChecklistService->checklistForCompany($companyId);
         $openTasks = count($checklistItems);
         $vacuumFollowUpTasks = count(array_filter(
             $checklistItems,
@@ -81,13 +121,17 @@ class DashboardMetricsService
                 $checklistItems
             ))
             : 0.0;
-        $unassignedLeads = Lead::where("company_id", $companyId)
-            ->whereNull("owner_user_id")
-            ->count();
+        // Um lead sem dono nunca é "do SDR" — 0 é a resposta correta e evita vazar a contagem da empresa.
+        $unassignedLeads = $scopeUser
+            ? 0
+            : Lead::where("company_id", $companyId)
+                ->whereNull("owner_user_id")
+                ->count();
 
         // 1. Efetividade de conversas (Sucesso vs Perdidas)
         $successfulConversationsCount = DB::table('conversations as c')
             ->where('c.company_id', $companyId)
+            ->when($scopeUser, fn ($query) => $query->where('c.owner_user_id', $scopeUser->id))
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('messages as m1')
@@ -112,6 +156,7 @@ class DashboardMetricsService
 
         $lostConversationsCount = DB::table('conversations as c')
             ->where('c.company_id', $companyId)
+            ->when($scopeUser, fn ($query) => $query->where('c.owner_user_id', $scopeUser->id))
             ->whereExists(function ($query) {
                 $query->select(DB::raw(1))
                     ->from('messages as m')
@@ -147,6 +192,7 @@ class DashboardMetricsService
             ->join('kanban_columns as kc', 'kc.id', '=', 'latest_stage.to_column_id')
             ->select('l.source', 'kc.name as stage_name', DB::raw('count(*) as count'))
             ->where('l.company_id', $companyId)
+            ->when($scopeUser, fn ($query) => $query->where('l.owner_user_id', $scopeUser->id))
             ->groupBy('l.source', 'kc.name')
             ->get()
             ->map(function ($row) {

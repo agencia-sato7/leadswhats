@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\Domain\ConversationEventService;
 use App\Services\Domain\InboxConversationTimelineService;
-use App\Services\Domain\InboxMessageService;
 use App\Services\Domain\InboxService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -55,72 +54,6 @@ class InboxController extends Controller
 
         return response()->json([
             'data' => $result,
-        ]);
-    }
-
-    public function sendMessage(
-        Request $request,
-        int $conversationId,
-        InboxMessageService $inboxMessageService,
-        ConversationEventService $conversationEventService,
-    ): JsonResponse {
-        $validated = $request->validate([
-            'body' => ['required', 'string', 'max:2000'],
-        ]);
-
-        if (trim((string) $validated['body']) === '') {
-            return response()->json([
-                'message' => 'The body field is required.',
-                'errors' => [
-                    'body' => ['The body field is required.'],
-                ],
-            ], 422);
-        }
-        $result = $inboxMessageService->sendTextMessageForConversation(
-            $request->user(),
-            $conversationId,
-            trim((string) $validated['body']),
-        );
-
-        if (!$result) {
-            return response()->json([
-                'message' => 'Conversa não encontrada.',
-            ], 404);
-        }
-
-        if (!($result['success'] ?? false)) {
-            return response()->json([
-                'message' => (string) ($result['message'] ?? 'Não foi possível enviar a mensagem.'),
-                'provider' => $result['provider'] ?? null,
-                'error_code' => $result['error_code'] ?? null,
-            ], (int) ($result['status'] ?? 422));
-        }
-
-        $message = $result['message'];
-
-        $conversationEventService->registerMessageSent(
-            $request->user(),
-            (int) $message->conversation_id,
-            (int) $message->lead_id,
-            [
-                'source' => 'inbox_api',
-                'provider' => $message->provider,
-                'external_message_id' => $message->external_message_id,
-            ],
-        );
-
-        return response()->json([
-            'message' => 'Message sent successfully.',
-            'data' => [
-                'id' => $message->id,
-                'conversation_id' => $message->conversation_id,
-                'lead_id' => $message->lead_id,
-                'direction' => $message->direction,
-                'body' => $message->body,
-                'provider' => $message->provider,
-                'external_message_id' => $message->external_message_id,
-                'sent_at' => optional($message->sent_at)?->toISOString(),
-            ],
         ]);
     }
 

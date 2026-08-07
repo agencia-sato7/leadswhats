@@ -8,9 +8,11 @@ use App\Models\Conversation;
 use App\Models\Lead;
 use App\Models\LeadSourceHistory;
 use App\Models\Message;
+use App\Models\User;
 use App\Services\Domain\DashboardMetricsService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class DashboardMetricsServiceTest extends TestCase
@@ -177,6 +179,79 @@ class DashboardMetricsServiceTest extends TestCase
         $this->assertSame(0, $summary["metrics"]["overdue_follow_up_tasks"]);
         $this->assertSame(4, $summary["metrics"]["unassigned_leads"]);
         $this->assertSame(0.0, (float) $summary["metrics"]["oldest_pending_task_hours"]);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_summary_for_user_scopes_metrics_to_the_sdr_own_records(): void
+    {
+        Carbon::setTestNow("2026-05-06 15:00:00");
+
+        $company = Company::create([
+            "name" => "Empresa Escopo",
+            "slug" => "empresa-escopo",
+            "timezone" => "America/Sao_Paulo",
+        ]);
+
+        $sdrA = User::create([
+            "company_id" => $company->id,
+            "name" => "SDR A",
+            "email" => "sdr.a.unit@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "sdr",
+            "active" => true,
+        ]);
+
+        $sdrB = User::create([
+            "company_id" => $company->id,
+            "name" => "SDR B",
+            "email" => "sdr.b.unit@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "sdr",
+            "active" => true,
+        ]);
+
+        $leadOwnedByA = Lead::create([
+            "company_id" => $company->id,
+            "owner_user_id" => $sdrA->id,
+            "name" => "Lead da SDR A",
+            "phone_e164" => "+5511955554001",
+            "source" => "google",
+            "is_repeat_lead" => false,
+        ]);
+
+        Lead::create([
+            "company_id" => $company->id,
+            "owner_user_id" => $sdrB->id,
+            "name" => "Lead da SDR B",
+            "phone_e164" => "+5511955554002",
+            "source" => "google",
+            "is_repeat_lead" => false,
+        ]);
+
+        Lead::create([
+            "company_id" => $company->id,
+            "owner_user_id" => null,
+            "name" => "Lead sem dono",
+            "phone_e164" => "+5511955554003",
+            "source" => "desconhecido",
+            "is_repeat_lead" => false,
+        ]);
+
+        Conversation::create([
+            "company_id" => $company->id,
+            "lead_id" => $leadOwnedByA->id,
+            "owner_user_id" => $sdrA->id,
+            "status" => "active",
+            "started_at" => Carbon::parse("2026-05-06 09:00:00"),
+        ]);
+
+        $service = app(DashboardMetricsService::class);
+        $summary = $service->summaryForUser($sdrA);
+
+        $this->assertSame(1, $summary["metrics"]["new_leads_today"]);
+        $this->assertSame(1, $summary["metrics"]["active_conversations"]);
+        $this->assertSame(0, $summary["metrics"]["unassigned_leads"]);
 
         Carbon::setTestNow();
     }

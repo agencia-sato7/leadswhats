@@ -501,13 +501,6 @@ form button:focus {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
-.lw-inbox-split {
-  display: grid;
-  grid-template-columns: 360px 1fr;
-  gap: var(--lw-space-4);
-  height: 680px;
-}
-
 .lw-admin-form {
   display: grid;
   gap: var(--lw-space-4);
@@ -818,9 +811,11 @@ form button:focus {
     align-items: stretch;
     gap: var(--lw-space-3);
   }
-  .lw-inbox-split {
-    grid-template-columns: 1fr;
-    height: auto;
+  .lw-modal-overlay {
+    padding: var(--lw-space-3);
+  }
+  .lw-modal-panel {
+    max-height: 95vh;
   }
   .lw-shell-main input,
   .lw-shell-main select,
@@ -847,70 +842,89 @@ form button:focus {
   color: var(--lw-color-text-soft);
 }
 
-/* Inbox styling overrides */
-.lw-inbox-sidebar {
+/* Inbox: lista de conversas em largura total */
+.lw-inbox-list {
   border: 1px solid var(--lw-color-border);
   border-radius: var(--lw-radius-md);
-  max-height: 520px;
-  overflow-y: auto;
   background: var(--lw-color-surface-muted);
+  overflow: hidden;
 }
 
-.lw-inbox-conv-btn {
+/* .lw-shell-main prefixado para vencer a especificidade do reset genérico ".lw-shell-main button" */
+.lw-shell-main .lw-inbox-list-row {
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--lw-space-4);
   text-align: left;
   border: none;
   border-bottom: 1px solid var(--lw-color-border);
+  border-radius: 0;
   background: var(--lw-color-surface);
-  padding: var(--lw-space-3);
+  padding: var(--lw-space-4) var(--lw-space-5);
   cursor: pointer;
   color: var(--lw-color-text-soft);
+  box-shadow: none;
   transition: background-color var(--lw-transition-fast), color var(--lw-transition-fast);
 }
 
-.lw-inbox-conv-btn:hover {
+.lw-inbox-list-row:last-child {
+  border-bottom: none;
+}
+
+.lw-shell-main .lw-inbox-list-row:hover {
   background: var(--lw-color-surface-hover);
   color: var(--lw-color-text);
+  box-shadow: none;
+  transform: none;
 }
 
-.lw-inbox-conv-btn--selected {
-  background: var(--lw-color-primary-glow);
-  color: var(--lw-color-primary);
-  border-left: 3px solid var(--lw-color-primary);
+.lw-inbox-list-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
-.lw-inbox-conv-btn p {
+.lw-inbox-list-row-main p {
   margin: 0;
   color: var(--lw-color-text);
 }
 
-.lw-inbox-conv-btn small {
-  display: block;
+.lw-inbox-list-row-main small {
   color: var(--lw-color-text-tertiary);
-  margin-top: 2px;
 }
 
-.lw-inbox-detail-pane {
-  border: 1px solid var(--lw-color-border);
-  border-radius: var(--lw-radius-md);
-  padding: var(--lw-space-4);
-  background: var(--lw-color-surface);
-  min-height: 300px;
+.lw-inbox-list-row-meta {
   display: flex;
-  flex-direction: column;
-  gap: var(--lw-space-3);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lw-space-4);
+  color: var(--lw-color-text-tertiary);
+  font-size: 0.8rem;
 }
 
-.lw-inbox-detail-pane h3 {
-  margin-top: 0;
-  margin-bottom: var(--lw-space-3);
-  color: var(--lw-color-text);
+.lw-inbox-list-row-arrow {
+  flex-shrink: 0;
+  font-size: 1.1rem;
+  color: var(--lw-color-text-tertiary);
+}
+
+.lw-inbox-list-pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--lw-space-2);
+  padding: var(--lw-space-3) var(--lw-space-5);
+  border-top: 1px solid var(--lw-color-border);
+  background: var(--lw-color-surface);
 }
 
 .lw-inbox-detail-info {
   display: grid;
   gap: 4px;
-  margin-bottom: var(--lw-space-3);
 }
 
 .lw-inbox-detail-info small {
@@ -921,12 +935,84 @@ form button:focus {
 
 .lw-inbox-detail-window {
   display: block;
-  margin-bottom: var(--lw-space-3);
   font-size: 0.85rem;
   color: var(--lw-color-text-soft);
 }
 
-.lw-tab-button {
+/* Modal genérico */
+.lw-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 4, 8, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lw-space-5);
+  z-index: 1000;
+}
+
+.lw-modal-panel {
+  width: min(960px, 100%);
+  max-height: min(85vh, 900px);
+  background: var(--lw-color-surface);
+  border: 1px solid var(--lw-color-border);
+  border-radius: var(--lw-radius-lg);
+  box-shadow: var(--lw-shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.lw-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lw-space-3);
+  padding: var(--lw-space-4) var(--lw-space-5);
+  border-bottom: 1px solid var(--lw-color-border);
+  flex-shrink: 0;
+}
+
+.lw-modal-header h3 {
+  margin: 0;
+  color: var(--lw-color-text);
+}
+
+.lw-shell-main .lw-modal-close {
+  border: none;
+  background: var(--lw-color-surface-muted);
+  color: var(--lw-color-text-soft);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--lw-radius-full);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none;
+  padding: 0;
+  transition: background-color var(--lw-transition-fast), color var(--lw-transition-fast);
+}
+
+.lw-shell-main .lw-modal-close:hover {
+  background: var(--lw-color-surface-hover);
+  color: var(--lw-color-text);
+  box-shadow: none;
+  transform: none;
+}
+
+.lw-modal-body {
+  padding: var(--lw-space-5);
+  overflow-y: auto;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lw-space-4);
+}
+
+.lw-shell-main .lw-tab-button {
   background: var(--lw-color-surface-muted);
   border: 1px solid var(--lw-color-border);
   color: var(--lw-color-text-soft);
@@ -935,15 +1021,18 @@ form button:focus {
   cursor: pointer;
   font-weight: 600;
   font-size: 0.8rem;
+  box-shadow: none;
   transition: all var(--lw-transition-fast);
 }
 
-.lw-tab-button:hover {
+.lw-shell-main .lw-tab-button:hover {
   background: var(--lw-color-surface-hover);
   color: var(--lw-color-text);
+  box-shadow: none;
+  transform: none;
 }
 
-.lw-tab-button--active {
+.lw-shell-main .lw-tab-button--active {
   background: var(--lw-color-primary-glow);
   border-color: var(--lw-color-primary);
   color: var(--lw-color-primary);
@@ -951,41 +1040,58 @@ form button:focus {
 
 .lw-inbox-messages-list {
   display: grid;
-  gap: var(--lw-space-2);
-  max-height: 360px;
+  gap: var(--lw-space-3);
+  flex: 1 1 auto;
+  min-height: 240px;
   overflow-y: auto;
-  padding-right: var(--lw-space-2);
+  padding-right: var(--lw-space-3);
 }
 
 .lw-chat-bubble {
   border: 1px solid var(--lw-color-border);
   border-radius: var(--lw-radius-md);
-  padding: var(--lw-space-3);
-  background: var(--lw-color-surface-muted);
+  padding: var(--lw-space-4);
+  width: 90%;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
 .lw-chat-bubble--inbound {
-  background: var(--lw-color-success-bg);
-  border-color: rgba(16, 185, 129, 0.15);
+  background: var(--lw-color-bubble-inbound-bg);
+  border-color: var(--lw-color-bubble-inbound-border);
+  justify-self: start;
 }
 
 .lw-chat-bubble--outbound {
-  background: var(--lw-color-info-bg);
-  border-color: rgba(59, 130, 246, 0.15);
+  background: var(--lw-color-bubble-outbound-bg);
+  border-color: var(--lw-color-bubble-outbound-border);
+  justify-self: end;
 }
 
 .lw-chat-bubble p {
   margin: var(--lw-space-1) 0;
-  color: var(--lw-color-text);
+}
+
+.lw-chat-bubble--inbound p {
+  color: var(--lw-color-bubble-inbound-text);
+}
+
+.lw-chat-bubble--outbound p {
+  color: var(--lw-color-bubble-outbound-text);
 }
 
 .lw-chat-bubble small {
   display: block;
   font-size: 0.75rem;
-  color: var(--lw-color-text-tertiary);
+}
+
+.lw-chat-bubble--inbound small {
+  color: var(--lw-color-bubble-inbound-text-soft);
+}
+
+.lw-chat-bubble--outbound small {
+  color: var(--lw-color-bubble-outbound-text-soft);
 }
 
 .lw-audit-item {

@@ -11,8 +11,7 @@ use App\Models\LeadStageHistory;
 use App\Models\Message;
 use App\Models\Pipeline;
 use App\Models\User;
-use App\Services\WhatsApp\WhatsAppProviderInterface;
-use App\Services\WhatsApp\WhatsAppSendResult;
+use App\Services\Domain\ConversationEventService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -27,7 +26,6 @@ class InboxApiTest extends TestCase
         $this->getJson('/api/v1/inbox/conversations')->assertUnauthorized();
         $this->getJson('/api/v1/inbox/conversations/1')->assertUnauthorized();
         $this->getJson('/api/v1/inbox/conversations/1/events')->assertUnauthorized();
-        $this->postJson('/api/v1/inbox/conversations/1/messages', ['body' => 'oi'])->assertUnauthorized();
     }
 
     public function test_timeline_is_visible_for_gestor_admin_and_owned_sdr_and_hidden_otherwise(): void
@@ -73,11 +71,12 @@ class InboxApiTest extends TestCase
             ->getJson('/api/v1/inbox/conversations/' . $conversation->id)
             ->assertOk();
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $gestorToken])
-            ->postJson('/api/v1/inbox/conversations/' . $conversation->id . '/messages', [
-                'body' => 'Mensagem timeline',
-            ])
-            ->assertOk();
+        app(ConversationEventService::class)->registerMessageSent(
+            $gestorA,
+            $conversation->id,
+            $conversation->lead_id,
+            ['source' => 'inbox_api'],
+        );
 
         $gestorTimeline = $this->withHeaders(['Authorization' => 'Bearer ' . $gestorToken])
             ->getJson('/api/v1/inbox/conversations/' . $conversation->id . '/events')
@@ -123,264 +122,6 @@ class InboxApiTest extends TestCase
             'conversation_id' => $conversation->id,
             'event_type' => 'conversation_opened',
         ]);
-
-        Carbon::setTestNow();
-    }
-
-    public function test_gestor_and_admin_can_send_message_inside_service_window(): void
-    {
-        Carbon::setTestNow('2026-05-14 12:00:00');
-        [$company, $gestor, $admin, $column] = $this->seedCompanyWithManagerAndAdmin('empresa-send-ga', 'gestor.send.ga@test.local', 'admin.send.ga@test.local');
-
-        $conversation = $this->seedConversationWithMessages(
-            $company->id,
-            $column->id,
-            'Lead Janela Aberta',
-            '+5511995000001',
-            'google',
-            'inbound',
-            now()->subMinutes(10),
-            now()->subMinutes(10),
-        );
-
-        $gestorToken = $this->login($gestor->email);
-        $adminToken = $this->login($admin->email);
-
-        $gestorResponse = $this->withHeaders(['Authorization' => 'Bearer ' . $gestorToken])
-            ->postJson('/api/v1/inbox/conversations/' . $conversation->id . '/messages', [
-                'body' => 'Olá, como posso ajudar?',
-            ])
-            ->assertOk()
-            ->assertJsonPath('message', 'Message sent successfully.')
-            ->assertJsonPath('data.direction', 'outbound')
-            ->assertJsonPath('data.provider', 'fake');
-
-        $this->assertNotEmpty($gestorResponse->json('data.external_message_id'));
-
-        $this->withHeaders(['Authorization' => 'Bearer ' . $adminToken])
-            ->postJson('/api/v1/inbox/conversations/' . $conversation->id . '/messages', [
-                'body' => 'Olá! Retornando seu atendimento.',
-            ])
-            ->assertOk()
-            ->assertJsonPath('message', 'Message sent successfully.')
-            ->assertJsonPath('data.provider', 'fake');
-
-        $this->assertDatabaseHas('conversation_events', [
-            'company_id' => $company->id,
-            'conversation_id' => $conversation->id,
-            'lead_id' => $conversation->lead_id,
-            'user_id' => $gestor->id,
-            'event_type' => 'message_sent',
-        ]);
-
-        $this->assertDatabaseHas('conversation_events', [
-            'company_id' => $company->id,
-            'conversation_id' => $conversation->id,
-            'lead_id' => $conversation->lead_id,
-            'user_id' => $admin->id,
-            'event_type' => 'message_sent',
-        ]);
-
-        Carbon::setTestNow();
-    }
-
-    public function test_sdr_with_ownership_can_send_but_without_ownership_cannot(): void
-    {
-        Carbon::setTestNow('2026-05-14 12:00:00');
-        $company = Company::create(['name' => 'Empresa SDR Send', 'slug' => 'empresa-sdr-send']);
-        $sdrA = $this->createUser($company->id, 'SDR A', 'sdr.a.send@test.local', 'sdr');
-        $sdrB = $this->createUser($company->id, 'SDR B', 'sdr.b.send@test.local', 'sdr');
-        $column = $this->seedDefaultColumn($company->id, 'Pipeline SDR Send');
-
-        $ownedConversation = $this->seedConversationWithMessages(
-            $company->id,
-            $column->id,
-            'Lead SDR A',
-            '+5511995000002',
-            'google',
-            'inbound',
-            now()->subMinutes(20),
-            now()->subMinutes(20),
-            $sdrA->id,
-            $sdrA->id,
-        );
-
-        $notOwnedConversation = $this->seedConversationWithMessages(
-            $company->id,
-            $column->id,
-            'Lead SDR B',
-            '+5511995000003',
-            'google',
-            'inbound',
-            now()->subMinutes(30),
-            now()->subMinutes(30),
-            $sdrB->id,
-            $sdrB->id,
-        );
-
-        $tokenA = $this->login($sdrA->email);
-
-        $this->withHeaders(['Authorization' => 'Bearer ' . $tokenA])
-            ->postJson('/api/v1/inbox/conversations/' . $ownedConversation->id . '/messages', [
-                'body' => 'Atendimento SDR com ownership',
-            ])
-            ->assertOk();
-
-        $this->withHeaders(['Authorization' => 'Bearer ' . $tokenA])
-            ->postJson('/api/v1/inbox/conversations/' . $notOwnedConversation->id . '/messages', [
-                'body' => 'Tentativa sem ownership',
-            ])
-            ->assertNotFound();
-
-        $this->assertDatabaseMissing('conversation_events', [
-            'company_id' => $company->id,
-            'conversation_id' => $notOwnedConversation->id,
-            'user_id' => $sdrA->id,
-            'event_type' => 'message_sent',
-        ]);
-
-        Carbon::setTestNow();
-    }
-
-    public function test_cross_tenant_send_is_blocked_with_404(): void
-    {
-        Carbon::setTestNow('2026-05-14 12:00:00');
-        [$companyA, $gestorA, $adminA, $columnA] = $this->seedCompanyWithManagerAndAdmin('empresa-send-tenant-a', 'gestor.send.tenant.a@test.local', 'admin.send.tenant.a@test.local');
-        [$companyB, $gestorB] = $this->seedCompanyWithManagerAndAdmin('empresa-send-tenant-b', 'gestor.send.tenant.b@test.local', 'admin.send.tenant.b@test.local');
-
-        $conversationA = $this->seedConversationWithMessages(
-            $companyA->id,
-            $columnA->id,
-            'Lead Tenant A',
-            '+5511995000004',
-            'google',
-            'inbound',
-            now()->subMinutes(15),
-            now()->subMinutes(15),
-        );
-
-        $tokenB = $this->login($gestorB->email);
-
-        $this->withHeaders(['Authorization' => 'Bearer ' . $tokenB])
-            ->postJson('/api/v1/inbox/conversations/' . $conversationA->id . '/messages', [
-                'body' => 'Cross tenant',
-            ])
-            ->assertNotFound();
-
-        $this->assertDatabaseMissing('messages', [
-            'company_id' => $companyB->id,
-            'conversation_id' => $conversationA->id,
-            'direction' => 'outbound',
-            'body' => 'Cross tenant',
-        ]);
-
-        Carbon::setTestNow();
-    }
-
-    public function test_send_message_validates_body_and_service_window(): void
-    {
-        Carbon::setTestNow('2026-05-14 12:00:00');
-        [$company, $gestor, $admin, $column] = $this->seedCompanyWithManagerAndAdmin('empresa-send-validation', 'gestor.send.validation@test.local', 'admin.send.validation@test.local');
-
-        $closedConversation = $this->seedConversationWithMessages(
-            $company->id,
-            $column->id,
-            'Lead Janela Fechada',
-            '+5511995000005',
-            'google',
-            'inbound',
-            now()->subHours(30),
-            now()->subHours(30),
-        );
-
-        $token = $this->login($gestor->email);
-
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->postJson('/api/v1/inbox/conversations/' . $closedConversation->id . '/messages', [
-                'body' => '',
-            ])
-            ->assertStatus(422);
-
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->postJson('/api/v1/inbox/conversations/' . $closedConversation->id . '/messages', [
-                'body' => 'Mensagem fora da janela',
-            ])
-            ->assertStatus(422)
-            ->assertJsonPath('message', 'Service window is closed. Wait for a recent inbound message before sending.');
-
-        $this->assertDatabaseMissing('messages', [
-            'company_id' => $company->id,
-            'conversation_id' => $closedConversation->id,
-            'direction' => 'outbound',
-            'body' => 'Mensagem fora da janela',
-        ]);
-
-        Carbon::setTestNow();
-    }
-
-    public function test_provider_failure_does_not_create_outbound_message_and_detail_includes_sent_message_on_success(): void
-    {
-        Carbon::setTestNow('2026-05-14 12:00:00');
-        [$company, $gestor, $admin, $column] = $this->seedCompanyWithManagerAndAdmin('empresa-send-provider', 'gestor.send.provider@test.local', 'admin.send.provider@test.local');
-
-        $conversation = $this->seedConversationWithMessages(
-            $company->id,
-            $column->id,
-            'Lead Provider',
-            '+5511995000006',
-            'google',
-            'inbound',
-            now()->subMinutes(5),
-            now()->subMinutes(5),
-        );
-
-        $token = $this->login($gestor->email);
-
-        app()->bind(WhatsAppProviderInterface::class, static fn () => new class implements WhatsAppProviderInterface {
-            public function sendTextMessage(string $toPhone, string $body, array $context = []): WhatsAppSendResult
-            {
-                return WhatsAppSendResult::failure(
-                    provider: 'fake',
-                    errorCode: 'provider_down',
-                    errorMessage: 'Provider failed (simulated).'
-                );
-            }
-        });
-
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->postJson('/api/v1/inbox/conversations/' . $conversation->id . '/messages', [
-                'body' => 'Mensagem com falha simulada',
-            ])
-            ->assertStatus(422)
-            ->assertJsonPath('message', 'Provider failed (simulated).')
-            ->assertJsonPath('provider', 'fake')
-            ->assertJsonPath('error_code', 'provider_down');
-
-        $this->assertDatabaseMissing('messages', [
-            'company_id' => $company->id,
-            'conversation_id' => $conversation->id,
-            'direction' => 'outbound',
-            'body' => 'Mensagem com falha simulada',
-        ]);
-
-        app()->bind(WhatsAppProviderInterface::class, \App\Services\WhatsApp\FakeWhatsAppProvider::class);
-
-        $sendSuccess = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->postJson('/api/v1/inbox/conversations/' . $conversation->id . '/messages', [
-                'body' => 'Mensagem enviada com sucesso',
-            ])
-            ->assertOk()
-            ->assertJsonPath('message', 'Message sent successfully.')
-            ->assertJsonPath('data.provider', 'fake');
-
-        $sentMessageId = $sendSuccess->json('data.id');
-
-        $detail = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->getJson('/api/v1/inbox/conversations/' . $conversation->id)
-            ->assertOk();
-
-        $detailMessages = collect($detail->json('data.messages'));
-        $this->assertTrue($detailMessages->contains(fn ($item) => (int) $item['id'] === (int) $sentMessageId));
 
         Carbon::setTestNow();
     }

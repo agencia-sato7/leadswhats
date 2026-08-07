@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type {
   ReactNode,
   TableHTMLAttributes,
@@ -92,6 +93,31 @@ export function Table({ className, ...props }: TableHTMLAttributes<HTMLTableElem
   return (
     <div className="lw-table-wrap">
       <table className={join('lw-table', className)} {...props} />
+    </div>
+  );
+}
+
+export function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title?: ReactNode; children: ReactNode }) {
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="lw-modal-overlay" onClick={onClose}>
+      <div className="lw-modal-panel" onClick={(event) => event.stopPropagation()}>
+        <div className="lw-modal-header">
+          <h3>{title}</h3>
+          <button type="button" className="lw-modal-close" onClick={onClose} aria-label="Fechar">✕</button>
+        </div>
+        <div className="lw-modal-body">{children}</div>
+      </div>
     </div>
   );
 }

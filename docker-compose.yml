@@ -55,21 +55,22 @@ services:
       redis:
         condition: service_healthy
     environment:
-      APP_ENV: production
+      # APP_ENV e as credenciais de DB_* propositalmente NÃO ficam aqui: como
+      # env vars de container elas vencem o .env e o próprio phpunit.xml (que
+      # tenta forçar APP_ENV=testing / DB_CONNECTION=sqlite via <env force>),
+      # fazendo os testes (RefreshDatabase -> migrate:fresh) rodarem contra o
+      # Postgres real de dev e apagando os dados. Já estão corretas em
+      # backend/.env (APP_ENV=local, DB_CONNECTION=pgsql apontando pro mesmo
+      # host/porta/banco) — mantenha só lá.
       APP_DEBUG: "true"
       APP_URL: https://leadswhats.appsato7.com.br
       APP_SERVICE: https://leadswhats.appsato7.com.br
-      DB_CONNECTION: pgsql
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_DATABASE: leadswhats
-      DB_USERNAME: leadswhats
-      DB_PASSWORD: leadswhats
       REDIS_HOST: redis
       REDIS_PORT: 6379
       SESSION_DOMAIN: .appsato7.com.br
       SANCTUM_STATEFUL_DOMAINS: leadswhats.appsato7.com.br
       TRUSTED_PROXIES: "*"
+      PHP_CLI_SERVER_WORKERS: "4"
     command: >
       sh -c "
         apt-get update && apt-get install -y libpq-dev &&
@@ -98,6 +99,8 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    environment:
+      VITE_API_BASE_URL: http://localhost:9000/api/v1
     command: sh -lc "npm install && npm run build && npm run preview -- --host 0.0.0.0 --port 5173 --strictPort"
     ports:
       - "5174:5173"

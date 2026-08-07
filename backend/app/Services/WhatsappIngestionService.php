@@ -12,9 +12,9 @@ use App\Services\Domain\KanbanInitialPlacementService;
 use App\Services\Domain\LeadClassifierService;
 use App\Services\Domain\LeadSourceService;
 use App\Services\Domain\MarketingIntelligenceService;
+use App\Services\Domain\PhoneNormalizationService;
 use App\Services\Domain\RescueDetectorService;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\Log;
 
 class WhatsappIngestionService
 {
@@ -27,13 +27,14 @@ class WhatsappIngestionService
         private readonly KanbanInitialPlacementService $kanbanInitialPlacementService,
         private readonly AiKanbanMovementService $aiKanbanMovementService,
         private readonly MarketingIntelligenceService $marketingIntelligenceService,
+        private readonly PhoneNormalizationService $phoneNormalizer,
     ) {
     }
 
     public function ingest(Company $company, array $payload): array
     {
         $direction = $payload["direction"];
-        $phone = $this->normalizePhone($payload["phone"]);
+        $phone = $this->phoneNormalizer->normalize($payload["phone"]);
         $provider = strtolower(trim($payload["provider"] ?? "whatsapp")) ?: "whatsapp";
         $source = strtolower(trim($payload["source"] ?? "desconhecido")) ?: "desconhecido";
         $externalMessageId = isset($payload["external_message_id"]) && trim((string) $payload["external_message_id"]) !== ""
@@ -146,24 +147,6 @@ class WhatsappIngestionService
             "is_rescue" => $isRescue,
             "duplicated" => false,
         ];
-    }
-
-    private function normalizePhone(string $phone): string
-    {
-        $digits = preg_replace("/\\D+/", "", $phone);
-
-        // Detect likely-unresolved LID identifiers (very long numeric strings, >15 digits).
-        // These are not real phone numbers but WhatsApp Linked Identity fallbacks.
-        // We still store them so the lead is captured, but log a warning for follow-up.
-        if (strlen($digits) > 15) {
-            Log::warning("Phone looks like an unresolved LID identifier: {$phone} (digits: {$digits})");
-        }
-
-        if (str_starts_with($digits, "55")) {
-            return "+" . $digits;
-        }
-
-        return "+55" . $digits;
     }
 
     /**

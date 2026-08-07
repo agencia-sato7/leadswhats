@@ -14,14 +14,6 @@ const LARAVEL_WEBHOOK_URL = process.env.LARAVEL_WEBHOOK_URL || 'http://backend:8
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const LARAVEL_API_TOKEN = process.env.LARAVEL_API_TOKEN || '';
 
-const DisconnectCodes = {
-  loggedOut: 401,
-  badSession: 408,
-  connectionClosed: 428,
-  timeout: 440,
-  restartRequired: 515,
-};
-
 // Ensure sessions directory exists
 if (!existsSync(SESSIONS_DIR)) {
   mkdirSync(SESSIONS_DIR, { recursive: true });
@@ -104,7 +96,12 @@ async function notifyLaravel(companyId, event, data) {
 /**
  * Extracts the phone number from a JID or LID.
  * For @s.whatsapp.net JIDs, returns the numeric phone.
- * For @lid JIDs, tries the LID→phone mapping; falls back to the LID numeric part.
+ * For @lid JIDs, tries the LID→phone mapping. A LID is NOT a phone number
+ * (it's WhatsApp's internal privacy identifier) — when there's no mapping yet,
+ * we must never fabricate a fake phone from it, or the client sees a wrong
+ * number that doesn't match any real contact. Instead we return a `lid:`
+ * marker that preserves the raw LID so the same contact can still be matched
+ * once WhatsApp eventually shares the real number (chats.phoneNumberShare).
  */
 function resolvePhone(remoteJid) {
   if (!remoteJid) {
@@ -116,14 +113,14 @@ function resolvePhone(remoteJid) {
     return jidDecode(remoteJid)?.user || remoteJid.replace('@s.whatsapp.net', '');
   }
 
-  // LID JID — try mapping, fall back to numeric LID
+  // LID JID — only ever return a real phone if we have a confirmed mapping.
   if (isLidUser(remoteJid)) {
     const mappedJid = lidMap[remoteJid];
     if (mappedJid && isJidUser(mappedJid)) {
       return jidDecode(mappedJid)?.user || mappedJid.replace('@s.whatsapp.net', '');
     }
-    // Fallback: use the LID numeric part as a unique identifier
-    return jidDecode(remoteJid)?.user || remoteJid.replace('@lid', '');
+    const rawId = jidDecode(remoteJid)?.user || remoteJid.replace('@lid', '');
+    return `lid:${rawId}`;
   }
 
   return '';
@@ -186,6 +183,44 @@ function extractBody(message) {
   return text || '';
 }
 
+/**
+ * Builds the payload sent to Laravel for a single Baileys message, applying
+ * the same direction/JID-filtering/body-extraction rules used for both
+ * real-time messages (messages.upsert) and history backfill
+ * (messaging-history.set). Returns null if the message should be skipped
+ * (missing key, non-chat JID, or empty body).
+ */
+function buildMessagePayload(message) {
+  if (!message.key) return null;
+
+  // fromMe = mensagem enviada pelo próprio WhatsApp conectado (o atendimento).
+  // O software existe para monitorar como o atendimento responde, então essas
+  // mensagens PRECISAM ser capturadas também — não só o que o cliente manda.
+  const direction = message.key.fromMe ? 'outbound' : 'inbound';
+  const remoteJid = message.key.remoteJid || '';
+
+  // Skip non-chat messages: status broadcast, groups, newsletters, bots
+  if (isJidStatusBroadcast(remoteJid)) return null;
+  if (isJidGroup(remoteJid)) return null;
+  if (isJidNewsletter(remoteJid)) return null;
+  if (remoteJid === 'status@broadcast') return null;
+
+  const body = extractBody(message);
+  if (!body) return null;
+
+  const phone = resolvePhone(remoteJid);
+  const messageId = message.key.id || '';
+
+  return {
+    phone,
+    body,
+    direction,
+    external_message_id: messageId,
+    sent_at: new Date((message.messageTimestamp || 0) * 1000).toISOString(),
+    raw_payload: JSON.stringify(message),
+  };
+}
+
 async function startSession(companyId) {
   // If session already exists and is connected, return it
   if (sessions[companyId] && sessions[companyId].status === 'connected') {
@@ -211,7 +246,7 @@ async function startSession(companyId) {
     printQRInTerminal: false,
     auth: state,
     browser: ['LeadsWhats', 'Chrome', '1.0.0'],
-    syncFullHistory: false,
+    syncFullHistory: true,
     markOnlineOnConnect: false,
   });
 
@@ -220,18 +255,50 @@ async function startSession(companyId) {
     qrCode: null,
     status: 'connecting',
     phone: null,
+    // O Baileys reenvia lotes de histórico sobrepostos/crescentes em várias
+    // chamadas de messaging-history.set — sem isso, a mesma mensagem é
+    // reenviada (e reprocessada no Laravel) várias vezes.
+    sentHistoryMessageIds: new Set(),
   };
 
   socket.ev.on('creds.update', saveCreds);
 
-  // Build LID → phone mapping from WhatsApp's phone number sharing
-  socket.ev.on('chats.phoneNumberShare', ({ lid, jid }) => {
-    if (lid && jid) {
-      lidMap[lid] = jid;
-      saveLidMap();
-      console.log(`[${companyId}] LID mapping: ${lid} → ${jid}`);
+  // Records a LID → phone mapping and tells Laravel about it, so any lead
+  // already stored under the "lid:" placeholder gets reconciled to the real
+  // number instead of staying stuck forever.
+  const registerLidMapping = (lid, jid) => {
+    if (!lid || !jid || !isLidUser(lid) || !isJidUser(jid)) {
+      return;
     }
+    if (lidMap[lid] === jid) {
+      return;
+    }
+
+    lidMap[lid] = jid;
+    saveLidMap();
+
+    const lidDigits = jidDecode(lid)?.user || lid.replace('@lid', '');
+    const phoneDigits = jidDecode(jid)?.user || jid.replace('@s.whatsapp.net', '');
+    console.log(`[${companyId}] LID mapping: ${lid} → ${jid}`);
+    notifyLaravel(companyId, 'lid_resolved', { lid: lidDigits, phone: phoneDigits });
+  };
+
+  // WhatsApp's opportunistic phone-number-sharing event — fires rarely.
+  socket.ev.on('chats.phoneNumberShare', ({ lid, jid }) => {
+    registerLidMapping(lid, jid);
   });
+
+  // Contacts sync carries lid ↔ phone pairs for any saved contact and fires
+  // early (right after connecting) — a much faster source of LID resolution
+  // than waiting for chats.phoneNumberShare.
+  const handleContactsSync = (contacts) => {
+    for (const contact of contacts || []) {
+      const jid = contact.jid || (contact.id && isJidUser(contact.id) ? contact.id : null);
+      registerLidMapping(contact.lid, jid);
+    }
+  };
+  socket.ev.on('contacts.upsert', handleContactsSync);
+  socket.ev.on('contacts.update', handleContactsSync);
 
   socket.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;
@@ -275,9 +342,14 @@ async function startSession(companyId) {
 
       await notifyLaravel(companyId, 'disconnected', { reason, error: errorMessage });
 
-      // Handle "MAC is invalid" / corrupted session error
-      const isMacInvalid = errorMessage.includes('MAC') || errorMessage.includes('invalid') || statusCode === DisconnectCodes.badSession;
-      const isLoggedOut = reason === DisconnectReason.loggedOut || statusCode === DisconnectCodes.loggedOut;
+      // Só tratamos como sessão corrompida quando o Baileys reporta explicitamente
+      // badSession (código real 500, não 408 — 408 é connectionLost/timedOut, uma
+      // desconexão normal e recuperável) ou uma mensagem de MAC inválido específica.
+      // Um match genérico em "invalid" (ex: "Invalid frame", timeouts de rede) apagava
+      // a sessão à toa a cada instabilidade momentânea, forçando reconectar via QR
+      // repetidamente mesmo com a sessão perfeitamente válida.
+      const isMacInvalid = errorMessage.includes('Bad MAC') || statusCode === DisconnectReason.badSession;
+      const isLoggedOut = reason === DisconnectReason.loggedOut || statusCode === DisconnectReason.loggedOut;
 
       if (isMacInvalid) {
         console.log(`[${companyId}] Session corrupted (MAC invalid). Clearing session and generating new QR...`);
@@ -307,33 +379,40 @@ async function startSession(companyId) {
 
     const messages = msg.messages || [];
     for (const message of messages) {
-      if (!message.key || message.key.fromMe) continue;
+      const payload = buildMessagePayload(message);
+      if (!payload) continue;
 
-      const remoteJid = message.key.remoteJid || '';
+      console.log(`[${companyId}] Message ${payload.direction} (phone: ${payload.phone}): ${payload.body.substring(0, 50)}`);
 
-      // Skip non-chat messages: status broadcast, groups, newsletters, bots
-      if (isJidStatusBroadcast(remoteJid)) continue;
-      if (isJidGroup(remoteJid)) continue;
-      if (isJidNewsletter(remoteJid)) continue;
-      if (remoteJid === 'status@broadcast') continue;
-
-      const body = extractBody(message);
-
-      if (!body) continue;
-
-      const phone = resolvePhone(remoteJid);
-      const messageId = message.key.id || '';
-
-      console.log(`[${companyId}] Message from ${phone} (jid: ${remoteJid}): ${body.substring(0, 50)}`);
-
-      await notifyLaravel(companyId, 'message_received', {
-        phone,
-        body,
-        external_message_id: messageId,
-        sent_at: new Date((message.messageTimestamp || 0) * 1000).toISOString(),
-        raw_payload: JSON.stringify(message),
-      });
+      await notifyLaravel(companyId, 'message_received', payload);
     }
+  });
+
+  // Histórico de conversas que já existiam antes de conectar o WhatsApp.
+  // O WhatsApp decide sozinho a janela de tempo enviada (semanas a poucos
+  // meses) — não dá pra pedir um período específico. Isso permite que o
+  // app faça a primeira análise de conversas antigas, não só das novas.
+  socket.ev.on('messaging-history.set', async ({ messages }) => {
+    const incoming = messages || [];
+    const sentIds = sessions[companyId]?.sentHistoryMessageIds;
+
+    const payloads = incoming
+      .map((message) => buildMessagePayload(message))
+      .filter((payload) => payload !== null)
+      .filter((payload) => {
+        if (!sentIds || !payload.external_message_id) return true;
+        if (sentIds.has(payload.external_message_id)) return false;
+        sentIds.add(payload.external_message_id);
+        return true;
+      });
+
+    if (payloads.length === 0) {
+      return;
+    }
+
+    console.log(`[${companyId}] History sync: ${payloads.length} new message(s) from a batch of ${incoming.length}`);
+
+    await notifyLaravel(companyId, 'history_synced', { messages: payloads });
   });
 
   return getSessionState(companyId);

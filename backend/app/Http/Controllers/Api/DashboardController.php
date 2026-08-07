@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Services\Domain\DashboardMetricsService;
 use Illuminate\Http\JsonResponse;
@@ -11,8 +12,13 @@ class DashboardController extends Controller
 {
     public function summary(Request $request, DashboardMetricsService $dashboardMetricsService): JsonResponse
     {
-        $companyId = $request->user()->company_id;
+        $user = $request->user();
+        $role = $user->role?->value ?? (string) $user->role;
 
-        return response()->json($dashboardMetricsService->summaryForCompany($companyId));
+        $summary = $role === UserRole::SDR->value
+            ? $dashboardMetricsService->summaryForUser($user)
+            : $dashboardMetricsService->summaryForCompany((int) $user->company_id);
+
+        return response()->json($summary);
     }
 }

@@ -71,6 +71,16 @@
   --lw-color-info: #3b82f6;
   --lw-color-info-bg: rgba(59, 130, 246, 0.1);
 
+  /* Chat bubble colors (direção da mensagem, não reaproveita status) */
+  --lw-color-bubble-outbound-bg: rgba(124, 58, 237, 0.22);
+  --lw-color-bubble-outbound-border: rgba(124, 58, 237, 0.4);
+  --lw-color-bubble-outbound-text: #f5f3ff;
+  --lw-color-bubble-outbound-text-soft: #c4b5fd;
+  --lw-color-bubble-inbound-bg: #1a1f2c;
+  --lw-color-bubble-inbound-border: #2a3142;
+  --lw-color-bubble-inbound-text: #f1f5f9;
+  --lw-color-bubble-inbound-text-soft: #94a3b8;
+
   /* Sidebar custom scrollbar */
   --lw-scrollbar-bg: #090a0f;
   --lw-scrollbar-thumb: #2d354d;
@@ -110,6 +120,16 @@
   --lw-color-danger-bg: rgba(220, 38, 38, 0.08);
   --lw-color-info: #2563eb;
   --lw-color-info-bg: rgba(37, 99, 235, 0.08);
+
+  /* Chat bubble colors (direção da mensagem, não reaproveita status) */
+  --lw-color-bubble-outbound-bg: #ede9fe;
+  --lw-color-bubble-outbound-border: #ddd6fe;
+  --lw-color-bubble-outbound-text: #4c1d95;
+  --lw-color-bubble-outbound-text-soft: #6d28d9;
+  --lw-color-bubble-inbound-bg: #eef2f6;
+  --lw-color-bubble-inbound-border: #dbe3ea;
+  --lw-color-bubble-inbound-text: #1e293b;
+  --lw-color-bubble-inbound-text-soft: #475569;
 
   /* Sidebar custom scrollbar */
   --lw-scrollbar-bg: #f8fafc;

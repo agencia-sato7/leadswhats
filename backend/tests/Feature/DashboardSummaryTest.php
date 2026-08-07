@@ -468,4 +468,115 @@ class DashboardSummaryTest extends TestCase
 
         Carbon::setTestNow();
     }
+
+    public function test_sdr_only_sees_own_performance_while_gestor_sees_company_totals(): void
+    {
+        Carbon::setTestNow("2026-05-11 12:00:00");
+
+        $company = Company::create([
+            "name" => "Empresa Privacidade",
+            "slug" => "empresa-privacidade",
+            "timezone" => "America/Sao_Paulo",
+        ]);
+
+        $gestor = User::create([
+            "company_id" => $company->id,
+            "name" => "Gestor",
+            "email" => "gestor.privacidade@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "gestor",
+            "active" => true,
+        ]);
+
+        $sdrA = User::create([
+            "company_id" => $company->id,
+            "name" => "SDR A",
+            "email" => "sdr.a.privacidade@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "sdr",
+            "active" => true,
+        ]);
+
+        $sdrB = User::create([
+            "company_id" => $company->id,
+            "name" => "SDR B",
+            "email" => "sdr.b.privacidade@test.local",
+            "password" => Hash::make("12345678"),
+            "role" => "sdr",
+            "active" => true,
+        ]);
+
+        $leadOwnedByA = Lead::create([
+            "company_id" => $company->id,
+            "owner_user_id" => $sdrA->id,
+            "name" => "Lead da SDR A",
+            "phone_e164" => "+5511955553001",
+            "source" => "google",
+            "is_repeat_lead" => false,
+        ]);
+
+        $leadOwnedByB = Lead::create([
+            "company_id" => $company->id,
+            "owner_user_id" => $sdrB->id,
+            "name" => "Lead da SDR B",
+            "phone_e164" => "+5511955553002",
+            "source" => "google",
+            "is_repeat_lead" => false,
+        ]);
+
+        $unassignedLead = Lead::create([
+            "company_id" => $company->id,
+            "owner_user_id" => null,
+            "name" => "Lead sem dono",
+            "phone_e164" => "+5511955553003",
+            "source" => "desconhecido",
+            "is_repeat_lead" => false,
+        ]);
+
+        $conversationOwnedByA = Conversation::create([
+            "company_id" => $company->id,
+            "lead_id" => $leadOwnedByA->id,
+            "owner_user_id" => $sdrA->id,
+            "status" => "active",
+            "started_at" => Carbon::parse("2026-05-11 09:00:00"),
+        ]);
+
+        Conversation::create([
+            "company_id" => $company->id,
+            "lead_id" => $leadOwnedByB->id,
+            "owner_user_id" => $sdrB->id,
+            "status" => "active",
+            "started_at" => Carbon::parse("2026-05-11 09:00:00"),
+        ]);
+
+        $token = $this->postJson("/api/v1/auth/login", [
+            "email" => $sdrA->email,
+            "password" => "12345678",
+        ])->json("token");
+
+        $sdrResponse = $this->withHeaders([
+            "Authorization" => "Bearer " . $token,
+        ])->getJson("/api/v1/dashboard/summary");
+
+        $sdrResponse->assertOk()
+            ->assertJsonPath("metrics.new_leads_today", 1)
+            ->assertJsonPath("metrics.active_conversations", 1)
+            ->assertJsonPath("metrics.unassigned_leads", 0);
+
+        $gestorToken = $this->postJson("/api/v1/auth/login", [
+            "email" => $gestor->email,
+            "password" => "12345678",
+        ])->json("token");
+
+        $gestorResponse = $this->withHeaders([
+            "Authorization" => "Bearer " . $gestorToken,
+        ])->getJson("/api/v1/dashboard/summary");
+
+        $gestorResponse->assertOk()
+            ->assertJsonPath("metrics.new_leads_today", 3)
+            ->assertJsonPath("metrics.active_conversations", 2)
+            ->assertJsonPath("metrics.unassigned_leads", 1);
+
+        Carbon::setTestNow();
+    }
 }

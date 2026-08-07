@@ -284,20 +284,6 @@ export type InboxConversationDetail = {
   messages: InboxMessageItem[];
 };
 
-export type InboxSendMessageResponse = {
-  message: string;
-  data: {
-    id: number;
-    conversation_id: number;
-    lead_id: number;
-    direction: 'outbound';
-    body: string;
-    provider: string | null;
-    external_message_id: string | null;
-    sent_at: string;
-  };
-};
-
 export type InboxConversationEventType =
   | 'conversation_opened'
   | 'message_sent'

@@ -2,6 +2,7 @@
 
 use App\Models\Company;
 use App\Models\CompanyBusinessSetting;
+use App\Models\Lead;
 use App\Models\Pipeline;
 use App\Services\DemoBootstrapService;
 use Illuminate\Foundation\Inspiring;
@@ -27,6 +28,44 @@ Artisan::command('leadswhats:demo-bootstrap', function (DemoBootstrapService $de
     $this->line('webhook token (apenas demo/local): ****' . $summary['webhook_token_suffix']);
     $this->newLine();
 })->purpose('Prepara de forma idempotente os dados mínimos do ambiente demo/local');
+
+Artisan::command('leadswhats:fix-unresolved-lid-phones {--dry-run : Apenas lista o que seria alterado, sem salvar}', function () {
+    $dryRun = (bool) $this->option('dry-run');
+    $fixed = 0;
+
+    Lead::query()->orderBy('id')->chunkById(100, function ($leads) use (&$fixed, $dryRun) {
+        foreach ($leads as $lead) {
+            $phone = (string) $lead->phone_e164;
+
+            if (str_starts_with($phone, 'lid:')) {
+                continue;
+            }
+
+            $digits = preg_replace('/\D+/', '', $phone);
+            $length = strlen($digits);
+            $isValidWithCountryCode = in_array($length, [12, 13], true) && str_starts_with($digits, '55');
+            $isValidWithoutCountryCode = in_array($length, [10, 11], true);
+
+            if ($isValidWithCountryCode || $isValidWithoutCountryCode) {
+                continue;
+            }
+
+            $newValue = 'lid:' . $digits;
+            $this->line(sprintf('Lead #%d (empresa %d): "%s" -> "%s"', $lead->id, $lead->company_id, $phone, $newValue));
+            $fixed++;
+
+            if (!$dryRun) {
+                $lead->phone_e164 = $newValue;
+                $lead->save();
+            }
+        }
+    });
+
+    $this->newLine();
+    $this->info($dryRun
+        ? "Simulação: {$fixed} lead(s) seriam corrigidos."
+        : "{$fixed} lead(s) corrigidos.");
+})->purpose('Corrige leads com telefone corrompido (LID do WhatsApp confundido com número real do cliente)');
 
 Artisan::command('leadswhats:doctor', function () {
     $checks = [];
