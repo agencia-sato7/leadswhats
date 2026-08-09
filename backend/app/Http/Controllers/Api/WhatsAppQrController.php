@@ -70,6 +70,21 @@ class WhatsAppQrController extends Controller
 
         $integration->session_status = $sessionData["status"] ?? CompanyWhatsAppIntegrationService::SESSION_STATUS_CONNECTING;
         $integration->qr_code_base64 = $sessionData["qr_code"] ?? null;
+        $integration->baileys_phone = $sessionData["phone"] ?? $integration->baileys_phone;
+
+        // O serviço de QR pode devolver uma sessão já conectada (ex.: reconexão
+        // automática usando credenciais salvas), sem passar pelo fluxo normal de
+        // escanear o QR. Sem isto, "status" (usado pelo bloqueio geral do app e
+        // pelo dashboard) ficava preso em "not_configured" enquanto
+        // "session_status" (usado na tela de WhatsApp) já mostrava "connected".
+        if ($integration->session_status === CompanyWhatsAppIntegrationService::SESSION_STATUS_CONNECTED) {
+            $integration->status = CompanyWhatsAppIntegrationService::STATUS_CONFIGURED;
+            if (!$integration->connected_at) {
+                $integration->connected_at = now();
+            }
+            $integration->last_error = null;
+        }
+
         $integration->save();
 
         return response()->json([
@@ -93,12 +108,14 @@ class WhatsAppQrController extends Controller
 
         $remoteStatus = null;
         $remoteQrCode = null;
+        $remotePhone = null;
 
         if ($response->successful()) {
             $raw = $response->json();
             $sessionData = is_array($raw) ? ($raw["data"] ?? []) : [];
             $remoteStatus = $sessionData["status"] ?? null;
             $remoteQrCode = $sessionData["qr_code"] ?? null;
+            $remotePhone = $sessionData["phone"] ?? null;
         }
 
         // Update local DB with remote status
@@ -110,6 +127,9 @@ class WhatsAppQrController extends Controller
             $integration->session_status = $remoteStatus;
             if ($remoteQrCode) {
                 $integration->qr_code_base64 = $remoteQrCode;
+            }
+            if ($remotePhone) {
+                $integration->baileys_phone = $remotePhone;
             }
             if ($remoteStatus === CompanyWhatsAppIntegrationService::SESSION_STATUS_CONNECTED) {
                 $integration->status = CompanyWhatsAppIntegrationService::STATUS_CONFIGURED;

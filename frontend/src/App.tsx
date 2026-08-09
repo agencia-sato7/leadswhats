@@ -1585,25 +1585,46 @@ export function App() {
                         <span>Telefone: <strong>{whatsAppSettings.baileys_phone}</strong></span>
                       ) : null}
                     </div>
-                    <Button
-                      type="button"
-                      disabled={qrLoading}
-                      onClick={async () => {
-                        if (!session) return;
-                        setQrLoading(true);
-                        setQrError(null);
-                        try {
-                          await logoutQrSession(session.token);
-                          await refreshWhatsAppSettings(session.token);
-                        } catch (err) {
-                          setQrError('Não foi possível desconectar.');
-                        } finally {
-                          setQrLoading(false);
-                        }
-                      }}
-                    >
-                      {qrLoading ? 'Desconectando...' : 'Desconectar WhatsApp'}
-                    </Button>
+                    <div className="lw-flex-align-center-gap">
+                      <Button
+                        type="button"
+                        disabled={qrLoading}
+                        onClick={async () => {
+                          if (!session) return;
+                          setQrLoading(true);
+                          setQrError(null);
+                          try {
+                            const updated = await getQrStatus(session.token);
+                            setWhatsAppSettings(updated);
+                          } catch (err) {
+                            setQrError('Não foi possível verificar o status.');
+                          } finally {
+                            setQrLoading(false);
+                          }
+                        }}
+                      >
+                        {qrLoading ? 'Verificando...' : 'Verificar status'}
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={qrLoading}
+                        onClick={async () => {
+                          if (!session) return;
+                          setQrLoading(true);
+                          setQrError(null);
+                          try {
+                            await logoutQrSession(session.token);
+                            await refreshWhatsAppSettings(session.token);
+                          } catch (err) {
+                            setQrError('Não foi possível desconectar.');
+                          } finally {
+                            setQrLoading(false);
+                          }
+                        }}
+                      >
+                        {qrLoading ? 'Desconectando...' : 'Desconectar WhatsApp'}
+                      </Button>
+                    </div>
                   </Card>
                 ) : whatsAppSettings?.session_status === 'connecting' && whatsAppSettings?.qr_code_base64 ? (
                   <Card>

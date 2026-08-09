@@ -150,3 +150,4 @@ curl -X POST http://localhost:8000/api/v1/webhooks/whatsapp \
 
 - Demo do MVP: [docs/MVP_DEMO.md](docs/MVP_DEMO.md)
 - Integracao WhatsApp Cloud: [docs/WHATSAPP_META_CLOUD.md](docs/WHATSAPP_META_CLOUD.md)
+- Roadmap ate fechar o Descritivo Logico: [docs/ROADMAP.md](docs/ROADMAP.md)
