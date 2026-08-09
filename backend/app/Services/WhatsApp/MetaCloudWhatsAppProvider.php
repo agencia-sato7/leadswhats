@@ -37,7 +37,7 @@ class MetaCloudWhatsAppProvider implements WhatsAppProviderInterface
             );
         }
 
-        if ($integration->status !== CompanyWhatsAppIntegrationService::STATUS_CONFIGURED) {
+        if (!CompanyWhatsAppIntegrationService::isConfigured($integration)) {
             return WhatsAppSendResult::failure(
                 provider: self::PROVIDER_NAME,
                 errorCode: "integration_not_configured",

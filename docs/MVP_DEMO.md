@@ -1,4 +1,4 @@
-# LEADSWHATS — Roteiro de Demo do MVP (sem IA)
+# LEADSWHATS — Roteiro de Demo do MVP e Conversation Intelligence
 
 ## 1) Preparação do ambiente
 
@@ -50,7 +50,6 @@ curl -X POST http://localhost:8000/api/v1/webhooks/whatsapp \
     "company_slug": "empresa-demo",
     "phone": "(11) 98888-1111",
     "direction": "inbound",
-    "provider": "whatsapp-cloud",
     "external_message_id": "wamid.demo.inbound.001",
     "channel": "text",
     "body": "Olá, quero saber mais",
@@ -75,24 +74,26 @@ Esperado:
 ## 6) Fluxo no frontend
 
 1. Login como gestor (`http://localhost:5173`).
-2. Ver o lead no Kanban.
-3. Abrir Inbox e localizar a conversa criada.
-4. Atribuir responsável pela Inbox.
-5. Responder via Inbox (provider fake/local).
-6. Abrir aba Auditoria e validar eventos:
+2. Abrir **Conversation Intelligence** e conferir as cinco conversas do bootstrap com o estado **Ainda não analisada**.
+3. Selecionar uma conversa e usar **Analisar com IA**; conferir score, intenção, objeções, pontos positivos, erros, dados comerciais e etapa recomendada.
+4. Usar **Reanalisar** e confirmar que as versões anteriores continuam disponíveis.
+5. Ver o lead no Kanban e confirmar que a recomendação não movimentou o cartão.
+6. Abrir Inbox e localizar a conversa criada.
+7. Atribuir responsável pela Inbox.
+8. Abrir aba Auditoria e validar eventos:
    - abertura
-   - envio de mensagem
    - mudança de responsável
-7. Conferir checklist operacional.
-8. Mover card de etapa no Kanban.
-9. Abrir Contatos.
-10. Exportar CSV.
+9. Conferir checklist operacional.
+10. Mover card manualmente no Kanban.
+11. Abrir Contatos.
+12. Exportar CSV.
 
 ## 7) Limitações conhecidas do MVP
 
-- Sem IA.
-- Provider WhatsApp fake/local por padrão.
-- Envio real para WhatsApp depende de provider real futuro.
+- A estrutura de Conversation Intelligence está pronta, mas local/testing ainda usam `FakeConversationAnalyzer`, sem chamadas externas. O provedor real será definido depois.
+- Provider `fake` somente em desenvolvimento, testes e demonstração; ele não realiza chamadas externas.
+- Em production, somente `meta_cloud` é aceito e credenciais incompletas mantêm o estado desconectado.
+- O endpoint genérico de ingestão não funciona em production.
 - Templates WhatsApp não implementados.
 - Sem transcrição automática de áudio.
 - Sem relatório PDF automático.

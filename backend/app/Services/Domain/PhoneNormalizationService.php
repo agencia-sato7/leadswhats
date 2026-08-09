@@ -2,24 +2,23 @@
 
 namespace App\Services\Domain;
 
-use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 
 class PhoneNormalizationService
 {
     /**
      * Normaliza um telefone recebido do provedor de WhatsApp.
      *
-     * Nunca fabrica um número: um LID (identificador interno de privacidade do
-     * WhatsApp, não um MSISDN) não pode virar um telefone só porque tem dígitos.
-     * Quando o valor recebido já vem marcado como "lid:..." (Baileys não conseguiu
-     * mapear o LID para o número real) ou não tem uma contagem de dígitos plausível
-     * para um telefone BR, ele é preservado como "não identificado" em vez de
-     * receber um "+55" fabricado na frente.
+     * Nunca fabrica um número: somente telefones BR plausíveis são aceitos para
+     * novas gravações. Identificadores históricos que não são MSISDN permanecem
+     * preservados no banco, mas não podem entrar novamente pela ingestão.
      */
     public function normalize(string $phone): string
     {
         if (str_starts_with($phone, "lid:")) {
-            return $phone;
+            throw ValidationException::withMessages([
+                'phone' => 'Identificadores lid:* são apenas históricos e não podem ser ingeridos.',
+            ]);
         }
 
         $digits = preg_replace("/\\D+/", "", $phone);
@@ -30,8 +29,9 @@ class PhoneNormalizationService
         $isValidWithoutCountryCode = in_array($length, [10, 11], true);
 
         if (!$isValidWithCountryCode && !$isValidWithoutCountryCode) {
-            Log::warning("Telefone recebido não parece válido, tratando como não identificado: {$phone} (dígitos: {$digits})");
-            return "lid:" . $digits;
+            throw ValidationException::withMessages([
+                'phone' => 'O telefone informado não possui um formato brasileiro válido.',
+            ]);
         }
 
         if ($isValidWithCountryCode) {

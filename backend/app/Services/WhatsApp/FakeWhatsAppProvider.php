@@ -2,6 +2,8 @@
 
 namespace App\Services\WhatsApp;
 
+use RuntimeException;
+
 class FakeWhatsAppProvider implements WhatsAppProviderInterface
 {
     /**
@@ -9,6 +11,10 @@ class FakeWhatsAppProvider implements WhatsAppProviderInterface
      */
     public function sendTextMessage(string $toPhone, string $body, array $context = []): WhatsAppSendResult
     {
+        if ((string) config('app.env') === 'production') {
+            throw new RuntimeException('O provider fake não pode ser executado em production.');
+        }
+
         $fingerprint = hash("sha256", json_encode([
             "to_phone" => $toPhone,
             "body" => $body,

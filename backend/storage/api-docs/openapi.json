@@ -33,6 +33,10 @@
       "description": "Leitura de pipelines, Kanban e histórico de etapas"
     },
     {
+      "name": "Conversation Intelligence",
+      "description": "Análise gerencial, somente leitura, da qualidade das conversas"
+    },
+    {
       "name": "SaaS Admin",
       "description": "Administração da plataforma (multi-tenant SaaS)"
     },
@@ -308,10 +312,6 @@
           },
           "owner_user_id": {
             "type": "integer"
-          },
-          "provider": {
-            "type": "string",
-            "example": "whatsapp-cloud"
           }
         }
       },
@@ -1583,10 +1583,181 @@
             "nullable": true
           }
         }
+      },
+      "ConversationQualityAnalysis": {
+        "type": "object",
+        "required": [
+          "id",
+          "analysis_version",
+          "score",
+          "summary",
+          "objections",
+          "positive_points",
+          "errors",
+          "commercial_data",
+          "criteria_scores"
+        ],
+        "properties": {
+          "id": { "type": "integer" },
+          "analysis_version": { "type": "integer", "minimum": 1 },
+          "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "summary": { "type": "string" },
+          "intent": { "type": "string", "nullable": true },
+          "objections": { "type": "array", "items": { "type": "string" } },
+          "positive_points": { "type": "array", "items": { "type": "string" } },
+          "errors": { "type": "array", "items": { "type": "string" } },
+          "improvement_suggestion": { "type": "string", "nullable": true },
+          "commercial_data": { "type": "object", "additionalProperties": true },
+          "criteria_scores": {
+            "type": "object",
+            "additionalProperties": { "type": "number", "minimum": 0, "maximum": 100 }
+          },
+          "recommended_kanban_column_id": { "type": "integer", "nullable": true },
+          "recommended_kanban_column_name": { "type": "string", "nullable": true },
+          "classification_reason": { "type": "string", "nullable": true },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1, "nullable": true },
+          "prompt_version": { "type": "string" },
+          "model_provider": { "type": "string", "nullable": true },
+          "model_name": { "type": "string", "nullable": true },
+          "analyzed_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ConversationIntelligenceDetailResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "conversation_id": { "type": "integer" },
+              "analysis_status": { "type": "string", "enum": ["pending", "analyzed"] },
+              "latest_analysis": {
+                "allOf": [{ "$ref": "#/components/schemas/ConversationQualityAnalysis" }],
+                "nullable": true
+              },
+              "analysis_history": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/ConversationQualityAnalysis" }
+              },
+              "messages": {
+                "type": "array",
+                "description": "Transcrição completa somente leitura",
+                "items": { "type": "object" }
+              }
+            }
+          }
+        }
+      },
+      "ConversationIntelligenceListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "conversation_id": { "type": "integer" },
+                "lead_name": { "type": "string", "nullable": true },
+                "analysis_status": { "type": "string", "enum": ["pending", "analyzed"] },
+                "analysis_count": { "type": "integer" },
+                "latest_analysis": {
+                  "allOf": [{ "$ref": "#/components/schemas/ConversationQualityAnalysis" }],
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "meta": { "type": "object" }
+        }
+      },
+      "ConversationIntelligenceSummaryResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "total_conversations": { "type": "integer" },
+              "analyzed_conversations": { "type": "integer" },
+              "pending_conversations": { "type": "integer" },
+              "total_snapshots": { "type": "integer" },
+              "average_score": { "type": "number", "nullable": true },
+              "score_bands": { "type": "object" },
+              "top_intents": { "type": "array", "items": { "type": "object" } }
+            }
+          }
+        }
       }
     }
   },
   "paths": {
+    "/api/v1/intelligence/conversations": {
+      "get": {
+        "tags": ["Conversation Intelligence"],
+        "summary": "Lista conversas e o último snapshot de qualidade",
+        "description": "Somente admin/gestor. Isolado por company_id e independente do estado da conexão WhatsApp.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "analysis_status", "in": "query", "schema": { "type": "string", "enum": ["pending", "analyzed"] } },
+          { "name": "min_score", "in": "query", "schema": { "type": "integer", "minimum": 0, "maximum": 100 } },
+          { "name": "max_score", "in": "query", "schema": { "type": "integer", "minimum": 0, "maximum": 100 } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista paginada",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConversationIntelligenceListResponse" } } }
+          },
+          "401": { "description": "Não autenticado" },
+          "403": { "description": "Perfil sem acesso" }
+        }
+      }
+    },
+    "/api/v1/intelligence/conversations/{conversation}": {
+      "get": {
+        "tags": ["Conversation Intelligence"],
+        "summary": "Detalha transcrição e snapshots de uma conversa",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "name": "conversation", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "200": {
+            "description": "Detalhe somente leitura",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConversationIntelligenceDetailResponse" } } }
+          },
+          "404": { "description": "Conversa não encontrada na empresa" }
+        }
+      }
+    },
+    "/api/v1/intelligence/summary": {
+      "get": {
+        "tags": ["Conversation Intelligence"],
+        "summary": "Resumo gerencial dos últimos snapshots",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Resumo de qualidade",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConversationIntelligenceSummaryResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/intelligence/conversations/{conversation}/analyze": {
+      "post": {
+        "tags": ["Conversation Intelligence"],
+        "summary": "Cria um novo snapshot imutável de análise",
+        "description": "Usa FakeConversationAnalyzer em local/testing. Não movimenta o Kanban e preserva snapshots anteriores.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "name": "conversation", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "responses": {
+          "201": {
+            "description": "Snapshot criado",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ConversationIntelligenceDetailResponse" } } }
+          },
+          "404": { "description": "Conversa não encontrada na empresa" },
+          "422": { "description": "Conversa sem mensagens ou resposta estrutural inválida" },
+          "503": { "description": "Nenhum analisador configurado no ambiente" }
+        }
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "tags": [
@@ -1736,7 +1907,7 @@
         "tags": [
           "Webhook"
         ],
-        "summary": "Ingestão passiva de mensagem WhatsApp (idempotente)",
+        "summary": "Ingestão fake local de mensagem (idempotente)",
         "parameters": [
           {
             "name": "X-Webhook-Token",
@@ -1798,10 +1969,10 @@
             "description": "Token ausente/inválido ou token não configurado em produção"
           },
           "404": {
-            "description": "Empresa nao encontrada"
+            "description": "Empresa nao encontrada ou endpoint indisponível no ambiente"
           }
         },
-        "description": "Endpoint de ingestao passiva (somente leitura de eventos). A chave idempotente prioritaria e company + provider + external_message_id. Se external_message_id nao for enviado, o sistema aplica fallback por hash deterministico do conteudo do evento. Replays da mesma mensagem retornam sucesso estavel e nao duplicam message, lead, conversation nem metricas. Quando aplicavel, classificacao e efeitos derivados respeitam configuracoes comerciais da empresa (timezone, expediente, almoco, dias uteis, janela de lead repetido e threshold de vacuo/resgate). No ambiente local/testing, se company_business_settings.webhook_token estiver null, o endpoint permite fallback de compatibilidade. Em production, webhook_token null e rejeitado com 401."
+        "description": "Endpoint exclusivo do provider fake para desenvolvimento, testes e demonstração. Nunca realiza chamada externa e não é registrado em production. O provider é fixado pelo servidor como fake. A chave idempotente é company + provider + external_message_id; replays não duplicam message, lead, conversation nem métricas. Eventos reais de produção entram exclusivamente por /api/v1/webhooks/whatsapp/meta."
       }
     },
     "/api/v1/dashboard/summary": {

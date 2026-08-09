@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
-use App\Services\WhatsApp\DynamicWhatsAppProvider;
+use App\Contracts\Intelligence\ConversationAnalyzer;
+use App\Services\Intelligence\FakeConversationAnalyzer;
+use App\Services\Intelligence\UnavailableConversationAnalyzer;
 use App\Services\WhatsApp\FakeWhatsAppProvider;
 use App\Services\WhatsApp\MetaCloudWhatsAppProvider;
 use App\Services\WhatsApp\WhatsAppProviderInterface;
@@ -16,21 +18,30 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $provider = (string) config('whatsapp.provider', 'dynamic');
-        $allowFakeInProduction = (bool) config('whatsapp.allow_fake_in_production', false);
+        $provider = (string) config('whatsapp.provider', 'meta_cloud');
         $isProduction = (string) config('app.env') === 'production';
 
-        if ($isProduction && $provider === 'fake' && !$allowFakeInProduction) {
-            throw new RuntimeException('WHATSAPP_PROVIDER=fake não é permitido em production. Defina WHATSAPP_PROVIDER válido ou WHATSAPP_ALLOW_FAKE_IN_PRODUCTION=true conscientemente.');
+        if (!in_array($provider, ['fake', 'meta_cloud'], true)) {
+            throw new RuntimeException("WHATSAPP_PROVIDER inválido: {$provider}. Providers suportados: fake, meta_cloud.");
+        }
+
+        if ($isProduction && $provider !== 'meta_cloud') {
+            throw new RuntimeException('Em production, WHATSAPP_PROVIDER deve ser meta_cloud.');
         }
 
         $this->app->bind(WhatsAppProviderInterface::class, function () use ($provider) {
             return match ($provider) {
                 'fake' => app(FakeWhatsAppProvider::class),
                 'meta_cloud' => app(MetaCloudWhatsAppProvider::class),
-                'dynamic' => app(DynamicWhatsAppProvider::class),
-                default => throw new RuntimeException("WHATSAPP_PROVIDER inválido: {$provider}. Providers suportados: fake, meta_cloud, dynamic."),
             };
+        });
+
+        $this->app->bind(ConversationAnalyzer::class, function () {
+            if (app()->environment(['local', 'testing'])) {
+                return app(FakeConversationAnalyzer::class);
+            }
+
+            return app(UnavailableConversationAnalyzer::class);
         });
     }
 
@@ -42,4 +53,3 @@ class AppServiceProvider extends ServiceProvider
         //
     }
 }
-

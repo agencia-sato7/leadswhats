@@ -22,17 +22,9 @@ import {
   moveLeadStage,
   updateWhatsAppSettings,
   updateLeadOwner,
-  startQrSession,
-  getQrStatus,
-  logoutQrSession,
-  getIntelligenceSourceSummary,
-  getCreativeRanking,
-  classifySourceWithAi,
-  analyzeCreativeWithAi,
-  saveIntelligenceSettings,
-  exportLookalikeCsv,
 } from './api';
 import { AppShell, PageHeader, Sidebar, Topbar } from './components/layout';
+import { ConversationIntelligencePage } from './pages/ConversationIntelligencePage';
 import {
   Alert,
   Table,
@@ -69,8 +61,6 @@ import type {
   PipelineListItem,
   WhatsAppSettings,
   WhatsAppSettingsUpdateRequest,
-  IntelligenceSourceSummaryResponse,
-  CreativeRankItem,
 } from './types';
 
 type Session = {
@@ -99,7 +89,6 @@ function formatDateTime(value: string | null | undefined): string {
 
 function formatPhoneDisplay(phone: string | null | undefined): string {
   if (!phone) return 'Aguardando identificação do WhatsApp';
-  if (phone.startsWith('lid:')) return 'Aguardando identificação do WhatsApp';
   return phone;
 }
 
@@ -182,17 +171,6 @@ export function App() {
   const [dragOverColumnId, setDragOverColumnId] = useState<number | null>(null);
   const [pressedCardId, setPressedCardId] = useState<number | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
-  const [intelligenceSummary, setIntelligenceSummary] = useState<IntelligenceSourceSummaryResponse['data'] | null>(null);
-  const [creativeRanking, setCreativeRanking] = useState<CreativeRankItem[]>([]);
-  const [intelligenceTab, setIntelligenceTab] = useState<'origem' | 'criativos' | 'lookalike'>('origem');
-  const [intelligenceLoading, setIntelligenceLoading] = useState(false);
-  const [intelligenceError, setIntelligenceError] = useState<string | null>(null);
-  const [lookalikeStageSelection, setLookalikeStageSelection] = useState<number[]>([]);
-  const [lookalikeSaving, setLookalikeSaving] = useState(false);
-  const [lookalikeExportLoading, setLookalikeExportLoading] = useState(false);
-  const [lookalikeExportError, setLookalikeExportError] = useState<string | null>(null);
-  const [lookalikeExportSuccess, setLookalikeExportSuccess] = useState<string | null>(null);
-  const [intelligenceActionFeedback, setIntelligenceActionFeedback] = useState<string | null>(null);
   const [adminCompanies, setAdminCompanies] = useState<AdminCompanyListItem[]>([]);
   const [adminCompaniesLoading, setAdminCompaniesLoading] = useState(false);
   const [adminCompaniesError, setAdminCompaniesError] = useState<string | null>(null);
@@ -205,9 +183,6 @@ export function App() {
   const [whatsAppSaving, setWhatsAppSaving] = useState(false);
   const [whatsAppError, setWhatsAppError] = useState<string | null>(null);
   const [whatsAppSuccess, setWhatsAppSuccess] = useState<string | null>(null);
-  const [qrLoading, setQrLoading] = useState(false);
-  const [qrError, setQrError] = useState<string | null>(null);
-  const [qrPolling, setQrPolling] = useState<ReturnType<typeof setInterval> | null>(null);
   const [whatsAppForm, setWhatsAppForm] = useState<WhatsAppSettingsUpdateRequest>({
     provider: 'meta_cloud',
     phone_number: '',
@@ -330,27 +305,6 @@ export function App() {
       setRecentLeads([]);
     }
   }
-
-  async function refreshIntelligence(token: string) {
-    setIntelligenceLoading(true);
-    setIntelligenceError(null);
-    try {
-      const [summaryData, rankingData] = await Promise.all([
-        getIntelligenceSourceSummary(token),
-        getCreativeRanking(token),
-      ]);
-      setIntelligenceSummary(summaryData.data);
-      setCreativeRanking(rankingData.data);
-    } catch (err) {
-      setIntelligenceSummary(null);
-      setCreativeRanking([]);
-      setIntelligenceError(parseApiErrorMessage(err, 'Não foi possível carregar a área de Inteligência.'));
-      console.error(err);
-    } finally {
-      setIntelligenceLoading(false);
-    }
-  }
-
 
   async function refreshKanban(token: string, pipelineId: number, silent = false) {
     if (!silent) {
@@ -547,53 +501,6 @@ export function App() {
   }, [session, canManageWhatsAppSettings, activeView]);
 
   useEffect(() => {
-    if (!session || !canManageSource || activeView !== 'intelligence') return;
-    refreshIntelligence(session.token).catch((err) => console.error(err));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, canManageSource, activeView]);
-
-  // Poll QR status when on whatsappSettings page and session is connecting
-  useEffect(() => {
-    if (!session || !canManageWhatsAppSettings || activeView !== 'whatsappSettings') {
-      if (qrPolling) {
-        clearInterval(qrPolling);
-        setQrPolling(null);
-      }
-      return;
-    }
-
-    if (whatsAppSettings?.session_status === 'connecting') {
-      if (!qrPolling) {
-        const interval = setInterval(async () => {
-          try {
-            const updated = await getQrStatus(session.token);
-            setWhatsAppSettings(updated);
-            if (updated.session_status === 'connected') {
-              clearInterval(interval);
-              setQrPolling(null);
-            }
-          } catch {
-            // Silently retry
-          }
-        }, 2000);
-        setQrPolling(interval);
-      }
-    } else {
-      if (qrPolling) {
-        clearInterval(qrPolling);
-        setQrPolling(null);
-      }
-    }
-
-    return () => {
-      if (qrPolling) {
-        clearInterval(qrPolling);
-        setQrPolling(null);
-      }
-    };
-  }, [session, canManageWhatsAppSettings, activeView, whatsAppSettings?.session_status]);
-
-  useEffect(() => {
     if (!session || !selectedPipelineId || isPlatformAdmin) return;
     refreshKanban(session.token, selectedPipelineId).catch((err) => console.error(err));
   }, [session, selectedPipelineId, isPlatformAdmin]);
@@ -653,8 +560,6 @@ export function App() {
         void refreshKanban(session.token, selectedPipelineId, true).catch((err) => console.error(err));
       } else if (activeView === 'dashboard') {
         void refreshData(session.token).catch((err) => console.error(err));
-      } else if (activeView === 'intelligence') {
-        void refreshIntelligence(session.token).catch((err) => console.error(err));
       }
     }, 5000);
 
@@ -778,11 +683,6 @@ export function App() {
     setWhatsAppSettings(null);
     setWhatsAppLoading(false);
     setWhatsAppSaving(false);
-    setIntelligenceSummary(null);
-    setCreativeRanking([]);
-    setIntelligenceError(null);
-    setIntelligenceActionFeedback(null);
-    setLookalikeStageSelection([]);
     setWhatsAppError(null);
     setWhatsAppSuccess(null);
     localStorage.removeItem(STORAGE_KEY);
@@ -972,80 +872,6 @@ export function App() {
     }
   }
 
-  async function handleIntelligenceClassifySource(leadId: number) {
-    if (!session || !canManageSource) return;
-    setIntelligenceActionFeedback(null);
-    try {
-      const res = await classifySourceWithAi(session.token, leadId);
-      setIntelligenceActionFeedback(res.message);
-      await refreshIntelligence(session.token);
-      await refreshData(session.token);
-    } catch (err) {
-      setIntelligenceError(parseApiErrorMessage(err, 'Não foi possível classificar a origem com IA.'));
-    }
-  }
-
-  async function handleIntelligenceAnalyzeCreative(leadId: number) {
-    if (!session || !canManageSource) return;
-    setIntelligenceActionFeedback(null);
-    try {
-      const res = await analyzeCreativeWithAi(session.token, leadId);
-      setIntelligenceActionFeedback(res.message);
-      await refreshIntelligence(session.token);
-    } catch (err) {
-      setIntelligenceError(parseApiErrorMessage(err, 'Não foi possível analisar o criativo com IA.'));
-    }
-  }
-
-  function toggleLookalikeStage(stageId: number) {
-    setLookalikeStageSelection((prev) =>
-      prev.includes(stageId) ? prev.filter((id) => id !== stageId) : [...prev, stageId],
-    );
-  }
-
-  async function handleSaveLookalikeSettings() {
-    if (!session || !canManageSource) return;
-    setLookalikeSaving(true);
-    setIntelligenceError(null);
-    try {
-      await saveIntelligenceSettings(session.token, lookalikeStageSelection);
-      setIntelligenceActionFeedback('Configuração de Lookalike salva.');
-    } catch (err) {
-      setIntelligenceError(parseApiErrorMessage(err, 'Não foi possível salvar as configurações.'));
-    } finally {
-      setLookalikeSaving(false);
-    }
-  }
-
-  async function handleExportLookalikeCsv() {
-    if (!session || !canManageSource) return;
-    setLookalikeExportLoading(true);
-    setLookalikeExportError(null);
-    setLookalikeExportSuccess(null);
-    try {
-      const stageIds = lookalikeStageSelection.length > 0 ? lookalikeStageSelection : undefined;
-      const csvBlob = await exportLookalikeCsv(session.token, stageIds);
-
-      const fileUrl = URL.createObjectURL(csvBlob);
-      const link = document.createElement('a');
-      link.href = fileUrl;
-      link.download = 'lookalike-export.csv';
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(fileUrl);
-
-      setLookalikeExportSuccess('Download iniciado.');
-    } catch (err) {
-      console.error(err);
-      setLookalikeExportError(parseApiErrorMessage(err, 'Não foi possível exportar o CSV de Lookalike.'));
-    } finally {
-      setLookalikeExportLoading(false);
-    }
-  }
-
-
-
   function updateAdminForm(path: string, value: string | number) {
     setAdminForm((prev) => {
       const next: AdminCompanyCreateRequest = {
@@ -1129,11 +955,6 @@ export function App() {
   async function handleSaveWhatsAppSettings(event: React.FormEvent) {
     event.preventDefault();
     if (!session || !canManageWhatsAppSettings) return;
-    if (!whatsAppForm.provider) {
-      setWhatsAppError('Provider é obrigatório.');
-      return;
-    }
-
     setWhatsAppSaving(true);
     setWhatsAppError(null);
     setWhatsAppSuccess(null);
@@ -1216,7 +1037,7 @@ export function App() {
       { id: 'checklist', label: 'Checklist', subtitle: 'Tarefas operacionais' },
       { id: 'kanban', label: 'Kanban', subtitle: 'Pipeline e movimentação' },
       { id: 'contacts', label: 'Contatos', subtitle: 'Busca e exportação' },
-      ...(canManageSource ? [{ id: 'intelligence' as ActiveView, label: 'Inteligência', subtitle: 'Origem, criativos e Lookalike' }] : []),
+      ...(canManageSource ? [{ id: 'intelligence' as ActiveView, label: 'Conversation Intelligence', subtitle: 'Qualidade, intenção e oportunidades das conversas' }] : []),
       ...(canManageWhatsAppSettings ? [{ id: 'whatsappSettings' as ActiveView, label: 'WhatsApp', subtitle: 'Configuração da integração da empresa' }] : []),
     ];
   const activeNav = navSections.find((item) => item.id === activeView) ?? navSections[0];
@@ -1273,7 +1094,7 @@ export function App() {
           {loading ? <LoadingState message="Carregando dados..." /> : null}
           {error ? <ErrorState message={error} /> : null}
 
-          {!isPlatformAdmin && overview && overview.whatsapp_status !== 'configured' && activeView !== 'whatsappSettings' ? (
+          {!isPlatformAdmin && overview && overview.whatsapp_status !== 'configured' && activeView !== 'whatsappSettings' && activeView !== 'intelligence' ? (
             <div className="lw-disconnected-wrap">
               <div className="lw-disconnected-card">
                 <div className="icon">⚠️</div>
@@ -1432,7 +1253,7 @@ export function App() {
 
           {activeView === 'whatsappSettings' && canManageWhatsAppSettings ? (
             <>
-              {/* <Section>
+              <Section>
                 <PageHeader title="Configuração WhatsApp" subtitle="Configure o canal de atendimento da empresa" />
                 <div className="lw-metrics-grid lw-mt-3">
                   <MetricCard
@@ -1452,9 +1273,9 @@ export function App() {
                     variant={whatsAppSettings?.webhook_verify_token_configured ? 'default' : 'risk'}
                   />
                 </div>
-              </Section> */}
+              </Section>
 
-              {/* <Section>
+              <Section>
                 {whatsAppLoading ? <LoadingState message="Carregando configurações do WhatsApp..." /> : null}
                 {whatsAppError ? <ErrorState message={whatsAppError} /> : null}
                 {whatsAppSuccess ? <Alert variant="success">{whatsAppSuccess}</Alert> : null}
@@ -1522,11 +1343,6 @@ export function App() {
                   <form onSubmit={(event) => void handleSaveWhatsAppSettings(event)} className="lw-admin-form">
                     <Card>
                       <div className="lw-admin-grid">
-                        <FormGroup label="Provider">
-                          <Select value={whatsAppForm.provider} onChange={(event) => updateWhatsAppForm('provider', event.target.value)}>
-                            <option value="meta_cloud">meta_cloud</option>
-                          </Select>
-                        </FormGroup>
                         <FormGroup label="Phone number">
                           <Input value={whatsAppForm.phone_number ?? ''} onChange={(event) => updateWhatsAppForm('phone_number', event.target.value)} placeholder="+5511999999999" />
                         </FormGroup>
@@ -1568,125 +1384,6 @@ export function App() {
                 {!whatsAppLoading && !whatsAppSettings ? (
                   <EmptyState title="Configuração indisponível no momento." description="Tente recarregar a página e salvar novamente." />
                 ) : null}
-              </Section> */}
-
-              {/* QR Code Section */}
-              <Section>
-                <h2>Conexão via QR Code (WhatsApp Web)</h2>
-                <p>Escaneie o QR code abaixo com o WhatsApp do seu celular para conectar a empresa.</p>
-
-                {qrError ? <ErrorState message={qrError} /> : null}
-
-                {whatsAppSettings?.integration_type === 'baileys_qr' && whatsAppSettings?.session_status === 'connected' ? (
-                  <Card>
-                    <div className="lw-flex-align-center-gap lw-mb-2">
-                      <Badge variant="success">Conectado</Badge>
-                      {whatsAppSettings.baileys_phone ? (
-                        <span>Telefone: <strong>{whatsAppSettings.baileys_phone}</strong></span>
-                      ) : null}
-                    </div>
-                    <div className="lw-flex-align-center-gap">
-                      <Button
-                        type="button"
-                        disabled={qrLoading}
-                        onClick={async () => {
-                          if (!session) return;
-                          setQrLoading(true);
-                          setQrError(null);
-                          try {
-                            const updated = await getQrStatus(session.token);
-                            setWhatsAppSettings(updated);
-                          } catch (err) {
-                            setQrError('Não foi possível verificar o status.');
-                          } finally {
-                            setQrLoading(false);
-                          }
-                        }}
-                      >
-                        {qrLoading ? 'Verificando...' : 'Verificar status'}
-                      </Button>
-                      <Button
-                        type="button"
-                        disabled={qrLoading}
-                        onClick={async () => {
-                          if (!session) return;
-                          setQrLoading(true);
-                          setQrError(null);
-                          try {
-                            await logoutQrSession(session.token);
-                            await refreshWhatsAppSettings(session.token);
-                          } catch (err) {
-                            setQrError('Não foi possível desconectar.');
-                          } finally {
-                            setQrLoading(false);
-                          }
-                        }}
-                      >
-                        {qrLoading ? 'Desconectando...' : 'Desconectar WhatsApp'}
-                      </Button>
-                    </div>
-                  </Card>
-                ) : whatsAppSettings?.session_status === 'connecting' && whatsAppSettings?.qr_code_base64 ? (
-                  <Card>
-                    <div className="lw-flex-align-center-gap lw-mb-2">
-                      <Badge variant="warning">Conectando...</Badge>
-                      <span>Escaneie o QR code com o WhatsApp do celular</span>
-                    </div>
-                    <div className="lw-qr-code-container">
-                      <img
-                        src={whatsAppSettings.qr_code_base64}
-                        alt="QR Code WhatsApp"
-                        className="lw-qr-code-image"
-                        style={{ maxWidth: '300px', height: 'auto' }}
-                      />
-                    </div>
-                    <p className="lw-text-sm-soft lw-mt-2">
-                      Abra o WhatsApp no celular {'>'} Menu (três pontos) {'>'} WhatsApp Web {'>'} Escaneie o QR code
-                    </p>
-                    <Button
-                      type="button"
-                      disabled={qrLoading}
-                      onClick={async () => {
-                        if (!session) return;
-                        setQrLoading(true);
-                        setQrError(null);
-                        try {
-                          await logoutQrSession(session.token);
-                          await refreshWhatsAppSettings(session.token);
-                        } catch (err) {
-                          setQrError('Não foi possível cancelar.');
-                        } finally {
-                          setQrLoading(false);
-                        }
-                      }}
-                    >
-                      {qrLoading ? 'Cancelando...' : 'Cancelar conexão'}
-                    </Button>
-                  </Card>
-                ) : (
-                  <Card>
-                    <p>Clique no botão abaixo para gerar um QR code e conectar o WhatsApp da empresa.</p>
-                    <Button
-                      type="button"
-                      disabled={qrLoading}
-                      onClick={async () => {
-                        if (!session) return;
-                        setQrLoading(true);
-                        setQrError(null);
-                        try {
-                          await startQrSession(session.token);
-                          await refreshWhatsAppSettings(session.token);
-                        } catch (err) {
-                          setQrError('Não foi possível iniciar a sessão QR.');
-                        } finally {
-                          setQrLoading(false);
-                        }
-                      }}
-                    >
-                      {qrLoading ? 'Iniciando...' : 'Conectar via QR Code'}
-                    </Button>
-                  </Card>
-                )}
               </Section>
             </>
           ) : null}
@@ -2050,7 +1747,7 @@ export function App() {
                 <small>Horas desde última mensagem: {item.hours_since_last_message}</small>
                 <small className="lw-mb-2">Prioridade: <strong>{item.priority}</strong></small>
                 <div className="lw-flex-wrap-gap">
-                  <button disabled={item.phone.startsWith('lid:')} onClick={() => void copyText(item.phone, 'Telefone copiado!')}>Copiar telefone</button>
+                  <button onClick={() => void copyText(item.phone, 'Telefone copiado!')}>Copiar telefone</button>
                   <button onClick={() => void copyText(CHECKLIST_DEFAULT_MESSAGE, 'Mensagem padrão copiada!')}>Copiar mensagem padrão</button>
                 </div>
               </div>
@@ -2218,7 +1915,7 @@ export function App() {
                   <small>Etapa atual: {contact.current_stage || 'Sem etapa'}</small>
                   <small>Última mensagem: {formatDateTime(contact.last_message_at)}</small>
                   <small className="lw-mb-2">Criado em: {formatDateTime(contact.created_at)}</small>
-                  <button disabled={contact.phone.startsWith('lid:')} onClick={() => void copyText(contact.phone, 'Telefone copiado!')}>Copiar telefone</button>
+                  <button onClick={() => void copyText(contact.phone, 'Telefone copiado!')}>Copiar telefone</button>
                 </div>
               ))}
             </div>
@@ -2235,162 +1932,7 @@ export function App() {
       ) : null}
 
       {activeView === 'intelligence' && canManageSource ? (
-        <Section>
-          <div className="lw-flex-align-center-gap lw-mb-3">
-            <h2 className="lw-m-0">Inteligência de Marketing</h2>
-            <Badge variant="info">OpenAI</Badge>
-          </div>
-
-          {intelligenceError ? <ErrorState message={intelligenceError} /> : null}
-          {intelligenceActionFeedback ? <Alert variant="success">{intelligenceActionFeedback}</Alert> : null}
-          {intelligenceLoading ? <LoadingState message="Carregando inteligência..." /> : null}
-
-          <div className="lw-flex-wrap-gap lw-mb-3">
-            <button
-              className={`lw-tab-button ${intelligenceTab === 'origem' ? 'lw-tab-button--active' : ''}`}
-              onClick={() => setIntelligenceTab('origem')}
-            >
-              Origem
-            </button>
-            <button
-              className={`lw-tab-button ${intelligenceTab === 'criativos' ? 'lw-tab-button--active' : ''}`}
-              onClick={() => setIntelligenceTab('criativos')}
-            >
-              Criativos (Anúncios)
-            </button>
-            <button
-              className={`lw-tab-button ${intelligenceTab === 'lookalike' ? 'lw-tab-button--active' : ''}`}
-              onClick={() => setIntelligenceTab('lookalike')}
-            >
-              Lookalike
-            </button>
-          </div>
-
-          {intelligenceTab === 'origem' ? (
-            <>
-              <h3 className="lw-funnel-title">Distribuição do Funil por Origem</h3>
-              {intelligenceSummary && intelligenceSummary.funnel.length > 0 ? (
-                <div className="lw-table-wrap">
-                  <table className="lw-table">
-                    <thead>
-                      <tr>
-                        <th>Origem</th>
-                        {Array.from(new Set(intelligenceSummary.funnel.map((item) => item.stage_name))).map((stage) => (
-                          <th key={stage} className="lw-text-center">{stage}</th>
-                        ))}
-                        <th className="lw-text-center lw-font-bold">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Array.from(new Set(intelligenceSummary.funnel.map((item) => item.source))).map((source) => {
-                        const stages = Array.from(new Set(intelligenceSummary.funnel.map((item) => item.stage_name)));
-                        let rowTotal = 0;
-                        return (
-                          <tr key={source}>
-                            <td><Badge variant="info">{source.charAt(0).toUpperCase() + source.slice(1)}</Badge></td>
-                            {stages.map((stage) => {
-                              const count = intelligenceSummary.funnel.find((item) => item.source === source && item.stage_name === stage)?.count || 0;
-                              rowTotal += count;
-                              return (
-                                <td key={stage} className={`lw-text-center ${count === 0 ? 'lw-opacity-40' : ''}`}>{count}</td>
-                              );
-                            })}
-                            <td className="lw-text-center lw-font-bold lw-color-primary">{rowTotal}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <EmptyState title="Sem dados de funil cruzados." description="Leads com origem e estágio definidos alimentarão esta matriz." />
-              )}
-
-              <h3 className="lw-funnel-title lw-mt-4">Volume por Origem</h3>
-              {intelligenceSummary && intelligenceSummary.by_source.length > 0 ? (
-                <div className="lw-metrics-grid">
-                  {intelligenceSummary.by_source.map((bySource) => (
-                    <MetricCard
-                      key={bySource.source}
-                      label={bySource.source.charAt(0).toUpperCase() + bySource.source.slice(1)}
-                      value={bySource.total_leads}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <EmptyState title="Sem volume por origem." />
-              )}
-            </>
-          ) : null}
-
-          {intelligenceTab === 'criativos' ? (
-            <>
-              <h3 className="lw-funnel-title">Ranking de Criativos (Anúncios) por Vendas</h3>
-              {creativeRanking.length === 0 ? (
-                <EmptyState
-                  title="Nenhum criativo analisado ainda."
-                  description="Quando um lead enviar um link rastreado (ad_id/utm), a IA descreve o anúncio e ele aparece aqui."
-                />
-              ) : (
-                <div className="lw-contacts-grid">
-                  {creativeRanking.map((creative) => (
-                    <div key={creative.creative_id} className="lw-contact-card">
-                      <p><strong>Criativo: {creative.creative_id}</strong></p>
-                      <small>Plataforma: {creative.platform || 'n/d'}</small>
-                      {creative.headline ? <small>Headline: {creative.headline}</small> : null}
-                      {creative.cta ? <small>CTA: {creative.cta}</small> : null}
-                      {creative.description ? <small>Descrição: {creative.description}</small> : null}
-                      <small className="lw-mt-2">Leads gerados: <strong>{creative.leads_count}</strong></small>
-                      <small>Chegaram à venda: <strong>{creative.terminal_leads}</strong></small>
-                      {creative.creative_url ? (
-                        <a href={creative.creative_url} target="_blank" rel="noreferrer" className="lw-button-link">Ver link do anúncio</a>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : null}
-
-          {intelligenceTab === 'lookalike' ? (
-            <>
-              <h3 className="lw-funnel-title">Exportação para Lookalike (Público Semelhante)</h3>
-              <p>
-                Selecione as etapas finais do funil (ex: Agendou Visita, Venda Fechada) para exportar um CSV
-                com os telefones e dados dos leads altamente qualificados.
-              </p>
-              <div className="lw-flex-wrap-gap lw-mt-3 lw-mb-3">
-                {(kanban?.columns ?? []).map((column) => (
-                  <label key={column.id} className="lw-flex-align-center-gap">
-                    <input
-                      type="checkbox"
-                      checked={lookalikeStageSelection.includes(column.id)}
-                      onChange={() => toggleLookalikeStage(column.id)}
-                    />
-                    {column.name}
-                  </label>
-                ))}
-              </div>
-              {kanban && kanban.columns.length === 0 ? (
-                <p className="lw-text-sm-soft">Nenhuma coluna disponível. Configure o Kanban primeiro.</p>
-              ) : null}
-              <div className="lw-flex-wrap-gap">
-                <button type="button" onClick={() => void handleSaveLookalikeSettings()} disabled={lookalikeSaving}>
-                  {lookalikeSaving ? 'Salvando...' : 'Salvar etapas do Lookalike'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleExportLookalikeCsv()}
-                  disabled={lookalikeExportLoading}
-                >
-                  {lookalikeExportLoading ? 'Exportando...' : 'Exportar CSV p/ Lookalike'}
-                </button>
-              </div>
-              {lookalikeExportError ? <p className="lw-text-xs-danger lw-mt-2">{lookalikeExportError}</p> : null}
-              {lookalikeExportSuccess ? <p className="lw-text-xs-success lw-mt-2">{lookalikeExportSuccess}</p> : null}
-            </>
-          ) : null}
-        </Section>
+        <ConversationIntelligencePage token={session.token} />
       ) : null}
 
 

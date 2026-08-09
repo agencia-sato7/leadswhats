@@ -201,6 +201,47 @@ class MetaCloudWebhookAdapterTest extends TestCase
         ]);
     }
 
+    public function test_meta_post_does_not_ingest_when_company_credentials_are_incomplete(): void
+    {
+        $company = Company::create([
+            'name' => 'Empresa Meta Incompleta',
+            'slug' => 'empresa-meta-incompleta',
+        ]);
+
+        CompanyWhatsAppIntegration::create([
+            'company_id' => $company->id,
+            'provider' => CompanyWhatsAppIntegrationService::PROVIDER_META_CLOUD,
+            'status' => CompanyWhatsAppIntegrationService::STATUS_CONFIGURED,
+            'phone_number_id' => 'phone-number-id-incomplete',
+            'business_account_id' => null,
+            'access_token_encrypted' => null,
+        ]);
+
+        $payload = [
+            'entry' => [[
+                'changes' => [[
+                    'value' => [
+                        'metadata' => ['phone_number_id' => 'phone-number-id-incomplete'],
+                        'messages' => [[
+                            'id' => 'wamid.meta.incomplete.1',
+                            'from' => '5511999990000',
+                            'timestamp' => '1717000000',
+                            'type' => 'text',
+                            'text' => ['body' => 'Não deve ser ingerida'],
+                        ]],
+                    ],
+                ]],
+            ]],
+        ];
+
+        $this->postJson('/api/v1/webhooks/whatsapp/meta', $payload)
+            ->assertOk()
+            ->assertJsonPath('data.processed', 0)
+            ->assertJsonPath('data.unmatched', 1);
+
+        $this->assertDatabaseMissing('messages', ['external_message_id' => 'wamid.meta.incomplete.1']);
+    }
+
     public function test_internal_webhook_endpoint_still_requires_internal_token_and_processes_payload(): void
     {
         $company = Company::create([
@@ -226,7 +267,7 @@ class MetaCloudWebhookAdapterTest extends TestCase
 
         $payload = [
             'company_slug' => $company->slug,
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'external_message_id' => 'wamid.internal.adapter.1',
             'phone' => '+5511991234567',
             'direction' => 'inbound',
@@ -244,6 +285,7 @@ class MetaCloudWebhookAdapterTest extends TestCase
 
         $this->assertDatabaseHas('messages', [
             'company_id' => $company->id,
+            'provider' => 'fake',
             'external_message_id' => 'wamid.internal.adapter.1',
             'direction' => 'inbound',
             'body' => 'Mensagem interna normalizada',

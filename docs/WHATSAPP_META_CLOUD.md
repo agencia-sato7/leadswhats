@@ -9,8 +9,8 @@ Este documento descreve como configurar, testar e operar a integração real com
 Para ativar e validar a integração real com o WhatsApp Cloud API no backend, as seguintes variáveis de ambiente devem ser configuradas no arquivo `.env` do backend:
 
 ```env
-# Provedor ativo de WhatsApp (opções: fake, meta_cloud, dynamic)
-# Defina como meta_cloud para exigir envio real por Meta Cloud
+# Provedor ativo de WhatsApp (opções: fake, meta_cloud)
+# Production exige meta_cloud; fake é exclusivo de local/testing/demo
 WHATSAPP_PROVIDER=meta_cloud
 
 # Versão da API Graph da Meta utilizada
@@ -63,6 +63,8 @@ Para garantir que as requisições recebidas no webhook POST de fato vieram da M
 - **Production (`APP_ENV=production`)**: A assinatura é **estritamente obrigatória**. Se o cabeçalho estiver ausente ou a assinatura for inválida, a requisição é rejeitada.
 - **Local/Testing**: Se `WHATSAPP_CLOUD_APP_SECRET` estiver vazio ou não configurado, a validação é pulada para fins de facilidade de testes (fallback). Se estiver configurado, a assinatura é validada normalmente.
 
+Não existe fallback de provider: falha ou ausência de credenciais Meta mantém a empresa no estado **WhatsApp desconectado**. O provider `fake` nunca é selecionado automaticamente.
+
 ---
 
 ## 5. Passo a Passo de Cadastro do Webhook na Meta
@@ -105,12 +107,13 @@ Envie uma mensagem real a partir de um número de WhatsApp pessoal de teste para
   ```
 - O lead e a conversa correspondente devem ser criados na Inbox automaticamente.
 
-### C. Testar o Envio pela Inbox (Outbound)
+### C. Validar a ingestão na Inbox
 1. Acesse o painel do LEADSWHATS como Gestor ou SDR.
 2. Abra a tela de **Inbox / Atendimento**.
-3. Selecione a conversa iniciada pelo lead de teste.
-4. Digite uma mensagem no campo de texto e clique em **Enviar**.
-5. A mensagem deverá aparecer no celular do lead em poucos segundos, com a tag do provedor `meta_cloud`.
+3. Selecione a conversa criada pelo webhook oficial.
+4. Confirme que as mensagens recebidas aparecem em ordem cronológica.
+
+O LEADSWHATS opera de forma passiva; o atendente responde pelo WhatsApp Business.
 
 ---
 

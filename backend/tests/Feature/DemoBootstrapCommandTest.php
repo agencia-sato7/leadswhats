@@ -4,7 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\Company;
 use App\Models\CompanyBusinessSetting;
+use App\Models\Conversation;
+use App\Models\ConversationQualityScore;
 use App\Models\KanbanColumn;
+use App\Models\Lead;
+use App\Models\Message;
 use App\Models\Pipeline;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -106,6 +110,11 @@ class DemoBootstrapCommandTest extends TestCase
             'name' => 'Perdido',
             'position' => 5,
         ]);
+
+        $this->assertSame(5, Lead::query()->where('company_id', $company->id)->count());
+        $this->assertSame(5, Conversation::query()->where('company_id', $company->id)->count());
+        $this->assertSame(32, Message::query()->where('company_id', $company->id)->count());
+        $this->assertSame(0, ConversationQualityScore::query()->where('company_id', $company->id)->count());
     }
 
     public function test_demo_bootstrap_is_idempotent_and_does_not_duplicate_records(): void
@@ -132,6 +141,10 @@ class DemoBootstrapCommandTest extends TestCase
         $this->assertSame(1, User::query()->where('email', 'sdr@empresa.local')->count());
         $this->assertSame(1, User::query()->where('email', 'platform@leadswhats.local')->count());
         $this->assertNull(User::query()->where('email', 'platform@leadswhats.local')->value('company_id'));
+        $this->assertSame(5, Lead::query()->where('company_id', $company->id)->count());
+        $this->assertSame(5, Conversation::query()->where('company_id', $company->id)->count());
+        $this->assertSame(32, Message::query()->where('company_id', $company->id)->count());
+        $this->assertSame(0, ConversationQualityScore::query()->where('company_id', $company->id)->count());
 
         $this->assertSame(
             $settingsToken,

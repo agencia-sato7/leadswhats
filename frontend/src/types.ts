@@ -328,17 +328,13 @@ export type LeadOwnerUpdateResponse = {
 
 export type WhatsAppSettings = {
   provider: 'meta_cloud';
-  integration_type: 'meta_cloud' | 'baileys_qr';
   status: 'not_configured' | 'configured' | 'error';
-  session_status: 'disconnected' | 'connecting' | 'connected' | 'error' | null;
   phone_number: string | null;
   phone_number_id: string | null;
   business_account_id: string | null;
   access_token_configured: boolean;
   webhook_verify_token_configured: boolean;
   webhook_verify_token?: string | null;
-  qr_code_base64: string | null;
-  baileys_phone: string | null;
   connected_at: string | null;
   last_error: string | null;
 };
@@ -361,72 +357,112 @@ export type WhatsAppSettingsUpdateResponse = {
   data: WhatsAppSettings;
 };
 
-// ==== Inteligência de Marketing ====
+// ==== Conversation Intelligence ====
 
-export type IntelligenceStageCount = {
-  stage_name: string;
-  count: number;
+export type ConversationQualityAnalysis = {
+  id: number;
+  analysis_version: number;
+  score: number;
+  summary: string;
+  intent: string | null;
+  objections: string[];
+  positive_points: string[];
+  errors: string[];
+  improvement_suggestion: string | null;
+  commercial_data: Record<string, unknown>;
+  criteria_scores: Record<string, number>;
+  recommended_kanban_column_id: number | null;
+  recommended_kanban_column_name: string | null;
+  classification_reason: string | null;
+  confidence: number | null;
+  prompt_version: string;
+  model_provider: string | null;
+  model_name: string | null;
+  source_last_message_id: number | null;
+  transcript_hash: string;
+  analyzed_at: string;
 };
 
-export type IntelligenceBySource = {
-  source: string;
-  total_leads: number;
-  stages: IntelligenceStageCount[];
+export type ConversationIntelligenceListItem = {
+  conversation_id: number;
+  lead_id: number;
+  lead_name: string | null;
+  phone: string | null;
+  source: string | null;
+  owner_user_id: number | null;
+  owner_name: string | null;
+  status: string;
+  started_at: string;
+  last_message_at: string | null;
+  current_stage: string | null;
+  analysis_status: 'pending' | 'analyzed';
+  analysis_count: number;
+  latest_analysis: ConversationQualityAnalysis | null;
 };
 
-export type IntelligenceFunnelRow = {
-  source: string;
-  stage_name: string;
-  count: number;
-};
-
-export type IntelligenceSourceSummaryResponse = {
-  data: {
-    funnel: IntelligenceFunnelRow[];
-    by_source: IntelligenceBySource[];
+export type ConversationIntelligenceListResponse = {
+  data: ConversationIntelligenceListItem[];
+  meta: {
+    page: number;
+    per_page: number;
+    total: number;
+    last_page: number;
   };
 };
 
-export type CreativeRankItem = {
-  creative_id: string;
-  creative_url: string;
-  platform: string | null;
-  description: string | null;
-  headline: string | null;
-  cta: string | null;
-  image_url: string | null;
-  leads_count: number;
-  terminal_leads: number;
-};
-
-export type CreativeRankingResponse = {
-  data: CreativeRankItem[];
-};
-
-export type ClassifySourceAiResponse = {
-  message: string;
-  data: {
-    applied: boolean;
-    source: string;
-    confidence: number;
-    reason: string;
-  };
-};
-
-export type AnalyzeCreativeAiResponse = {
-  message: string;
-  data: {
-    analyzed: boolean;
+export type ConversationIntelligenceDetail = {
+  conversation_id: number;
+  status: string;
+  started_at: string;
+  last_message_at: string | null;
+  lead: {
+    lead_id: number;
+    name: string | null;
+    phone: string | null;
+    source: string | null;
     creative_id: string | null;
-    platform: string | null;
-    status: string;
-    reason: string;
+    creative_url: string | null;
+    campaign_name: string | null;
+    current_stage: string | null;
+  };
+  owner: {
+    owner_user_id: number | null;
+    name: string | null;
+  };
+  messages: Array<{
+    id: number;
+    direction: 'inbound' | 'outbound';
+    channel: string;
+    body: string | null;
+    audio_transcript: string | null;
+    sent_at: string;
+  }>;
+  analysis_status: 'pending' | 'analyzed';
+  latest_analysis: ConversationQualityAnalysis | null;
+  analysis_history: ConversationQualityAnalysis[];
+};
+
+export type ConversationIntelligenceDetailResponse = {
+  data: ConversationIntelligenceDetail;
+};
+
+export type ConversationIntelligenceSummaryResponse = {
+  data: {
+    total_conversations: number;
+    analyzed_conversations: number;
+    pending_conversations: number;
+    total_snapshots: number;
+    average_score: number | null;
+    score_bands: {
+      excellent: number;
+      attention: number;
+      critical: number;
+    };
+    top_intents: Array<{ intent: string; total: number }>;
   };
 };
 
-export type SaveIntelligenceSettingsResponse = {
+export type AnalyzeConversationResponse = {
   message: string;
-  data: {
-    lookalike_export_stage_ids: number[];
-  };
+  data: ConversationIntelligenceDetail;
 };

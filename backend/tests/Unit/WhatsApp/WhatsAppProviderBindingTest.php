@@ -2,6 +2,8 @@
 
 namespace Tests\Unit\WhatsApp;
 
+use App\Providers\AppServiceProvider;
+use App\Services\WhatsApp\FakeWhatsAppProvider;
 use App\Services\WhatsApp\MetaCloudWhatsAppProvider;
 use App\Services\WhatsApp\WhatsAppProviderInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,15 +38,43 @@ class WhatsAppProviderBindingTest extends TestCase
 
     public function test_unknown_provider_fails_with_clear_message(): void
     {
-        putenv('WHATSAPP_PROVIDER=unknown-provider');
-        $_ENV['WHATSAPP_PROVIDER'] = 'unknown-provider';
-        $_SERVER['WHATSAPP_PROVIDER'] = 'unknown-provider';
-        $this->refreshApplication();
+        config()->set('whatsapp.provider', 'unknown-provider');
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('WHATSAPP_PROVIDER inválido');
 
-        app()->make(WhatsAppProviderInterface::class);
+        (new AppServiceProvider(app()))->register();
+    }
+
+    public function test_fake_provider_is_allowed_outside_production(): void
+    {
+        config()->set('app.env', 'local');
+        config()->set('whatsapp.provider', 'fake');
+
+        (new AppServiceProvider(app()))->register();
+
+        $this->assertInstanceOf(FakeWhatsAppProvider::class, app(WhatsAppProviderInterface::class));
+    }
+
+    public function test_fake_provider_is_rejected_in_production_without_override(): void
+    {
+        config()->set('app.env', 'production');
+        config()->set('whatsapp.provider', 'fake');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('production');
+
+        (new AppServiceProvider(app()))->register();
+    }
+
+    public function test_dynamic_provider_is_rejected(): void
+    {
+        config()->set('whatsapp.provider', 'dynamic');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('WHATSAPP_PROVIDER inválido');
+
+        (new AppServiceProvider(app()))->register();
     }
 
     protected function tearDown(): void

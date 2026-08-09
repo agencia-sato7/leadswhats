@@ -108,26 +108,6 @@ services:
       - leadswhats_network
     restart: unless-stopped
 
-  whatsapp-qr-service:
-    image: node:22-alpine
-    container_name: leadswhats_qr_service
-    working_dir: /app
-    volumes:
-      - ./whatsapp-qr-service:/app
-      - /app/node_modules
-      - qr_sessions:/app/sessions
-    environment:
-      PORT: "3001"
-      LARAVEL_WEBHOOK_URL: "http://backend:9000/api/v1/webhooks/whatsapp/baileys"
-    command: sh -lc "apk add --no-cache git python3 make g++ && npm install --ignore-scripts && npm start"
-    ports:
-      - "3001:3001"
-    networks:
-      - leadswhats_network
-    restart: unless-stopped
-    depends_on:
-      - backend
-
   nginx:
     image: nginx:alpine
     container_name: leadswhats_nginx
@@ -145,7 +125,6 @@ services:
 
 volumes:
   postgres_data:
-  qr_sessions:
 
 networks:
   leadswhats_network:

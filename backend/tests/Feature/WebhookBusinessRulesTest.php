@@ -47,7 +47,7 @@ class WebhookBusinessRulesTest extends TestCase
             'company_slug' => $company->slug,
             'phone' => '(11) 97777-1111',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'channel' => 'text',
             'body' => 'Quero orçamento',
             'source' => 'google',
@@ -91,7 +91,7 @@ class WebhookBusinessRulesTest extends TestCase
             'company_slug' => $company->slug,
             'phone' => '(11) 94444-1111',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'external_message_id' => 'wamid.token.valid.1',
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ], ['X-Webhook-Token' => 'demo_valid_token_123'])
@@ -114,7 +114,7 @@ class WebhookBusinessRulesTest extends TestCase
             'company_slug' => $company->slug,
             'phone' => '(11) 94444-2222',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'external_message_id' => 'wamid.token.missing.1',
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ])->assertStatus(401);
@@ -132,7 +132,7 @@ class WebhookBusinessRulesTest extends TestCase
             'company_slug' => $company->slug,
             'phone' => '(11) 94444-3333',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'external_message_id' => 'wamid.token.invalid.1',
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ], ['X-Webhook-Token' => 'wrong-token'])->assertStatus(401);
@@ -150,13 +150,13 @@ class WebhookBusinessRulesTest extends TestCase
             'company_slug' => $company->slug,
             'phone' => '(11) 94444-4444',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'external_message_id' => 'wamid.token.null.testing.1',
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ])->assertOk();
     }
 
-    public function test_webhook_rejects_when_company_token_is_null_in_production(): void
+    public function test_fake_webhook_is_unavailable_in_production(): void
     {
         $company = Company::create(['name' => 'Empresa Fallback', 'slug' => 'empresa-fallback-production']);
         CompanyBusinessSetting::create([
@@ -172,10 +172,10 @@ class WebhookBusinessRulesTest extends TestCase
                 'company_slug' => $company->slug,
                 'phone' => '(11) 94444-5555',
                 'direction' => 'inbound',
-                'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
                 'external_message_id' => 'wamid.token.null.production.1',
                 'sent_at' => '2026-05-06T10:00:00-03:00',
-            ])->assertStatus(401);
+            ])->assertNotFound();
         } finally {
             Config::set('app.env', $originalEnv);
         }
@@ -192,7 +192,7 @@ class WebhookBusinessRulesTest extends TestCase
             'company_slug' => $companyA->slug,
             'phone' => '(11) 96666-1111',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'external_message_id' => 'wamid.tenant.a',
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ], $headers)->assertOk();
@@ -201,7 +201,7 @@ class WebhookBusinessRulesTest extends TestCase
             'company_slug' => $companyB->slug,
             'phone' => '(11) 96666-1111',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'external_message_id' => 'wamid.tenant.b',
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ], $headers)->assertOk();
@@ -250,7 +250,7 @@ class WebhookBusinessRulesTest extends TestCase
             'company_slug' => $company->slug,
             'phone' => '(11) 95555-1111',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'external_message_id' => 'wamid.kanban.init.1',
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ], $headers)->assertOk()->assertJsonPath('data.duplicated', false);
@@ -323,7 +323,7 @@ class WebhookBusinessRulesTest extends TestCase
             'company_slug' => $company->slug,
             'phone' => '(11) 95555-2222',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'external_message_id' => 'wamid.kanban.init.2',
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ], $headers)->assertOk();
@@ -346,7 +346,7 @@ class WebhookBusinessRulesTest extends TestCase
             'company_slug' => $company->slug,
             'phone' => '(11) 95555-3333',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'external_message_id' => 'wamid.kanban.init.3',
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ], $headers)->assertOk()->assertJsonPath('data.duplicated', false);
@@ -397,7 +397,7 @@ class WebhookBusinessRulesTest extends TestCase
             'company_slug' => $companyA->slug,
             'phone' => '(11) 95555-4444',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'external_message_id' => 'wamid.kanban.init.4a',
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ], $headers)->assertOk();
@@ -406,7 +406,7 @@ class WebhookBusinessRulesTest extends TestCase
             'company_slug' => $companyB->slug,
             'phone' => '(11) 95555-4445',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'external_message_id' => 'wamid.kanban.init.4b',
             'sent_at' => '2026-05-06T10:00:00-03:00',
         ], $headers)->assertOk();

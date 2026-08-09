@@ -8,15 +8,9 @@ use Illuminate\Support\Str;
 class CompanyWhatsAppIntegrationService
 {
     public const PROVIDER_META_CLOUD = "meta_cloud";
-    public const INTEGRATION_TYPE_META_CLOUD = "meta_cloud";
-    public const INTEGRATION_TYPE_BAILEYS_QR = "baileys_qr";
     public const STATUS_NOT_CONFIGURED = "not_configured";
     public const STATUS_CONFIGURED = "configured";
     public const STATUS_ERROR = "error";
-    public const SESSION_STATUS_DISCONNECTED = "disconnected";
-    public const SESSION_STATUS_CONNECTING = "connecting";
-    public const SESSION_STATUS_CONNECTED = "connected";
-    public const SESSION_STATUS_ERROR = "error";
 
     /**
      * @return array<string, mixed>
@@ -47,7 +41,7 @@ class CompanyWhatsAppIntegrationService
             $integration->status = self::STATUS_NOT_CONFIGURED;
         }
 
-        $integration->provider = (string) ($validated["provider"] ?? self::PROVIDER_META_CLOUD);
+        $integration->provider = self::PROVIDER_META_CLOUD;
         $integration->phone_number = $this->nullableString($validated, "phone_number");
         $integration->phone_number_id = $this->nullableString($validated, "phone_number_id");
         $integration->business_account_id = $this->nullableString($validated, "business_account_id");
@@ -66,7 +60,9 @@ class CompanyWhatsAppIntegrationService
             $integration->access_token_encrypted = $this->nullableString($validated, "access_token");
         }
 
-        $integration->status = $this->resolveStatus($integration);
+        $integration->status = self::hasRequiredCredentials($integration)
+            ? self::STATUS_CONFIGURED
+            : self::STATUS_NOT_CONFIGURED;
         if ($integration->status === self::STATUS_CONFIGURED && !$integration->connected_at) {
             $integration->connected_at = now();
         }
@@ -80,17 +76,23 @@ class CompanyWhatsAppIntegrationService
         return $this->toResponseData($integration->fresh());
     }
 
-    private function resolveStatus(CompanyWhatsAppIntegration $integration): string
+    public static function hasRequiredCredentials(?CompanyWhatsAppIntegration $integration): bool
     {
+        if (!$integration || $integration->provider !== self::PROVIDER_META_CLOUD) {
+            return false;
+        }
+
         $hasAccessToken = is_string($integration->access_token_encrypted) && trim($integration->access_token_encrypted) !== "";
         $hasPhoneNumberId = is_string($integration->phone_number_id) && trim($integration->phone_number_id) !== "";
         $hasBusinessAccountId = is_string($integration->business_account_id) && trim($integration->business_account_id) !== "";
 
-        if ($hasAccessToken && $hasPhoneNumberId && $hasBusinessAccountId) {
-            return self::STATUS_CONFIGURED;
-        }
+        return $hasAccessToken && $hasPhoneNumberId && $hasBusinessAccountId;
+    }
 
-        return self::STATUS_NOT_CONFIGURED;
+    public static function isConfigured(?CompanyWhatsAppIntegration $integration): bool
+    {
+        return $integration?->status === self::STATUS_CONFIGURED
+            && self::hasRequiredCredentials($integration);
     }
 
     private function nullableString(array $payload, string $key): ?string
@@ -117,35 +119,29 @@ class CompanyWhatsAppIntegrationService
         if (!$integration) {
             return [
                 "provider" => self::PROVIDER_META_CLOUD,
-                "integration_type" => self::INTEGRATION_TYPE_META_CLOUD,
                 "status" => self::STATUS_NOT_CONFIGURED,
-                "session_status" => null,
                 "phone_number" => null,
                 "phone_number_id" => null,
                 "business_account_id" => null,
                 "webhook_verify_token_configured" => false,
                 "access_token_configured" => false,
-                "qr_code_base64" => null,
-                "baileys_phone" => null,
                 "connected_at" => null,
                 "last_error" => null,
             ];
         }
 
+        $isConfigured = self::isConfigured($integration);
+
         return [
-            "provider" => $integration->provider,
-            "integration_type" => $integration->integration_type ?? self::INTEGRATION_TYPE_META_CLOUD,
-            "status" => $integration->status,
-            "session_status" => $integration->session_status,
+            "provider" => self::PROVIDER_META_CLOUD,
+            "status" => $isConfigured ? self::STATUS_CONFIGURED : self::STATUS_NOT_CONFIGURED,
             "phone_number" => $integration->phone_number,
             "phone_number_id" => $integration->phone_number_id,
             "business_account_id" => $integration->business_account_id,
             "webhook_verify_token_configured" => (bool) $integration->webhook_verify_token,
             "webhook_verify_token" => $integration->webhook_verify_token,
             "access_token_configured" => (bool) $integration->access_token_encrypted,
-            "qr_code_base64" => $integration->qr_code_base64,
-            "baileys_phone" => $integration->baileys_phone,
-            "connected_at" => $integration->connected_at?->toISOString(),
+            "connected_at" => $isConfigured ? $integration->connected_at?->toISOString() : null,
             "last_error" => $integration->last_error,
         ];
     }

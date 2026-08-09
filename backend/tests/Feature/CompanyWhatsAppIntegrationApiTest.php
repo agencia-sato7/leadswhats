@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class CompanyWhatsAppIntegrationApiTest extends TestCase
@@ -31,7 +32,16 @@ class CompanyWhatsAppIntegrationApiTest extends TestCase
             ->assertJsonPath("data.phone_number_id", null)
             ->assertJsonPath("data.business_account_id", null)
             ->assertJsonPath("data.connected_at", null)
-            ->assertJsonPath("data.last_error", null);
+            ->assertJsonPath("data.last_error", null)
+            ->assertJsonMissingPath("data.integration_type")
+            ->assertJsonMissingPath("data.session_status")
+            ->assertJsonMissingPath("data.qr_code_base64")
+            ->assertJsonMissingPath("data.baileys_phone");
+
+        $this->assertFalse(Schema::hasColumn('company_whatsapp_integrations', 'integration_type'));
+        $this->assertFalse(Schema::hasColumn('company_whatsapp_integrations', 'session_status'));
+        $this->assertFalse(Schema::hasColumn('company_whatsapp_integrations', 'qr_code_base64'));
+        $this->assertFalse(Schema::hasColumn('company_whatsapp_integrations', 'baileys_phone'));
     }
 
     public function test_gestor_get_returns_initial_state(): void

@@ -36,6 +36,8 @@ docker compose up -d
 
 Na primeira subida, o ambiente instala dependencias do frontend e sobe os servicos definidos no `docker-compose.yml`.
 
+O ambiente local deve usar `WHATSAPP_PROVIDER=fake`. Esse provider não abre sessão, não usa navegador e não realiza chamadas externas. Em `production`, a aplicação aceita exclusivamente `WHATSAPP_PROVIDER=meta_cloud`.
+
 ## Endpoints locais
 
 - API Laravel: `http://localhost:8000`
@@ -63,6 +65,12 @@ docker compose exec backend php artisan leadswhats:doctor
 - `sdr@empresa.local` / `12345678`
 
 Use essas credenciais apenas em ambiente local.
+
+## Conversation Intelligence local
+
+O comando `leadswhats:demo-bootstrap` cria cinco conversas comerciais completas sem análises pré-gravadas. Entre como gestor, abra **Conversation Intelligence** e use **Analisar com IA** para criar o primeiro snapshot; **Reanalisar** cria uma nova versão sem apagar as anteriores.
+
+Nesta etapa estrutural, `local` e `testing` usam exclusivamente `FakeConversationAnalyzer`, sem chamadas externas. Nenhum provedor real ou credencial de IA foi escolhido. Em outros ambientes, o endpoint retorna indisponível até que um analisador oficial seja implementado e configurado.
 
 ## Comandos uteis
 
@@ -105,17 +113,20 @@ jq empty backend/storage/api-docs/openapi.json
 
 - O projeto foi pensado para operacao multi-tenant por `company_id`.
 - O monitoramento de WhatsApp e passivo: o sistema nao deve enviar mensagens comerciais para leads.
+- A tela de Conversation Intelligence exibe mensagens somente para leitura e nunca movimenta o Kanban automaticamente.
 - O perfil `sdr` nao pode acessar dados de outros vendedores nem alterar configuracoes estrategicas.
 - O `docker-compose.yml` atual expoe PostgreSQL e Redis para desenvolvimento local.
 - O backend local hoje sobe com a configuracao definida no proprio `docker-compose.yml`. Se o time decidir mudar a conexao padrao do banco, atualize esse arquivo e as variaveis de ambiente em conjunto.
 
-## Webhook de ingestao
+## Webhook fake de ingestao local
 
 Endpoint:
 
 ```text
 POST /api/v1/webhooks/whatsapp
 ```
+
+Esse endpoint existe somente fora de `production`. Eventos reais de produção entram exclusivamente pelo webhook oficial `POST /api/v1/webhooks/whatsapp/meta`.
 
 Autenticacao:
 - Header `X-Webhook-Token`
@@ -130,7 +141,6 @@ curl -X POST http://localhost:8000/api/v1/webhooks/whatsapp \
     "company_slug": "empresa-demo",
     "phone": "(11) 98888-1111",
     "direction": "inbound",
-    "provider": "whatsapp-cloud",
     "external_message_id": "wamid.1234567890",
     "channel": "text",
     "body": "Ola, vi voces no Instagram",

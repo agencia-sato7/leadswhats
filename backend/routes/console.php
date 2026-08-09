@@ -2,7 +2,6 @@
 
 use App\Models\Company;
 use App\Models\CompanyBusinessSetting;
-use App\Models\Lead;
 use App\Models\Pipeline;
 use App\Services\DemoBootstrapService;
 use Illuminate\Foundation\Inspiring;
@@ -24,48 +23,11 @@ Artisan::command('leadswhats:demo-bootstrap', function (DemoBootstrapService $de
     $this->line('settings ok: ' . ($summary['settings_ok'] ? 'sim' : 'não'));
     $this->line('pipeline ok: ' . ($summary['pipeline_ok'] ? 'sim' : 'não'));
     $this->line('colunas ok: ' . ($summary['columns_ok'] ? 'sim' : 'não'));
+    $this->line('conversas demo: ' . $summary['demo_conversations_count']);
     $this->line('webhook token configurado: ' . ($summary['webhook_token_configured'] ? 'sim' : 'não'));
     $this->line('webhook token (apenas demo/local): ****' . $summary['webhook_token_suffix']);
     $this->newLine();
 })->purpose('Prepara de forma idempotente os dados mínimos do ambiente demo/local');
-
-Artisan::command('leadswhats:fix-unresolved-lid-phones {--dry-run : Apenas lista o que seria alterado, sem salvar}', function () {
-    $dryRun = (bool) $this->option('dry-run');
-    $fixed = 0;
-
-    Lead::query()->orderBy('id')->chunkById(100, function ($leads) use (&$fixed, $dryRun) {
-        foreach ($leads as $lead) {
-            $phone = (string) $lead->phone_e164;
-
-            if (str_starts_with($phone, 'lid:')) {
-                continue;
-            }
-
-            $digits = preg_replace('/\D+/', '', $phone);
-            $length = strlen($digits);
-            $isValidWithCountryCode = in_array($length, [12, 13], true) && str_starts_with($digits, '55');
-            $isValidWithoutCountryCode = in_array($length, [10, 11], true);
-
-            if ($isValidWithCountryCode || $isValidWithoutCountryCode) {
-                continue;
-            }
-
-            $newValue = 'lid:' . $digits;
-            $this->line(sprintf('Lead #%d (empresa %d): "%s" -> "%s"', $lead->id, $lead->company_id, $phone, $newValue));
-            $fixed++;
-
-            if (!$dryRun) {
-                $lead->phone_e164 = $newValue;
-                $lead->save();
-            }
-        }
-    });
-
-    $this->newLine();
-    $this->info($dryRun
-        ? "Simulação: {$fixed} lead(s) seriam corrigidos."
-        : "{$fixed} lead(s) corrigidos.");
-})->purpose('Corrige leads com telefone corrompido (LID do WhatsApp confundido com número real do cliente)');
 
 Artisan::command('leadswhats:doctor', function () {
     $checks = [];
@@ -80,15 +42,17 @@ Artisan::command('leadswhats:doctor', function () {
 
     $env = (string) config('app.env');
     $debug = (bool) config('app.debug');
-    $provider = (string) config('whatsapp.provider', 'fake');
-    $allowFakeInProduction = (bool) config('whatsapp.allow_fake_in_production', false);
+    $provider = (string) config('whatsapp.provider', 'meta_cloud');
 
     $pushCheck('APP_ENV', 'OK', $env);
     $pushCheck('APP_DEBUG', $debug ? 'WARN' : 'OK', $debug ? 'true' : 'false');
-    $pushCheck('WHATSAPP_PROVIDER', $provider === 'fake' ? 'WARN' : 'OK', $provider);
+    $providerIsSupported = in_array($provider, ['fake', 'meta_cloud'], true);
+    $pushCheck('WHATSAPP_PROVIDER', !$providerIsSupported ? 'FAIL' : ($provider === 'fake' ? 'WARN' : 'OK'), $provider);
 
-    if ($env === 'production' && $provider === 'fake' && !$allowFakeInProduction) {
-        $pushCheck('WHATSAPP_PROVIDER_POLICY', 'FAIL', 'Provider fake ativo em production sem allow explícito.');
+    if (!$providerIsSupported) {
+        $pushCheck('WHATSAPP_PROVIDER_POLICY', 'FAIL', 'Provider não suportado. Use fake ou meta_cloud.');
+    } elseif ($env === 'production' && $provider !== 'meta_cloud') {
+        $pushCheck('WHATSAPP_PROVIDER_POLICY', 'FAIL', 'Production exige obrigatoriamente o provider meta_cloud.');
     } else {
         $pushCheck('WHATSAPP_PROVIDER_POLICY', 'OK', 'Policy de provider válida para o ambiente.');
     }
@@ -101,9 +65,23 @@ Artisan::command('leadswhats:doctor', function () {
             $pushCheck('WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN', 'OK', 'configurado');
         }
 
+        $metaAppSecret = (string) config('whatsapp.cloud_app_secret');
+        if ($metaAppSecret === '') {
+            $pushCheck('WHATSAPP_CLOUD_APP_SECRET', 'FAIL', 'App secret da Meta ausente (WHATSAPP_CLOUD_APP_SECRET).');
+        } else {
+            $pushCheck('WHATSAPP_CLOUD_APP_SECRET', 'OK', 'configurado');
+        }
+
         if (Schema::hasTable('company_whatsapp_integrations')) {
             $configuredCount = DB::table('company_whatsapp_integrations')
+                ->where('provider', 'meta_cloud')
                 ->where('status', 'configured')
+                ->whereNotNull('access_token_encrypted')
+                ->where('access_token_encrypted', '!=', '')
+                ->whereNotNull('phone_number_id')
+                ->where('phone_number_id', '!=', '')
+                ->whereNotNull('business_account_id')
+                ->where('business_account_id', '!=', '')
                 ->count();
             if ($configuredCount === 0) {
                 $pushCheck('META_CLOUD_INTEGRATIONS', 'WARN', 'Nenhuma empresa possui integração de WhatsApp configurada.');
@@ -172,4 +150,3 @@ Artisan::command('leadswhats:doctor', function () {
 
     return $hasFail ? 1 : 0;
 })->purpose('Valida readiness operacional e configuração crítica do ambiente');
-

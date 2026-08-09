@@ -24,7 +24,6 @@ class CompanyBusinessSetting extends Model
         'follow_up_sla_hours',
         'stale_conversation_hours',
         'webhook_token',
-        'lookalike_export_stage_ids',
     ];
 
     protected function casts(): array

@@ -5,16 +5,15 @@ namespace App\Services;
 use App\Models\Company;
 use App\Models\Lead;
 use App\Models\Message;
-use App\Services\Domain\AiKanbanMovementService;
 use App\Services\Domain\ConversationResolverService;
 use App\Services\Domain\FirstResponseCalculatorService;
 use App\Services\Domain\KanbanInitialPlacementService;
 use App\Services\Domain\LeadClassifierService;
 use App\Services\Domain\LeadSourceService;
-use App\Services\Domain\MarketingIntelligenceService;
 use App\Services\Domain\PhoneNormalizationService;
 use App\Services\Domain\RescueDetectorService;
 use Carbon\Carbon;
+use InvalidArgumentException;
 
 class WhatsappIngestionService
 {
@@ -25,8 +24,6 @@ class WhatsappIngestionService
         private readonly RescueDetectorService $rescueDetector,
         private readonly LeadSourceService $leadSourceService,
         private readonly KanbanInitialPlacementService $kanbanInitialPlacementService,
-        private readonly AiKanbanMovementService $aiKanbanMovementService,
-        private readonly MarketingIntelligenceService $marketingIntelligenceService,
         private readonly PhoneNormalizationService $phoneNormalizer,
     ) {
     }
@@ -35,8 +32,16 @@ class WhatsappIngestionService
     {
         $direction = $payload["direction"];
         $phone = $this->phoneNormalizer->normalize($payload["phone"]);
-        $provider = strtolower(trim($payload["provider"] ?? "whatsapp")) ?: "whatsapp";
+        $provider = strtolower(trim($payload["provider"] ?? ""));
         $source = strtolower(trim($payload["source"] ?? "desconhecido")) ?: "desconhecido";
+
+        if (!in_array($provider, ['fake', 'meta_cloud'], true)) {
+            throw new InvalidArgumentException('Provider de ingestão inválido. Use fake ou meta_cloud.');
+        }
+
+        if (in_array($source, ['baileys_qr', 'baileys_qr_history', 'whatsapp_qr'], true)) {
+            throw new InvalidArgumentException('A origem informada é apenas histórica e não aceita novas gravações.');
+        }
         $externalMessageId = isset($payload["external_message_id"]) && trim((string) $payload["external_message_id"]) !== ""
             ? trim((string) $payload["external_message_id"])
             : null;
@@ -136,10 +141,6 @@ class WhatsappIngestionService
 
         $lead->save();
 
-        $this->applyAiIntelligenceIfNeeded($lead, $direction);
-
-        $this->aiKanbanMovementService->evaluateAndMove($company->id, $lead->id);
-
         return [
             "lead_id" => $lead->id,
             "conversation_id" => $conversation->id,
@@ -149,52 +150,4 @@ class WhatsappIngestionService
         ];
     }
 
-    /**
-     * Uses AI marketing intelligence on new inbound leads whose origin was not
-     * tracked by the incoming payload, so the lead can be attributed to a
-     * Facebook/Instagram/Google/TikTok campaign automatically.
-     */
-    private function applyAiIntelligenceIfNeeded(Lead $lead, string $direction): void
-    {
-        if ($direction !== "inbound") {
-            return;
-        }
-
-        // Only attempt automatic classification when the source is unknown.
-        if ($lead->source !== "desconhecido" && $lead->source !== "meta_cloud" && $lead->source !== "whatsapp_qr") {
-            // Still try to detect a tracked creative link.
-            $this->tryDetectCreative($lead);
-            return;
-        }
-
-        $result = $this->marketingIntelligenceService->classifyLeadSourceByAi($lead);
-        $lead->refresh();
-
-        $this->tryDetectCreative($lead);
-    }
-
-    private function tryDetectCreative(Lead $lead): void
-    {
-        if ($lead->creative_url) {
-            return;
-        }
-
-        $firstMessage = \App\Models\Message::query()
-            ->where("company_id", $lead->company_id)
-            ->where("lead_id", $lead->id)
-            ->where("direction", "inbound")
-            ->orderBy("sent_at")
-            ->orderBy("id")
-            ->value("body");
-
-        if (!$firstMessage || !preg_match('/https?:\/\/[^\s]+/i', (string) $firstMessage)) {
-            return;
-        }
-
-        try {
-            $this->marketingIntelligenceService->analyzeLeadCreative($lead);
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::warning("Falha ao analisar criativo via IA: " . $e->getMessage());
-        }
-    }
 }

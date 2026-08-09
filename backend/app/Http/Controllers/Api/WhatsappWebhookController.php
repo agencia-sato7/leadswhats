@@ -11,21 +11,26 @@ use App\Services\WhatsappIngestionService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\Response;
 
 class WhatsappWebhookController extends Controller
 {
     public function ingest(Request $request, WhatsappIngestionService $service): JsonResponse
     {
+        if ((string) config('app.env') === 'production' || config('whatsapp.provider') !== 'fake') {
+            abort(404);
+        }
+
         $validated = $request->validate([
             'company_slug' => ['required', 'string'],
             'phone' => ['required', 'string'],
             'direction' => ['required', 'in:inbound,outbound'],
-            'provider' => ['nullable', 'string', 'max:60'],
+            'provider' => ['nullable', 'string', Rule::in(['fake'])],
             'channel' => ['nullable', 'in:text,audio'],
             'body' => ['nullable', 'string'],
             'audio_transcript' => ['nullable', 'string'],
-            'source' => ['nullable', 'string'],
+            'source' => ['nullable', 'string', Rule::notIn(['baileys_qr', 'baileys_qr_history', 'whatsapp_qr'])],
             'lead_name' => ['nullable', 'string'],
             'external_message_id' => ['nullable', 'string'],
             'sent_at' => ['nullable', 'date'],
@@ -51,6 +56,7 @@ class WhatsappWebhookController extends Controller
             return response()->json(['message' => 'Webhook token não configurado.'], 401);
         }
 
+        $validated['provider'] = 'fake';
         $validated['raw_payload'] = $request->all();
 
         $result = $service->ingest($company, $validated);
@@ -138,7 +144,7 @@ class WhatsappWebhookController extends Controller
                     ->where('phone_number_id', $phoneNumberId)
                     ->first();
 
-                if (!$integration || !$integration->company_id) {
+                if (!CompanyWhatsAppIntegrationService::isConfigured($integration) || !$integration?->company_id) {
                     $unmatched++;
                     continue;
                 }
@@ -223,8 +229,10 @@ class WhatsappWebhookController extends Controller
 
         return CompanyWhatsAppIntegration::query()
             ->where('provider', CompanyWhatsAppIntegrationService::PROVIDER_META_CLOUD)
+            ->where('status', CompanyWhatsAppIntegrationService::STATUS_CONFIGURED)
             ->whereNotNull('webhook_verify_token')
             ->where('webhook_verify_token', $providedToken)
-            ->exists();
+            ->get()
+            ->contains(fn (CompanyWhatsAppIntegration $integration): bool => CompanyWhatsAppIntegrationService::isConfigured($integration));
     }
 }

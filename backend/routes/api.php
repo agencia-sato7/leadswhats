@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AdminCompanyController;
 use App\Http\Controllers\Api\BootstrapController;
 use App\Http\Controllers\Api\ContactController;
+use App\Http\Controllers\Api\ConversationIntelligenceController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\InboxController;
 use App\Http\Controllers\Api\LeadStageHistoryController;
@@ -16,17 +17,15 @@ use App\Http\Controllers\Api\TaskChecklistController;
 use App\Http\Controllers\Api\SettingsWhatsAppController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WhatsappWebhookController;
-use App\Http\Controllers\Api\WhatsAppQrController;
-use App\Http\Controllers\Api\BaileysWebhookController;
-use App\Http\Controllers\Api\MarketingIntelligenceController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
     Route::post('/auth/login', [AuthController::class, 'login']);
-    Route::post('/webhooks/whatsapp', [WhatsappWebhookController::class, 'ingest']);
+    if (!app()->environment('production')) {
+        Route::post('/webhooks/whatsapp', [WhatsappWebhookController::class, 'ingest']);
+    }
     Route::get('/webhooks/whatsapp/meta', [WhatsappWebhookController::class, 'verifyMeta']);
     Route::post('/webhooks/whatsapp/meta', [WhatsappWebhookController::class, 'ingestMeta']);
-    Route::post('/webhooks/whatsapp/baileys', [BaileysWebhookController::class, 'ingest']);
 
     Route::middleware('auth.token')->group(function () {
         Route::get('/auth/me', [AuthController::class, 'me']);
@@ -49,11 +48,14 @@ Route::prefix('v1')->group(function () {
         Route::put('/settings/whatsapp', [SettingsWhatsAppController::class, 'update'])
             ->middleware('role:admin,gestor');
 
-        Route::post('/whatsapp/qr/start', [WhatsAppQrController::class, 'start'])
+        // Intelligence lê conversas já persistidas e não depende do estado da conexão WhatsApp.
+        Route::get('/intelligence/conversations', [ConversationIntelligenceController::class, 'index'])
             ->middleware('role:admin,gestor');
-        Route::get('/whatsapp/qr/status', [WhatsAppQrController::class, 'status'])
-            ->middleware('role:admin,gestor,sdr');
-        Route::post('/whatsapp/qr/logout', [WhatsAppQrController::class, 'logout'])
+        Route::get('/intelligence/conversations/{conversation}', [ConversationIntelligenceController::class, 'show'])
+            ->middleware('role:admin,gestor');
+        Route::get('/intelligence/summary', [ConversationIntelligenceController::class, 'summary'])
+            ->middleware('role:admin,gestor');
+        Route::post('/intelligence/conversations/{conversation}/analyze', [ConversationIntelligenceController::class, 'analyze'])
             ->middleware('role:admin,gestor');
 
         Route::middleware('whatsapp.connected')->group(function () {
@@ -114,19 +116,6 @@ Route::prefix('v1')->group(function () {
             Route::patch('/leads/{leadId}/source', [LeadSourceController::class, 'classify'])
                 ->middleware('role:admin,gestor');
 
-            // ==== Inteligência de Marketing (Origem, Criativos e Lookalike) ====
-            Route::get('/intelligence/sources/summary', [MarketingIntelligenceController::class, 'sourcesSummary'])
-                ->middleware('role:admin,gestor');
-            Route::get('/intelligence/creatives', [MarketingIntelligenceController::class, 'creativeRanking'])
-                ->middleware('role:admin,gestor');
-            Route::post('/intelligence/leads/{lead}/classify-source', [MarketingIntelligenceController::class, 'classifySourceByAi'])
-                ->middleware('role:admin,gestor');
-            Route::post('/intelligence/leads/{lead}/analyze-creative', [MarketingIntelligenceController::class, 'analyzeCreativeByAi'])
-                ->middleware('role:admin,gestor');
-            Route::post('/intelligence/settings', [MarketingIntelligenceController::class, 'saveSettings'])
-                ->middleware('role:admin,gestor');
-            Route::get('/intelligence/lookalike/export', [MarketingIntelligenceController::class, 'lookalikeExport'])
-                ->middleware('role:admin,gestor');
         });
     });
 });

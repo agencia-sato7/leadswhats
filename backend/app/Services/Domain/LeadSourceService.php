@@ -4,11 +4,14 @@ namespace App\Services\Domain;
 
 use App\Models\Lead;
 use App\Models\LeadSourceHistory;
+use InvalidArgumentException;
+use Illuminate\Validation\ValidationException;
 
 class LeadSourceService
 {
     public function applyInitialSource(Lead $lead, string $source): void
     {
+        $this->assertWritableSource($source);
         $lead->source = $source;
         $lead->source_method = 'auto';
         $lead->source_updated_at = now();
@@ -26,6 +29,10 @@ class LeadSourceService
 
     public function applyAutoSourceFromReentry(Lead $lead, string $source): void
     {
+        $this->assertWritableSource($source);
+        if ($this->isLegacySource($lead->source)) {
+            return;
+        }
         if ($source === 'desconhecido' || $lead->source === $source) {
             return;
         }
@@ -33,17 +40,14 @@ class LeadSourceService
         $this->trackAndApplyChange($lead, $source, 'auto', 'Reentrada detectada com origem rastreada.', null);
     }
 
-    public function applyAiSource(Lead $lead, string $source, string $reason): void
-    {
-        if ($source === 'desconhecido' || $lead->source === $source) {
-            return;
-        }
-
-        $this->trackAndApplyChange($lead, $source, 'auto', $reason, null);
-    }
-
     public function classifyManual(Lead $lead, string $newSource, ?int $changedByUserId, ?string $reason): void
     {
+        $this->assertWritableSource($newSource);
+        if ($this->isLegacySource($lead->source)) {
+            throw ValidationException::withMessages([
+                'source' => 'A origem histórica legada deste lead não pode ser reclassificada.',
+            ]);
+        }
         if ($lead->source !== $newSource) {
             $this->trackAndApplyChange(
                 $lead,
@@ -81,5 +85,17 @@ class LeadSourceService
         $lead->source_method = $changeType;
         $lead->source_updated_at = now();
         $lead->save();
+    }
+
+    private function assertWritableSource(string $source): void
+    {
+        if ($this->isLegacySource($source)) {
+            throw new InvalidArgumentException('Esta origem é reservada exclusivamente para histórico legado.');
+        }
+    }
+
+    private function isLegacySource(?string $source): bool
+    {
+        return in_array($source, ['baileys_qr', 'baileys_qr_history', 'whatsapp_qr'], true);
     }
 }

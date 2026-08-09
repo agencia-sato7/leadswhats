@@ -31,7 +31,7 @@ class WhatsappWebhookIdempotencyTest extends TestCase
             'company_slug' => $company->slug,
             'phone' => '(11) 98888-1111',
             'direction' => 'inbound',
-            'provider' => 'whatsapp-cloud',
+            'provider' => 'fake',
             'channel' => 'text',
             'body' => 'Olá, mensagem de teste',
             'source' => 'instagram',

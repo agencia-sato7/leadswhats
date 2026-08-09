@@ -16,27 +16,17 @@ task): **leitura passiva** (o Inbox não envia mais mensagem pro lead) e
 
 ## P0 — Pré-requisitos do core
 
-### P0.1 — Transcrição real de áudio no whatsapp-qr-service
+### P0.1 — Transcrição de áudio recebido pela API oficial da Meta
 
 **Objetivo:** popular `audio_transcript` de verdade. Hoje qualquer áudio vira
 o texto literal `"[Áudio]"` — a IA (Kanban e, depois, o scoring) fica cega
 pra essa parte da conversa.
 
 **Escopo técnico:**
-- `whatsapp-qr-service/src/index.js`: quando `msg.audioMessage` existir,
-  baixar a mídia via `downloadMediaMessage(message, 'buffer', {}, { logger,
-  reuploadRequest: socket.updateMediaMessage })` (Baileys já expõe essa
-  função).
-- Chamar `POST https://api.openai.com/v1/audio/transcriptions` (Whisper,
-  multipart/form-data) com uma nova env var `OPENAI_API_KEY` no
-  `whatsapp-qr-service` (hoje só existe no backend Laravel).
-- Incluir `audio_transcript` e `channel: 'audio'` no payload do webhook —
-  `buildMessagePayload()` hoje não manda nenhum dos dois.
-- `BaileysWebhookController::ingest` (casos `message_received` e
-  `history_synced`): parar de hardcodar `"channel" => "text"`; repassar
-  `data.channel` e `data.audio_transcript` do payload recebido.
-- `docker-compose.yml`: adicionar `OPENAI_API_KEY` no `environment` do
-  serviço `whatsapp-qr-service`.
+- Receber o evento de mídia exclusivamente pelo webhook oficial da Meta.
+- Baixar o áudio usando somente os endpoints oficiais da Graph API.
+- Transcrever no backend e preencher `channel = 'audio'` e
+  `audio_transcript`, preservando o payload oficial para auditoria.
 
 **Critério de pronto:** mandar um áudio de teste pelo WhatsApp conectado
 resulta em `messages.channel = 'audio'` e `messages.audio_transcript`
@@ -46,39 +36,27 @@ preenchido com o texto real (não mais o literal `[Áudio]`).
 
 ### P0.2 — Scoring de atendimento por IA (0–100) — **o core do produto**
 
-**Objetivo:** nota 0–100 por conversa avaliando SPIN Selling, Encantamento
-Disney, gatilho mental/escassez e contorno de objeção, com uma dica de
-melhoria em texto explicando o porquê da nota.
+**Objetivo:** nota 0–100 por conversa, com resumo, intenção, objeções,
+pontos positivos, erros, sugestão, dados comerciais e recomendação de etapa.
 
 **Escopo técnico:**
-- Migration `create_conversation_quality_scores_table`: `id, company_id,
-  conversation_id` (FK `conversations`, cascade), `lead_id` (FK `leads`,
-  cascade), `score` (unsignedTinyInteger 0–100), `criteria` (json — nota por
-  critério), `tips` (text), `raw_response` (json, auditoria), `scored_at`,
-  timestamps. Index `['company_id', 'scored_at']`.
-- Model `ConversationQualityScore`.
-- Serviço `app/Services/Domain/ConversationQualityScoringService.php`: monta
-  o transcript completo da conversa (mensagens + `audio_transcript`,
-  ordenadas por `sent_at`), chama a IA com prompt estruturado pelos 4
-  critérios do PDF, grava o score. Seguir o padrão de chamada OpenAI já usado
-  em `OpenAiIntelligenceService` (`Http::` + `env('OPENAI_API_KEY')` +
-  fallback em erro).
-- **Decisão em aberto — gatilho de "conversa finalizada":** hoje nenhuma
-  conversa é fechada explicitamente (`Conversation.status` fica sempre
-  `'active'`, confirmado em `ConversationResolverService`). Duas opções:
-  - (a) job periódico que pontua conversas sem mensagem nova há N horas
-    (proxy de "acabou"), ou
-  - (b) **recomendado** — pontuar quando o Kanban move o lead pra uma coluna
-    terminal (`kanban_columns.is_terminal`, campo que já existe e já é
-    avaliado pelo `AiKanbanMovementService`). Menos ambíguo que um timeout.
-- Endpoint `GET /api/v1/performance/scores` (role: admin,gestor,sdr — SDR só
-  vê o próprio, mesmo padrão do dashboard).
-- Frontend: nova aba/seção "Performance" mostrando nota + dica por conversa.
+- `conversation_quality_scores` armazena snapshots imutáveis e versionados.
+- `ConversationAnalyzer` define o contrato estruturado independente do
+  provedor. `FakeConversationAnalyzer` é o único binding em local/testing e
+  não realiza chamadas externas.
+- `ConversationIntelligenceService` monta a transcrição completa, inclui
+  `kanban_columns.rule_prompt` no contexto, valida a recomendação e grava um
+  novo snapshot. A coluna é recomendada, nunca movimentada automaticamente.
+- Endpoints de listagem, detalhe, resumo e análise ficam em
+  `/api/v1/intelligence/*`, somente para `admin/gestor` e isolados por tenant.
+- `ConversationIntelligencePage.tsx` mostra mensagens somente para leitura,
+  análise atual e histórico de reanálises.
+- Próxima etapa: implementar um adaptador real do contrato, com configuração,
+  observabilidade e testes de contrato, sem fallback por palavras-chave.
 
-**Critério de pronto:** mover um cartão pro estágio terminal gera uma linha
-em `conversation_quality_scores`; SDR só vê as próprias notas, gestor vê a
-equipe (teste de isolamento por role/tenant, no padrão de
-`DashboardMetricsServiceTest`).
+**Critério de pronto estrutural:** gestor analisa ou reanalisa manualmente uma
+conversa e recebe um novo snapshot; o histórico anterior e o Kanban permanecem
+inalterados. O provedor real será conectado em uma etapa posterior.
 
 ---
 
@@ -180,32 +158,13 @@ privacidade do resto do sistema).
 
 ## P3 — Complementos
 
-### P3.1 — Placar de contatos salvos
+### P3.1 — Auto-CRM: extração estruturada
 
 **Escopo técnico:**
-- `whatsapp-qr-service`: no handler de `contacts.upsert`/`contacts.update`
-  (já existe, adicionado pra resolver LID), quando `contact.name` estiver
-  presente (contato salvo na agenda, diferente de `contact.notify`), mandar
-  um novo evento de webhook `contact_saved_status` com `{phone, is_saved:
-  true}`.
-- Migration: coluna `is_saved_in_phone` (boolean, nullable) em `leads`.
-- `BaileysWebhookController`: novo `case` pro evento.
-- `ContactController`/`ContactDirectoryService`: expor "salvou X, esqueceu
-  Y" no endpoint de listagem.
-
-**Critério de pronto:** contato salvo no celular aparece marcado; contagem
-bate no endpoint de contatos.
-
----
-
-### P3.2 — Auto-CRM: extração estruturada
-
-**Escopo técnico:**
-- Estender `AiRuleEvaluatorService` (ou novo serviço dedicado) pra, na
-  mesma chamada de IA que decide a coluna do Kanban, também extrair fatos
-  soltos (orçamento, prazo, objeção mencionada) em JSON.
-- Gravar em `leads.metadata` (campo `json` que já existe) sob uma chave
-  dedicada, ex. `metadata->auto_crm`.
+- Estender o adaptador real de `ConversationAnalyzer` para extrair fatos
+  comerciais estruturados na mesma resposta da análise.
+- Manter os fatos no snapshot em `conversation_quality_scores.commercial_data`;
+  qualquer projeção futura em `leads.metadata` deve ser explícita e auditada.
 - Frontend: mostrar esses fatos no cartão do Kanban / detalhe do lead.
 
 **Critério de pronto:** "meu orçamento é 5 mil" resulta em

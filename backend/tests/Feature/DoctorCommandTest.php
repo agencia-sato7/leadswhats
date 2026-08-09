@@ -39,12 +39,10 @@ class DoctorCommandTest extends TestCase
             ->assertExitCode(0);
     }
 
-    public function test_doctor_fails_when_fake_provider_is_active_in_production_without_explicit_allow(): void
+    public function test_doctor_fails_when_fake_provider_is_active_in_production(): void
     {
         config()->set('app.env', 'production');
         config()->set('whatsapp.provider', 'fake');
-        config()->set('whatsapp.allow_fake_in_production', false);
-
         $this->artisan('leadswhats:doctor')
             ->expectsOutputToContain('[FAIL] WHATSAPP_PROVIDER_POLICY')
             ->assertExitCode(1);
@@ -66,6 +64,7 @@ class DoctorCommandTest extends TestCase
     {
         config()->set('whatsapp.provider', 'meta_cloud');
         config()->set('whatsapp.cloud_webhook_verify_token', 'my-verify-token');
+        config()->set('whatsapp.cloud_app_secret', 'my-app-secret');
         config()->set('app.debug', false);
 
         $company = Company::create([
@@ -100,4 +99,3 @@ class DoctorCommandTest extends TestCase
             ->assertExitCode(0);
     }
 }
-
