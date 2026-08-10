@@ -224,6 +224,18 @@
               }
             }
           },
+          "demo_mode": {
+            "type": "boolean",
+            "description": "Indica ambiente local/testing para exibição discreta do modo demonstração. Não altera o provider de produção."
+          },
+          "whatsapp_status": {
+            "type": "string",
+            "enum": [
+              "configured",
+              "not_configured",
+              "error"
+            ]
+          },
           "counts": {
             "type": "object",
             "properties": {
@@ -401,6 +413,64 @@
               },
               "oldest_pending_task_hours": {
                 "type": "number"
+              },
+              "successful_conversations_today": {
+                "type": "integer"
+              },
+              "lost_conversations_today": {
+                "type": "integer"
+              },
+              "effectiveness_percentage": {
+                "type": "integer"
+              },
+              "average_conversation_quality": {
+                "type": "number",
+                "nullable": true
+              },
+              "low_quality_conversations": {
+                "type": "integer"
+              },
+              "ai_stage_mismatch_opportunities": {
+                "type": "integer"
+              }
+            }
+          },
+          "funnel": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "stage_name": {
+                  "type": "string"
+                },
+                "position": {
+                  "type": "integer"
+                },
+                "count": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "team_performance": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "active_opportunities": {
+                  "type": "integer"
+                },
+                "average_score": {
+                  "type": "number",
+                  "nullable": true
+                },
+                "avg_first_response_seconds": {
+                  "type": "integer",
+                  "nullable": true
+                }
               }
             }
           }
@@ -592,6 +662,40 @@
           "last_message_at": {
             "type": "string",
             "nullable": true
+          },
+          "owner_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "latest_analysis": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/KanbanLatestAnalysis"
+              }
+            ],
+            "nullable": true
+          }
+        }
+      },
+      "KanbanLatestAnalysis": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "conversation_id": { "type": "integer" },
+          "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+          "summary": { "type": "string" },
+          "intent": { "type": "string", "nullable": true },
+          "objections": { "type": "array", "items": { "type": "string" } },
+          "commercial_data": { "type": "object", "additionalProperties": true },
+          "recommended_kanban_column_id": { "type": "integer", "nullable": true },
+          "recommended_kanban_column_name": { "type": "string", "nullable": true },
+          "classification_reason": { "type": "string", "nullable": true },
+          "confidence": { "type": "number", "format": "float", "minimum": 0, "maximum": 1, "nullable": true },
+          "analyzed_at": { "type": "string", "format": "date-time" },
+          "recommendation_decision": {
+            "type": "string",
+            "enum": ["applied", "kept_current"],
+            "nullable": true
           }
         }
       },
@@ -636,6 +740,28 @@
                 "items": {
                   "$ref": "#/components/schemas/KanbanColumnResponse"
                 }
+              }
+            }
+          }
+        }
+      },
+      "KanbanRecommendationDecisionResponse": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "type": "string",
+                "enum": ["applied", "kept_current"]
+              },
+              "decided_at": { "type": "string", "format": "date-time" },
+              "movement": {
+                "allOf": [
+                  { "$ref": "#/components/schemas/LeadStageUpdateResponse" }
+                ],
+                "nullable": true
               }
             }
           }
@@ -1744,7 +1870,7 @@
       "post": {
         "tags": ["Conversation Intelligence"],
         "summary": "Cria um novo snapshot imutável de análise",
-        "description": "Usa FakeConversationAnalyzer em local/testing. Não movimenta o Kanban e preserva snapshots anteriores.",
+        "description": "Usa o ConversationAnalyzer configurado. O driver python chama o ai-service, não possui fallback silencioso e preserva snapshots anteriores sem movimentar o Kanban. O driver fake só é permitido quando configurado explicitamente em local/testing.",
         "security": [{ "BearerAuth": [] }],
         "parameters": [{ "name": "conversation", "in": "path", "required": true, "schema": { "type": "integer" } }],
         "responses": {
@@ -1980,7 +2106,7 @@
         "tags": [
           "Dashboard"
         ],
-        "summary": "Resumo de metricas do dia",
+        "summary": "Resumo executivo da operação no dia",
         "security": [
           {
             "BearerAuth": []
@@ -2010,8 +2136,26 @@
                     "waiting_first_response_tasks": 2,
                     "overdue_follow_up_tasks": 4,
                     "unassigned_leads": 6,
-                    "oldest_pending_task_hours": 31.5
-                  }
+                    "oldest_pending_task_hours": 31.5,
+                    "average_conversation_quality": 74.6,
+                    "low_quality_conversations": 2,
+                    "ai_stage_mismatch_opportunities": 1
+                  },
+                  "funnel": [
+                    {
+                      "stage_name": "Novo Contato",
+                      "position": 1,
+                      "count": 3
+                    }
+                  ],
+                  "team_performance": [
+                    {
+                      "name": "Marina Costa",
+                      "active_opportunities": 4,
+                      "average_score": 78.5,
+                      "avg_first_response_seconds": 180
+                    }
+                  ]
                 }
               }
             }
@@ -2037,7 +2181,7 @@
             }
           }
         },
-        "description": "Métricas operacionais do dia para a empresa autenticada. Os cálculos refletem regras comerciais por tenant, incluindo timezone, expediente, intervalo de almoço, dias úteis, janela de lead repetido e threshold de vácuo/resgate."
+        "description": "Métricas executivas do dia para a empresa autenticada, com saúde da operação, prioridades, funil atual e desempenho por responsável. Mantém o detalhamento legado por origem por compatibilidade. Os cálculos respeitam tenant e o escopo individual do perfil SDR."
       }
     },
     "/api/v1/leads/sources/unknown": {
@@ -2309,7 +2453,26 @@
                             "phone": "+5511999999999",
                             "source": "instagram",
                             "classification": "lead_novo",
-                            "last_message_at": "2026-05-06 09:30:00"
+                            "last_message_at": "2026-05-06 09:30:00",
+                            "owner_name": "Ana Gestora",
+                            "latest_analysis": {
+                              "id": 91,
+                              "conversation_id": 456,
+                              "score": 84,
+                              "summary": "Lead qualificado e com próximo passo definido.",
+                              "intent": "Compra em curto prazo",
+                              "objections": ["Prazo de implantação"],
+                              "commercial_data": {
+                                "budget": "R$ 12.000",
+                                "next_step": "Enviar proposta amanhã"
+                              },
+                              "recommended_kanban_column_id": 11,
+                              "recommended_kanban_column_name": "Proposta",
+                              "classification_reason": "Necessidade e orçamento confirmados.",
+                              "confidence": 0.91,
+                              "analyzed_at": "2026-08-09T15:00:00Z",
+                              "recommendation_decision": null
+                            }
                           }
                         ]
                       }
@@ -2350,7 +2513,7 @@
             }
           }
         },
-        "description": "Retorna Kanban do pipeline da empresa autenticada (isolamento por company_id). Ordenação: colunas por position asc e, em empate, id asc. Cards seguem regra atual do backend: last_message_at desc, nulls por último e desempate por lead_id asc."
+        "description": "Retorna o Auto-CRM com dados persistidos e a análise comercial mais recente de cada lead. Não depende de conexão ativa com a Meta. Isolamento por company_id. Colunas por position asc e cards por last_message_at desc."
       }
     },
     "/api/v1/leads/{leadId}/stage-history": {
@@ -2561,6 +2724,79 @@
           }
         },
         "description": "Movimentação manual de lead entre colunas do Kanban. Permitido para perfis admin e gestor. Repetir a mesma movimentação não cria histórico duplicado."
+      }
+    },
+    "/api/v1/leads/{leadId}/recommendations/{analysisId}/apply": {
+      "post": {
+        "tags": ["Pipelines"],
+        "summary": "Aplica a etapa recomendada pela IA",
+        "description": "Valida a análise mais recente, movimenta o lead via KanbanMovementService e registra histórico com origem ai_recommendation_accepted. Nunca é executado automaticamente.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "leadId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "analysisId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recomendação aplicada e decisão auditada",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/KanbanRecommendationDecisionResponse" },
+                "example": {
+                  "message": "Recomendação da IA aplicada com sucesso.",
+                  "data": {
+                    "decision": "applied",
+                    "decided_at": "2026-08-09T15:10:00Z",
+                    "movement": {
+                      "lead_id": 123,
+                      "kanban_column_id": 11,
+                      "moved_by_user_id": 7,
+                      "movement_type": "ai_recommendation_accepted",
+                      "history_created": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Não autenticado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "403": { "description": "Perfil sem permissão", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "404": { "description": "Lead, análise ou etapa não encontrados na empresa", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "422": { "description": "Recomendação ausente, antiga ou já decidida de outra forma", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/api/v1/leads/{leadId}/recommendations/{analysisId}/keep-current": {
+      "post": {
+        "tags": ["Pipelines"],
+        "summary": "Mantém a etapa atual diante da recomendação da IA",
+        "description": "Registra a decisão gerencial de manter a etapa sem criar movimentação no histórico.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "name": "leadId", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "analysisId", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Etapa atual mantida e decisão auditada",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/KanbanRecommendationDecisionResponse" },
+                "example": {
+                  "message": "Etapa atual mantida.",
+                  "data": {
+                    "decision": "kept_current",
+                    "decided_at": "2026-08-09T15:10:00Z"
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Não autenticado", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "403": { "description": "Perfil sem permissão", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "404": { "description": "Lead ou análise não encontrados na empresa", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "422": { "description": "Recomendação antiga ou já aplicada", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
       }
     },
     "/api/v1/pipelines/{pipelineId}/columns": {

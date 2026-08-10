@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use LogicException;
 
 class ConversationQualityScore extends Model
@@ -91,5 +92,10 @@ class ConversationQualityScore extends Model
     public function sourceLastMessage(): BelongsTo
     {
         return $this->belongsTo(Message::class, 'source_last_message_id');
+    }
+
+    public function recommendationDecision(): HasOne
+    {
+        return $this->hasOne(ConversationAnalysisDecision::class);
     }
 }

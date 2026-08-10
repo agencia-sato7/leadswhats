@@ -23,40 +23,42 @@ class ConversationIntelligenceApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // Estes testes validam deliberadamente o analisador determinístico local.
+        // O fake precisa ser opt-in mesmo quando o container Docker usa Python.
+        config()->set('intelligence.analyzer', 'fake');
         Http::preventStrayRequests();
         $this->artisan('leadswhats:demo-bootstrap')->assertExitCode(0);
     }
 
-    public function test_local_and_testing_use_the_fake_analyzer_and_demo_starts_pending(): void
+    public function test_local_and_testing_use_the_fake_analyzer_and_demo_has_analyzed_and_pending_conversations(): void
     {
         $this->assertInstanceOf(FakeConversationAnalyzer::class, app(ConversationAnalyzer::class));
 
         $company = Company::query()->where('slug', 'empresa-demo')->firstOrFail();
-        $this->assertSame(5, Conversation::query()->where('company_id', $company->id)->count());
-        $this->assertSame(0, ConversationQualityScore::query()->where('company_id', $company->id)->count());
+        $this->assertSame(14, Conversation::query()->where('company_id', $company->id)->count());
+        $this->assertSame(10, ConversationQualityScore::query()->where('company_id', $company->id)->count());
 
         $response = $this->withToken($this->loginToken('gestor@empresa.local'))
             ->getJson('/api/v1/intelligence/conversations')
             ->assertOk()
-            ->assertJsonPath('meta.total', 5);
+            ->assertJsonPath('meta.total', 14);
 
-        foreach ($response->json('data') as $conversation) {
-            $this->assertSame('pending', $conversation['analysis_status']);
-            $this->assertNull($conversation['latest_analysis']);
-        }
+        $conversations = collect($response->json('data'));
+        $this->assertCount(10, $conversations->where('analysis_status', 'analyzed'));
+        $this->assertCount(4, $conversations->where('analysis_status', 'pending'));
 
         $this->withToken($this->loginToken('gestor@empresa.local'))
             ->getJson('/api/v1/intelligence/summary')
             ->assertOk()
-            ->assertJsonPath('data.total_conversations', 5)
-            ->assertJsonPath('data.analyzed_conversations', 0)
-            ->assertJsonPath('data.pending_conversations', 5)
-            ->assertJsonPath('data.total_snapshots', 0);
+            ->assertJsonPath('data.total_conversations', 14)
+            ->assertJsonPath('data.analyzed_conversations', 10)
+            ->assertJsonPath('data.pending_conversations', 4)
+            ->assertJsonPath('data.total_snapshots', 10);
     }
 
     public function test_analyze_creates_a_structured_snapshot_without_moving_the_lead(): void
     {
-        $conversation = Conversation::query()->whereHas('lead', fn ($query) => $query->where('name', 'Ana Martins'))->firstOrFail();
+        $conversation = Conversation::query()->whereHas('lead', fn ($query) => $query->where('name', 'Larissa Mendes'))->firstOrFail();
         $historyCountBefore = LeadStageHistory::query()->where('lead_id', $conversation->lead_id)->count();
 
         $response = $this->withToken($this->loginToken('gestor@empresa.local'))
@@ -89,12 +91,12 @@ class ConversationIntelligenceApiTest extends TestCase
         $this->assertLessThanOrEqual(100, $score);
         $this->assertNotNull($response->json('data.latest_analysis.recommended_kanban_column_id'));
         $this->assertSame($historyCountBefore, LeadStageHistory::query()->where('lead_id', $conversation->lead_id)->count());
-        $this->assertDatabaseCount('conversation_quality_scores', 1);
+        $this->assertDatabaseCount('conversation_quality_scores', 11);
     }
 
     public function test_reanalyze_preserves_previous_snapshot_and_snapshots_are_immutable(): void
     {
-        $conversation = Conversation::query()->firstOrFail();
+        $conversation = Conversation::query()->whereHas('lead', fn ($query) => $query->where('name', 'Larissa Mendes'))->firstOrFail();
         $token = $this->loginToken('gestor@empresa.local');
 
         $this->withToken($token)->postJson("/api/v1/intelligence/conversations/{$conversation->id}/analyze")->assertCreated();

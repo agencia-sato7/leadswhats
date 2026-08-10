@@ -16,7 +16,12 @@ backend/storage/framework/views/*
 backend/bootstrap/cache/*.php
 
 # Local env
+.env
 backend/.env
+
+# Python
+.pytest_cache/
+.venv/
 
 # Local AI/editor tooling
 .agent/

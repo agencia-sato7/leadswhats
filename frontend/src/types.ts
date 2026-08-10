@@ -24,6 +24,7 @@ export type OverviewResponse = {
     work_start: string;
     work_end: string;
   };
+  demo_mode: boolean;
   whatsapp_status: 'not_configured' | 'configured' | 'error';
   counts: {
     users: number;
@@ -55,7 +56,21 @@ export type DashboardSummaryResponse = {
     successful_conversations_today: number;
     lost_conversations_today: number;
     effectiveness_percentage: number;
+    average_conversation_quality: number | null;
+    low_quality_conversations: number;
+    ai_stage_mismatch_opportunities: number;
   };
+  funnel: Array<{
+    stage_name: string;
+    position: number;
+    count: number;
+  }>;
+  team_performance: Array<{
+    name: string;
+    active_opportunities: number;
+    average_score: number | null;
+    avg_first_response_seconds: number | null;
+  }>;
   funnel_by_source: Array<{
     source: string;
     stage_name: string;
@@ -90,6 +105,21 @@ export type KanbanCard = {
   classification: string;
   last_message_at: string | null;
   owner_name: string | null;
+  latest_analysis: {
+    id: number;
+    conversation_id: number;
+    score: number;
+    summary: string;
+    intent: string | null;
+    objections: string[];
+    commercial_data: Record<string, unknown>;
+    recommended_kanban_column_id: number | null;
+    recommended_kanban_column_name: string | null;
+    classification_reason: string | null;
+    confidence: number | null;
+    analyzed_at: string;
+    recommendation_decision: 'applied' | 'kept_current' | null;
+  } | null;
 };
 
 export type KanbanColumn = {
@@ -127,6 +157,15 @@ export type MoveLeadStageResponse = {
     moved_by_user_id: number;
     movement_type: string;
     history_created: boolean;
+  };
+};
+
+export type KanbanRecommendationResponse = {
+  message: string;
+  data: {
+    decision: 'applied' | 'kept_current';
+    decided_at: string;
+    movement?: MoveLeadStageResponse['data'];
   };
 };
 

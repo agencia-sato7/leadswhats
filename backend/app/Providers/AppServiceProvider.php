@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Contracts\Intelligence\ConversationAnalyzer;
 use App\Services\Intelligence\FakeConversationAnalyzer;
+use App\Services\Intelligence\PythonConversationAnalyzer;
 use App\Services\Intelligence\UnavailableConversationAnalyzer;
 use App\Services\WhatsApp\FakeWhatsAppProvider;
 use App\Services\WhatsApp\MetaCloudWhatsAppProvider;
@@ -37,11 +38,21 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->app->bind(ConversationAnalyzer::class, function () {
-            if (app()->environment(['local', 'testing'])) {
-                return app(FakeConversationAnalyzer::class);
+            $analyzer = (string) config('intelligence.analyzer', 'unavailable');
+
+            if (!in_array($analyzer, ['python', 'fake', 'unavailable'], true)) {
+                throw new RuntimeException("CONVERSATION_ANALYZER inválido: {$analyzer}. Valores suportados: python, fake, unavailable.");
             }
 
-            return app(UnavailableConversationAnalyzer::class);
+            if ($analyzer === 'fake' && !app()->environment(['local', 'testing'])) {
+                throw new RuntimeException('CONVERSATION_ANALYZER=fake é permitido somente em local/testing.');
+            }
+
+            return match ($analyzer) {
+                'python' => app(PythonConversationAnalyzer::class),
+                'fake' => app(FakeConversationAnalyzer::class),
+                'unavailable' => app(UnavailableConversationAnalyzer::class),
+            };
         });
     }
 

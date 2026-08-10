@@ -43,6 +43,26 @@ services:
       - leadswhats_network
     restart: unless-stopped
 
+  ai-service:
+    build:
+      context: ./ai-service
+    container_name: leadswhats_ai_service
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-60}
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - leadswhats_network
+    restart: unless-stopped
+
   backend:
     image: laravelsail/php84-composer:latest
     container_name: leadswhats_backend
@@ -53,6 +73,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      ai-service:
         condition: service_healthy
     environment:
       # APP_ENV e as credenciais de DB_* propositalmente NÃO ficam aqui: como
@@ -71,6 +93,10 @@ services:
       SANCTUM_STATEFUL_DOMAINS: leadswhats.appsato7.com.br
       TRUSTED_PROXIES: "*"
       PHP_CLI_SERVER_WORKERS: "4"
+      CONVERSATION_ANALYZER: python
+      AI_SERVICE_URL: http://ai-service:8001
+      AI_SERVICE_TIMEOUT_SECONDS: "90"
+      AI_SERVICE_CONNECT_TIMEOUT_SECONDS: "5"
     command: >
       sh -c "
         apt-get update && apt-get install -y libpq-dev &&

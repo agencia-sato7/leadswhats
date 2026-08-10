@@ -4,6 +4,7 @@ LEADSWHATS e um SaaS B2B multiempresa para monitoramento passivo de WhatsApp, Re
 
 Stack atual:
 - Backend: Laravel
+- IA: Python + FastAPI + Pydantic
 - Frontend: React + TypeScript + Vite
 - Infra local: Docker Compose
 - Cache: Redis
@@ -13,8 +14,9 @@ Stack atual:
 
 Antes de subir o projeto localmente, garanta:
 - Docker e Docker Compose instalados
-- Porta `8000` livre para a API
-- Porta `5173` livre para o frontend
+- Porta `9000` livre para a API
+- Porta `8001` livre para o microserviço de IA
+- Porta `5174` livre para o frontend
 - Porta `5433` livre para o PostgreSQL local do Compose
 - Porta `6380` livre para o Redis local do Compose
 
@@ -36,13 +38,29 @@ docker compose up -d
 
 Na primeira subida, o ambiente instala dependencias do frontend e sobe os servicos definidos no `docker-compose.yml`.
 
+Antes de analisar conversas com o provider real, copie o arquivo de ambiente da raiz e configure a chave:
+
+```bash
+cp .env.example .env
+```
+
+```env
+OPENAI_API_KEY=<sua-chave>
+OPENAI_MODEL=gpt-4o-mini
+```
+
+A chave existe apenas no container `ai-service`; ela não é repassada ao Laravel.
+
 O ambiente local deve usar `WHATSAPP_PROVIDER=fake`. Esse provider não abre sessão, não usa navegador e não realiza chamadas externas. Em `production`, a aplicação aceita exclusivamente `WHATSAPP_PROVIDER=meta_cloud`.
 
 ## Endpoints locais
 
-- API Laravel: `http://localhost:8000`
-- Swagger / OpenAPI: `http://localhost:8000/api/docs`
-- Frontend: `http://localhost:5173`
+- API Laravel: `http://localhost:9000`
+- Swagger / OpenAPI Laravel: `http://localhost:8080/api/docs`
+- AI Service: `http://localhost:8001`
+- Health do AI Service: `http://localhost:8001/health`
+- OpenAPI do AI Service: `http://localhost:8001/docs`
+- Frontend: `http://localhost:5174`
 - PostgreSQL do Compose: `localhost:5433`
 - Redis do Compose: `localhost:6380`
 
@@ -66,11 +84,13 @@ docker compose exec backend php artisan leadswhats:doctor
 
 Use essas credenciais apenas em ambiente local.
 
-## Conversation Intelligence local
+## Conversation Intelligence
 
 O comando `leadswhats:demo-bootstrap` cria cinco conversas comerciais completas sem análises pré-gravadas. Entre como gestor, abra **Conversation Intelligence** e use **Analisar com IA** para criar o primeiro snapshot; **Reanalisar** cria uma nova versão sem apagar as anteriores.
 
-Nesta etapa estrutural, `local` e `testing` usam exclusivamente `FakeConversationAnalyzer`, sem chamadas externas. Nenhum provedor real ou credencial de IA foi escolhido. Em outros ambientes, o endpoint retorna indisponível até que um analisador oficial seja implementado e configurado.
+O Laravel usa `PythonConversationAnalyzer` quando `CONVERSATION_ANALYZER=python` e chama exclusivamente o `ai-service`. O microserviço valida entrada e saída com Pydantic e é o único componente que conhece `OPENAI_API_KEY` e `OPENAI_MODEL`.
+
+Não existe fallback silencioso. Falha ou ausência de configuração do provider retorna erro controlado. O `FakeConversationAnalyzer` só pode ser usado em `local/testing` quando `CONVERSATION_ANALYZER=fake` for definido explicitamente; a suíte Laravel faz isso no `phpunit.xml`.
 
 ## Comandos uteis
 
@@ -95,6 +115,12 @@ Backend:
 
 ```bash
 docker compose exec backend php artisan test
+```
+
+AI Service, sem chamadas externas:
+
+```bash
+docker compose exec ai-service pytest -q
 ```
 
 Build do frontend:

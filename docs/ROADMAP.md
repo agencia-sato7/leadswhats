@@ -42,7 +42,11 @@ pontos positivos, erros, sugestão, dados comerciais e recomendação de etapa.
 **Escopo técnico:**
 - `conversation_quality_scores` armazena snapshots imutáveis e versionados.
 - `ConversationAnalyzer` define o contrato estruturado independente do
-  provedor. `FakeConversationAnalyzer` é o único binding em local/testing e
+  provedor. `PythonConversationAnalyzer` chama o microserviço FastAPI e não
+  contém credenciais nem SDK da OpenAI no Laravel.
+- O `ai-service` usa Structured Outputs, valida entrada e saída com Pydantic
+  e concentra `OPENAI_API_KEY`/`OPENAI_MODEL`.
+- `FakeConversationAnalyzer` só é ativado explicitamente em local/testing e
   não realiza chamadas externas.
 - `ConversationIntelligenceService` monta a transcrição completa, inclui
   `kanban_columns.rule_prompt` no contexto, valida a recomendação e grava um
@@ -51,8 +55,8 @@ pontos positivos, erros, sugestão, dados comerciais e recomendação de etapa.
   `/api/v1/intelligence/*`, somente para `admin/gestor` e isolados por tenant.
 - `ConversationIntelligencePage.tsx` mostra mensagens somente para leitura,
   análise atual e histórico de reanálises.
-- Próxima etapa: implementar um adaptador real do contrato, com configuração,
-  observabilidade e testes de contrato, sem fallback por palavras-chave.
+- Próxima etapa: adicionar observabilidade, métricas de custo/latência e
+  avaliações de qualidade do prompt, sem fallback por palavras-chave.
 
 **Critério de pronto estrutural:** gestor analisa ou reanalisa manualmente uma
 conversa e recebe um novo snapshot; o histórico anterior e o Kanban permanecem

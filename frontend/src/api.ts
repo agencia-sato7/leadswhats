@@ -15,6 +15,7 @@ import type {
   LeadOwnerUpdateResponse,
   LoginResponse,
   MoveLeadStageResponse,
+  KanbanRecommendationResponse,
   OverviewResponse,
   PipelineKanban,
   PipelineListItem,
@@ -124,6 +125,28 @@ export async function getLeadStageHistory(token: string, leadId: number): Promis
   });
 
   return data.data;
+}
+
+export function applyKanbanRecommendation(token: string, leadId: number, analysisId: number): Promise<KanbanRecommendationResponse> {
+  return request<KanbanRecommendationResponse>(`/leads/${leadId}/recommendations/${analysisId}/apply`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function keepCurrentKanbanStage(token: string, leadId: number, analysisId: number): Promise<KanbanRecommendationResponse> {
+  return request<KanbanRecommendationResponse>(`/leads/${leadId}/recommendations/${analysisId}/keep-current`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function updateKanbanColumn(token: string, columnId: number, payload: { name: string; rule: string | null }) {
+  return request(`/kanban-columns/${columnId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function getTasksChecklist(token: string): Promise<ChecklistTaskItem[]> {

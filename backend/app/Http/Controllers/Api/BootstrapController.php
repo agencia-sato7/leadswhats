@@ -27,6 +27,7 @@ class BootstrapController extends Controller
 
         return response()->json([
             'company' => $company,
+            'demo_mode' => app()->environment(['local', 'testing']),
             'whatsapp_status' => $whatsAppConfigured ? 'configured' : 'not_configured',
             'counts' => [
                 'users' => $company ? $company->users()->count() : 0,

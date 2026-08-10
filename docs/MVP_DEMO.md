@@ -90,7 +90,8 @@ Esperado:
 
 ## 7) Limitações conhecidas do MVP
 
-- A estrutura de Conversation Intelligence está pronta, mas local/testing ainda usam `FakeConversationAnalyzer`, sem chamadas externas. O provedor real será definido depois.
+- O provider real de Conversation Intelligence roda no microserviço Python `ai-service`; sem `OPENAI_API_KEY` a análise retorna erro controlado.
+- A suíte de testes configura explicitamente `FakeConversationAnalyzer` e não realiza chamadas externas.
 - Provider `fake` somente em desenvolvimento, testes e demonstração; ele não realiza chamadas externas.
 - Em production, somente `meta_cloud` é aceito e credenciais incompletas mantêm o estado desconectado.
 - O endpoint genérico de ingestão não funciona em production.

@@ -18,6 +18,53 @@ class DashboardSummaryTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_dashboard_summary_exposes_executive_quality_funnel_and_team_data(): void
+    {
+        $this->artisan('leadswhats:demo-bootstrap')->assertExitCode(0);
+
+        $token = $this->postJson('/api/v1/auth/login', [
+            'email' => 'gestor@empresa.local',
+            'password' => '12345678',
+        ])->assertOk()->json('token');
+
+        $response = $this->withToken($token)
+            ->getJson('/api/v1/dashboard/summary')
+            ->assertOk()
+            ->assertJsonPath('metrics.new_leads_today', 6)
+            ->assertJsonPath('metrics.repeat_leads_today', 1)
+            ->assertJsonPath('metrics.avg_first_response_seconds', 395)
+            ->assertJsonPath('metrics.vacuum_24h_open', 2)
+            ->assertJsonPath('metrics.unassigned_leads', 2)
+            ->assertJsonPath('metrics.average_conversation_quality', 75.5)
+            ->assertJsonPath('metrics.low_quality_conversations', 2)
+            ->assertJsonPath('metrics.ai_stage_mismatch_opportunities', 3)
+            ->assertJsonCount(7, 'funnel')
+            ->assertJsonPath('funnel.0.stage_name', 'Novo Lead')
+            ->assertJsonPath('funnel.0.count', 2)
+            ->assertJsonPath('funnel.1.stage_name', 'Em Atendimento')
+            ->assertJsonPath('funnel.1.count', 3)
+            ->assertJsonPath('funnel.2.stage_name', 'Avaliação Agendada')
+            ->assertJsonPath('funnel.2.count', 3)
+            ->assertJsonPath('funnel.3.stage_name', 'Avaliação Realizada')
+            ->assertJsonPath('funnel.3.count', 1)
+            ->assertJsonPath('funnel.4.stage_name', 'Em Negociação')
+            ->assertJsonPath('funnel.4.count', 2)
+            ->assertJsonPath('funnel.5.stage_name', 'Tratamento Fechado')
+            ->assertJsonPath('funnel.5.count', 2)
+            ->assertJsonPath('funnel.6.stage_name', 'Não Convertido')
+            ->assertJsonPath('funnel.6.count', 1)
+            ->assertJsonCount(3, 'team_performance');
+
+        $team = collect($response->json('team_performance'))->keyBy('name');
+        $this->assertSame(56.7, $team['Marina Costa']['average_score']);
+        $this->assertSame(89.3, $team['Rafael Lima']['average_score']);
+        $this->assertSame(79.3, $team['Camila Nunes']['average_score']);
+        $this->assertSame(4, $team['Marina Costa']['active_opportunities']);
+        $this->assertSame(750, $team['Marina Costa']['avg_first_response_seconds']);
+        $this->assertSame(105, $team['Rafael Lima']['avg_first_response_seconds']);
+        $this->assertSame(330, $team['Camila Nunes']['avg_first_response_seconds']);
+    }
+
     public function test_dashboard_summary_preserves_contract_and_isolates_company_data(): void
     {
         Carbon::setTestNow("2026-05-06 15:00:00");

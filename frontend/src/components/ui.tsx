@@ -35,9 +35,9 @@ export function MetricCard({ label, value, hint, variant = 'default' }: { label:
   );
 }
 
-export function Button({ className, children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+export function Button({ className, children, variant = 'primary', ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' }) {
   return (
-    <button className={join('lw-button', className)} {...props}>
+    <button className={join('lw-button', variant === 'secondary' ? 'lw-button--secondary' : undefined, className)} {...props}>
       {children}
     </button>
   );
