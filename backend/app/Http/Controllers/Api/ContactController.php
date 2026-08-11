@@ -4,17 +4,25 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Domain\ContactDirectoryService;
+use App\Services\EffectiveTenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ContactController extends Controller
 {
-    public function index(Request $request, ContactDirectoryService $contactDirectoryService): JsonResponse
-    {
+    public function index(
+        Request $request,
+        ContactDirectoryService $contactDirectoryService,
+        EffectiveTenantContext $tenantContext,
+    ): JsonResponse {
         $filters = $request->validate($this->filterRules(includePagination: true));
 
-        $result = $contactDirectoryService->listForUser($request->user(), $filters);
+        $result = $contactDirectoryService->listForUser(
+            $request->user(),
+            $filters,
+            $tenantContext->companyId($request),
+        );
 
         return response()->json($result);
     }
@@ -24,7 +32,7 @@ class ContactController extends Controller
         $filters = $request->validate($this->filterRules(includePagination: false));
         $rows = $contactDirectoryService->exportRowsForUser($request->user(), $filters);
 
-        $fileName = 'contacts_export_' . now()->format('Ymd_His') . '.csv';
+        $fileName = 'contacts_export_'.now()->format('Ymd_His').'.csv';
 
         return response()->streamDownload(static function () use ($rows): void {
             $output = fopen('php://output', 'wb');

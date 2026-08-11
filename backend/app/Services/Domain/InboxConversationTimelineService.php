@@ -11,23 +11,26 @@ class InboxConversationTimelineService
 {
     public function __construct(
         private readonly InboxService $inboxService,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>|null
      */
-    public function listEventsForConversation(User $user, int $conversationId): ?array
-    {
-        $detail = $this->inboxService->getConversationDetailForUser($user, $conversationId);
-        if (!$detail) {
+    public function listEventsForConversation(
+        User $user,
+        int $conversationId,
+        ?int $effectiveCompanyId = null,
+    ): ?array {
+        $companyId = $effectiveCompanyId ?? (int) $user->company_id;
+        $detail = $this->inboxService->getConversationDetailForUser($user, $conversationId, $companyId);
+        if (! $detail) {
             return null;
         }
 
         $leadId = (int) data_get($detail, 'lead.lead_id');
 
-        $events = $this->conversationEvents($user, $conversationId)
-            ->merge($this->stageEvents($user, $leadId))
+        $events = collect($this->conversationEvents($user, $conversationId, $companyId)->all())
+            ->merge($this->stageEvents($user, $leadId, $companyId)->all())
             ->all();
 
         usort($events, static function (array $a, array $b): int {
@@ -52,15 +55,15 @@ class InboxConversationTimelineService
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    private function conversationEvents(User $user, int $conversationId): Collection
+    private function conversationEvents(User $user, int $conversationId, int $companyId): Collection
     {
         return ConversationEvent::query()
             ->from('conversation_events')
-            ->leftJoin('users', function ($join) use ($user) {
+            ->leftJoin('users', function ($join) use ($companyId) {
                 $join->on('users.id', '=', 'conversation_events.user_id')
-                    ->where('users.company_id', '=', $user->company_id);
+                    ->where('users.company_id', '=', $companyId);
             })
-            ->where('conversation_events.company_id', $user->company_id)
+            ->where('conversation_events.company_id', $companyId)
             ->where('conversation_events.conversation_id', $conversationId)
             ->whereIn('conversation_events.event_type', [
                 'conversation_opened',
@@ -94,23 +97,23 @@ class InboxConversationTimelineService
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    private function stageEvents(User $user, int $leadId): Collection
+    private function stageEvents(User $user, int $leadId, int $companyId): Collection
     {
         return LeadStageHistory::query()
             ->from('lead_stage_histories')
-            ->leftJoin('users', function ($join) use ($user) {
+            ->leftJoin('users', function ($join) use ($companyId) {
                 $join->on('users.id', '=', 'lead_stage_histories.moved_by_user_id')
-                    ->where('users.company_id', '=', $user->company_id);
+                    ->where('users.company_id', '=', $companyId);
             })
-            ->leftJoin('kanban_columns as from_columns', function ($join) use ($user) {
+            ->leftJoin('kanban_columns as from_columns', function ($join) use ($companyId) {
                 $join->on('from_columns.id', '=', 'lead_stage_histories.from_column_id')
-                    ->where('from_columns.company_id', '=', $user->company_id);
+                    ->where('from_columns.company_id', '=', $companyId);
             })
-            ->leftJoin('kanban_columns as to_columns', function ($join) use ($user) {
+            ->leftJoin('kanban_columns as to_columns', function ($join) use ($companyId) {
                 $join->on('to_columns.id', '=', 'lead_stage_histories.to_column_id')
-                    ->where('to_columns.company_id', '=', $user->company_id);
+                    ->where('to_columns.company_id', '=', $companyId);
             })
-            ->where('lead_stage_histories.company_id', $user->company_id)
+            ->where('lead_stage_histories.company_id', $companyId)
             ->where('lead_stage_histories.lead_id', $leadId)
             ->orderBy('lead_stage_histories.moved_at')
             ->orderBy('lead_stage_histories.id')

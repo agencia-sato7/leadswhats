@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AdminCompanyController;
+use App\Http\Controllers\Api\AdminCompanyViewContextController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BootstrapController;
 use App\Http\Controllers\Api\ContactController;
@@ -40,57 +41,77 @@ Route::prefix('v1')->group(function () {
             ->middleware('role:platform_admin');
         Route::patch('/admin/companies/{companyId}', [AdminCompanyController::class, 'update'])
             ->middleware('role:platform_admin');
+        Route::post('/admin/companies/{companyId}/view-context', [AdminCompanyViewContextController::class, 'store'])
+            ->middleware('role:platform_admin');
+        Route::delete('/admin/view-context', [AdminCompanyViewContextController::class, 'destroy'])
+            ->middleware('role:platform_admin');
 
         Route::get('/bootstrap/overview', [BootstrapController::class, 'overview'])
-            ->middleware('role:admin,gestor,sdr');
+            ->name('tenant.bootstrap.overview')
+            ->middleware(['role:admin,gestor,sdr,platform_admin', 'tenant.view']);
 
         Route::get('/settings/whatsapp', [SettingsWhatsAppController::class, 'show'])
-            ->middleware('role:admin,gestor');
+            ->name('tenant.settings.whatsapp.show')
+            ->middleware(['role:admin,gestor,platform_admin', 'tenant.view']);
         Route::put('/settings/whatsapp', [SettingsWhatsAppController::class, 'update'])
+            ->middleware('role:admin,gestor');
+        Route::post('/settings/whatsapp/embedded-signup/complete', [SettingsWhatsAppController::class, 'completeEmbeddedSignup'])
             ->middleware('role:admin,gestor');
 
         // Intelligence lê conversas já persistidas e não depende do estado da conexão WhatsApp.
         Route::get('/intelligence/conversations', [ConversationIntelligenceController::class, 'index'])
-            ->middleware('role:admin,gestor');
+            ->name('tenant.intelligence.conversations.index')
+            ->middleware(['role:admin,gestor,platform_admin', 'tenant.view']);
         Route::get('/intelligence/conversations/{conversation}', [ConversationIntelligenceController::class, 'show'])
-            ->middleware('role:admin,gestor');
+            ->name('tenant.intelligence.conversations.show')
+            ->middleware(['role:admin,gestor,platform_admin', 'tenant.view']);
         Route::get('/intelligence/summary', [ConversationIntelligenceController::class, 'summary'])
-            ->middleware('role:admin,gestor');
+            ->name('tenant.intelligence.summary')
+            ->middleware(['role:admin,gestor,platform_admin', 'tenant.view']);
         Route::post('/intelligence/conversations/{conversation}/analyze', [ConversationIntelligenceController::class, 'analyze'])
             ->middleware('role:admin,gestor');
 
         // Estas rotas trabalham somente com dados já persistidos. A conexão com a
         // Meta é exigida apenas nos fluxos que efetivamente chamam a API oficial.
         Route::get('/dashboard/summary', [DashboardController::class, 'summary'])
-            ->middleware('role:admin,gestor,sdr');
+            ->name('tenant.dashboard.summary')
+            ->middleware(['role:admin,gestor,sdr,platform_admin', 'tenant.view']);
 
         Route::get('/contacts', [ContactController::class, 'index'])
-            ->middleware('role:admin,gestor,sdr');
+            ->name('tenant.contacts.index')
+            ->middleware(['role:admin,gestor,sdr,platform_admin', 'tenant.view']);
         Route::get('/contacts/export', [ContactController::class, 'export'])
             ->middleware('role:admin,gestor');
 
         Route::get('/inbox/conversations', [InboxController::class, 'index'])
-            ->middleware('role:admin,gestor,sdr');
+            ->name('tenant.inbox.conversations.index')
+            ->middleware(['role:admin,gestor,sdr,platform_admin', 'tenant.view']);
 
         Route::get('/inbox/conversations/{conversationId}', [InboxController::class, 'show'])
-            ->middleware('role:admin,gestor,sdr');
+            ->name('tenant.inbox.conversations.show')
+            ->middleware(['role:admin,gestor,sdr,platform_admin', 'tenant.view']);
         Route::get('/inbox/conversations/{conversationId}/events', [InboxController::class, 'events'])
-            ->middleware('role:admin,gestor,sdr');
+            ->name('tenant.inbox.conversations.events')
+            ->middleware(['role:admin,gestor,sdr,platform_admin', 'tenant.view']);
 
         Route::get('/tasks/checklist', [TaskChecklistController::class, 'index'])
-            ->middleware('role:admin,gestor,sdr');
+            ->name('tenant.tasks.checklist')
+            ->middleware(['role:admin,gestor,sdr,platform_admin', 'tenant.view']);
 
         Route::get('/users/assignable', [UserController::class, 'assignable'])
             ->middleware('role:admin,gestor');
 
         Route::get('/pipelines', [PipelineController::class, 'index'])
-            ->middleware('role:admin,gestor,sdr');
+            ->name('tenant.pipelines.index')
+            ->middleware(['role:admin,gestor,sdr,platform_admin', 'tenant.view']);
 
         Route::get('/pipelines/{pipelineId}/kanban', [PipelineController::class, 'kanban'])
-            ->middleware('role:admin,gestor,sdr');
+            ->name('tenant.pipelines.kanban')
+            ->middleware(['role:admin,gestor,sdr,platform_admin', 'tenant.view']);
 
         Route::get('/leads/{leadId}/stage-history', [LeadStageHistoryController::class, 'index'])
-            ->middleware('role:admin,gestor,sdr');
+            ->name('tenant.leads.stage-history')
+            ->middleware(['role:admin,gestor,sdr,platform_admin', 'tenant.view']);
 
         Route::patch('/leads/{leadId}/stage', [LeadStageController::class, 'update'])
             ->middleware('role:admin,gestor');

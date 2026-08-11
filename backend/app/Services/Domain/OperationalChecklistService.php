@@ -10,21 +10,23 @@ use App\Models\LeadStageHistory;
 use App\Models\Message;
 use App\Models\User;
 use App\Services\CompanySettingsService;
+use Carbon\Carbon;
+use Illuminate\Support\Collection;
 
 class OperationalChecklistService
 {
     public function __construct(
         private readonly CompanySettingsService $companySettingsService,
         private readonly BusinessTimeCalculatorService $businessTimeCalculatorService,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<int, array<string, mixed>>
      */
-    public function checklistForUser(User $user): array
+    public function checklistForUser(User $user, ?int $effectiveCompanyId = null): array
     {
-        $conversations = $this->baseConversationsQuery((int) $user->company_id)
+        $companyId = $effectiveCompanyId ?? (int) $user->company_id;
+        $conversations = $this->baseConversationsQuery($companyId)
             // Regra atual para SDR: checklist limitado ao próprio owner da conversa ou lead.
             ->when(($user->role?->value ?? (string) $user->role) === 'sdr', function ($query) use ($user) {
                 $query->where(function ($scopeQuery) use ($user) {
@@ -38,7 +40,7 @@ class OperationalChecklistService
             ->orderByDesc('last_message_at')
             ->get(['id', 'lead_id', 'last_message_at', 'owner_user_id']);
 
-        return $this->buildChecklistItemsForCompany((int) $user->company_id, $conversations);
+        return $this->buildChecklistItemsForCompany($companyId, $conversations);
     }
 
     /**
@@ -62,7 +64,7 @@ class OperationalChecklistService
     }
 
     /**
-     * @param \Illuminate\Support\Collection<int, Conversation> $conversations
+     * @param  Collection<int, Conversation>  $conversations
      * @return array<int, array<string, mixed>>
      */
     private function buildChecklistItemsForCompany(int $companyId, $conversations): array
@@ -75,7 +77,7 @@ class OperationalChecklistService
         }
 
         $company = Company::query()->find($companyId, ['id']);
-        if (!$company) {
+        if (! $company) {
             return [];
         }
 
@@ -136,12 +138,12 @@ class OperationalChecklistService
 
         foreach ($conversations as $conversation) {
             $lastMessage = $latestMessages->get($conversation->id);
-            if (!$lastMessage) {
+            if (! $lastMessage) {
                 continue;
             }
 
             $lead = $leadsById->get($conversation->lead_id);
-            if (!$lead) {
+            if (! $lead) {
                 continue;
             }
 
@@ -172,14 +174,14 @@ class OperationalChecklistService
             }
 
             $latestInboundRaw = $latestInboundAtByConversation->get($conversation->id);
-            if (!$latestInboundRaw) {
+            if (! $latestInboundRaw) {
                 continue;
             }
 
-            $latestInboundAt = \Carbon\Carbon::parse((string) $latestInboundRaw);
+            $latestInboundAt = Carbon::parse((string) $latestInboundRaw);
             $latestOutboundRaw = $latestOutboundAtByConversation->get($conversation->id);
             if ($latestOutboundRaw) {
-                $latestOutboundAt = \Carbon\Carbon::parse((string) $latestOutboundRaw);
+                $latestOutboundAt = Carbon::parse((string) $latestOutboundRaw);
                 if ($latestOutboundAt->gte($latestInboundAt)) {
                     continue;
                 }

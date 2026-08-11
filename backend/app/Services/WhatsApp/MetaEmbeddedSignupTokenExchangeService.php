@@ -1,0 +1,95 @@
+<?php
+
+namespace App\Services\WhatsApp;
+
+use App\Exceptions\MetaEmbeddedSignupException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+
+class MetaEmbeddedSignupTokenExchangeService
+{
+    public function exchange(string $code): string
+    {
+        $appId = trim((string) config('whatsapp.meta_app_id', ''));
+        $appSecret = trim((string) config('whatsapp.meta_app_secret', ''));
+        $redirectUri = trim((string) config('whatsapp.meta_redirect_uri', ''));
+
+        if ($appId === '' || $appSecret === '' || $redirectUri === '') {
+            throw new MetaEmbeddedSignupException(
+                'As credenciais do Embedded Signup não estão configuradas no servidor.',
+                503,
+            );
+        }
+
+        $apiVersion = trim((string) config('whatsapp.meta_graph_api_version', 'v25.0'), '/');
+        $endpoint = "https://graph.facebook.com/{$apiVersion}/oauth/access_token";
+        $payload = [
+            'client_id' => $appId,
+            'client_secret' => $appSecret,
+            'code' => $code,
+            'grant_type' => 'authorization_code',
+            'redirect_uri' => $redirectUri,
+        ];
+
+        // Instrumentação temporária: somente metadados em allowlist, sem valores
+        // de code, client_secret, resposta OAuth ou access_token.
+        Log::info('Meta Embedded Signup OAuth request metadata.', [
+            'url' => $endpoint,
+            'method' => 'POST',
+            'content_type' => 'application/json',
+            'parameter_names' => array_keys($payload),
+            'redirect_uri' => $redirectUri,
+            'client_id' => $appId,
+            'grant_type' => $payload['grant_type'],
+            'graph_api_version' => $apiVersion,
+        ]);
+
+        try {
+            $response = Http::acceptJson()
+                ->asJson()
+                ->connectTimeout(max((int) config('whatsapp.meta_connect_timeout_seconds', 5), 1))
+                ->timeout(max((int) config('whatsapp.meta_timeout_seconds', 15), 1))
+                ->post($endpoint, $payload);
+        } catch (ConnectionException) {
+            throw new MetaEmbeddedSignupException(
+                'Não foi possível concluir a comunicação segura com a Meta.',
+            );
+        }
+
+        if (! $response->successful()) {
+            $errorCode = $this->scalarOrNull($response->json('error.code'));
+            $errorType = $response->json('error.type');
+            $errorSubcode = $this->scalarOrNull($response->json('error.error_subcode'));
+
+            Log::warning('Meta Embedded Signup OAuth exchange failed.', [
+                'http_status' => $response->status(),
+                'error_code' => $errorCode,
+                'error_type' => is_string($errorType) ? $errorType : null,
+                'error_subcode' => $errorSubcode,
+            ]);
+
+            throw new MetaEmbeddedSignupException(
+                'A Meta não aceitou a conclusão do Embedded Signup.',
+                502,
+                $errorCode,
+                is_string($errorType) ? $errorType : null,
+                $errorSubcode,
+            );
+        }
+
+        $accessToken = $response->json('access_token');
+        if (! is_string($accessToken) || trim($accessToken) === '') {
+            throw new MetaEmbeddedSignupException(
+                'A Meta retornou uma resposta inválida para o Embedded Signup.',
+            );
+        }
+
+        return trim($accessToken);
+    }
+
+    private function scalarOrNull(mixed $value): int|string|null
+    {
+        return is_int($value) || is_string($value) ? $value : null;
+    }
+}

@@ -10,26 +10,36 @@ class CompanyWhatsAppIntegration extends Model
 {
     use HasFactory;
 
-    protected $table = "company_whatsapp_integrations";
+    protected $table = 'company_whatsapp_integrations';
 
     protected $fillable = [
-        "company_id",
-        "provider",
-        "status",
-        "phone_number",
-        "phone_number_id",
-        "business_account_id",
-        "access_token_encrypted",
-        "webhook_verify_token",
-        "connected_at",
-        "last_error",
+        'company_id',
+        'provider',
+        'status',
+        'phone_number',
+        'phone_number_id',
+        'business_account_id',
+        'waba_id',
+        'business_id',
+        'page_ids',
+        'catalog_ids',
+        'dataset_ids',
+        'instagram_account_ids',
+        'access_token_encrypted',
+        'webhook_verify_token',
+        'connected_at',
+        'last_error',
     ];
 
     protected function casts(): array
     {
         return [
-            "access_token_encrypted" => "encrypted",
-            "connected_at" => "datetime",
+            'access_token_encrypted' => 'encrypted',
+            'page_ids' => 'array',
+            'catalog_ids' => 'array',
+            'dataset_ids' => 'array',
+            'instagram_account_ids' => 'array',
+            'connected_at' => 'datetime',
         ];
     }
 

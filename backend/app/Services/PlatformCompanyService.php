@@ -27,6 +27,7 @@ class PlatformCompanyService
                 'id' => $company->id,
                 'name' => $company->name,
                 'slug' => $company->slug,
+                'active' => (bool) $company->active,
                 'users_count' => (int) $company->users_count,
                 'pipelines_count' => (int) $company->pipelines_count,
                 'has_business_settings' => (bool) $company->has_business_settings,
@@ -80,7 +81,7 @@ class PlatformCompanyService
                 'first_response_sla_minutes' => $settingsPayload['first_response_sla_minutes'],
                 'follow_up_sla_hours' => $settingsPayload['follow_up_sla_hours'],
                 'stale_conversation_hours' => $settingsPayload['stale_conversation_hours'],
-                'webhook_token' => 'demo_' . Str::lower(Str::random(28)),
+                'webhook_token' => 'demo_'.Str::lower(Str::random(28)),
             ]);
 
             $pipeline = Pipeline::query()->create([
@@ -108,7 +109,7 @@ class PlatformCompanyService
             }
 
             $token = (string) $settings->webhook_token;
-            $maskedToken = '****' . (strlen($token) >= 4 ? substr($token, -4) : $token);
+            $maskedToken = '****'.(strlen($token) >= 4 ? substr($token, -4) : $token);
 
             return [
                 'company' => [
@@ -220,7 +221,7 @@ class PlatformCompanyService
     }
 
     /**
-     * @param array{name?:string,slug?:string,active?:bool} $payload
+     * @param  array{name?:string,slug?:string,active?:bool}  $payload
      * @return array<string,mixed>
      */
     public function updateCompany(int $companyId, array $payload): array
@@ -248,4 +249,3 @@ class PlatformCompanyService
         ];
     }
 }
-

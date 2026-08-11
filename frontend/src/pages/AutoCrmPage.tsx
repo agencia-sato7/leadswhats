@@ -13,6 +13,7 @@ type AttentionFilter = 'all' | 'ai' | 'stale' | 'unassigned';
 
 type Props = {
   token: string;
+  tenantContext?: string;
   pipelines: PipelineListItem[];
   selectedPipelineId: number | null;
   kanban: PipelineKanban | null;
@@ -166,6 +167,7 @@ function historySourceLabel(source: string): string {
 
 export function AutoCrmPage({
   token,
+  tenantContext,
   pipelines,
   selectedPipelineId,
   kanban,
@@ -257,7 +259,7 @@ export function AutoCrmPage({
     setHistoryLoading(true);
     setActionError(null);
     try {
-      setHistory(await getLeadStageHistory(token, leadId));
+      setHistory(await getLeadStageHistory(token, leadId, tenantContext));
     } catch {
       setActionError('Não foi possível carregar o histórico de etapas.');
     } finally {

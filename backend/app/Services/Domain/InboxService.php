@@ -3,7 +3,6 @@
 namespace App\Services\Domain;
 
 use App\Models\Conversation;
-use App\Models\Lead;
 use App\Models\LeadStageHistory;
 use App\Models\Message;
 use App\Models\User;
@@ -12,25 +11,23 @@ use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
 
 class InboxService
 {
     public function __construct(
         private readonly CompanySettingsService $companySettingsService,
-    ) {
-    }
+    ) {}
 
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      * @return array{data: array<int, array<string, mixed>>, meta: array<string, int>}
      */
-    public function listConversationsForUser(User $user, array $filters): array
+    public function listConversationsForUser(User $user, array $filters, ?int $effectiveCompanyId = null): array
     {
         $perPage = max(1, min((int) ($filters['per_page'] ?? 20), 100));
         $page = max(1, (int) ($filters['page'] ?? 1));
 
-        $paginator = $this->baseQueryForUser($user, $filters)
+        $paginator = $this->baseQueryForUser($user, $filters, $effectiveCompanyId)
             ->select($this->listSelectColumns())
             ->orderByDesc('latest_message.last_message_at')
             ->orderByDesc('conversations.id')
@@ -50,21 +47,25 @@ class InboxService
     /**
      * @return array<string, mixed>|null
      */
-    public function getConversationDetailForUser(User $user, int $conversationId): ?array
-    {
-        $query = $this->baseQueryForUser($user, [])
+    public function getConversationDetailForUser(
+        User $user,
+        int $conversationId,
+        ?int $effectiveCompanyId = null,
+    ): ?array {
+        $companyId = $effectiveCompanyId ?? (int) $user->company_id;
+        $query = $this->baseQueryForUser($user, [], $companyId)
             ->where('conversations.id', $conversationId)
             ->select($this->detailSelectColumns());
 
         $conversation = $query->first();
-        if (!$conversation) {
+        if (! $conversation) {
             return null;
         }
 
         $serviceWindow = $this->buildServiceWindow($conversation->last_inbound_at);
 
         $messages = Message::query()
-            ->where('company_id', $user->company_id)
+            ->where('company_id', $companyId)
             ->where('conversation_id', $conversationId)
             ->orderBy('sent_at')
             ->orderBy('id')
@@ -112,11 +113,11 @@ class InboxService
     }
 
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      */
-    private function baseQueryForUser(User $user, array $filters): Builder
+    private function baseQueryForUser(User $user, array $filters, ?int $effectiveCompanyId = null): Builder
     {
-        $companyId = (int) $user->company_id;
+        $companyId = $effectiveCompanyId ?? (int) $user->company_id;
 
         $query = Conversation::query()
             ->from('conversations')
@@ -251,7 +252,7 @@ class InboxService
     }
 
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      */
     private function applyFilters(Builder $query, User $user, array $filters): void
     {
@@ -259,24 +260,24 @@ class InboxService
         if ($search !== '') {
             $normalizedSearch = preg_replace('/\D+/', '', $search) ?? '';
             $query->where(function ($searchQuery) use ($search, $normalizedSearch) {
-                $searchQuery->where('leads.name', 'like', '%' . $search . '%')
-                    ->orWhere('leads.phone_e164', 'like', '%' . $search . '%');
+                $searchQuery->where('leads.name', 'like', '%'.$search.'%')
+                    ->orWhere('leads.phone_e164', 'like', '%'.$search.'%');
 
                 if ($normalizedSearch !== '') {
-                    $searchQuery->orWhere('leads.phone_e164', 'like', '%' . $normalizedSearch . '%');
+                    $searchQuery->orWhere('leads.phone_e164', 'like', '%'.$normalizedSearch.'%');
                 }
             });
         }
 
-        if (!empty($filters['owner_user_id'])) {
+        if (! empty($filters['owner_user_id'])) {
             $query->where('conversations.owner_user_id', (int) $filters['owner_user_id']);
         }
 
-        if (!empty($filters['source'])) {
+        if (! empty($filters['source'])) {
             $query->where('leads.source', $filters['source']);
         }
 
-        if (!empty($filters['stage_id'])) {
+        if (! empty($filters['stage_id'])) {
             $query->where('latest_stage.to_column_id', (int) $filters['stage_id']);
         }
 
@@ -310,6 +311,7 @@ class InboxService
         if ($expectedOpenTask) {
             $query->where('latest_message.last_message_direction', 'outbound')
                 ->where('latest_message.last_message_at', '<=', $thresholdDate);
+
             return;
         }
 
@@ -321,7 +323,6 @@ class InboxService
     }
 
     /**
-     * @param CarbonInterface|string|null $lastInboundAt
      * @return array{open: bool, expires_at: string|null}
      */
     private function buildServiceWindow(CarbonInterface|string|null $lastInboundAt): array

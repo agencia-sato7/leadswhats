@@ -37,18 +37,19 @@ class AdminCompaniesApiTest extends TestCase
 
         $token = $this->login($platformAdmin->email);
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->getJson('/api/v1/admin/companies')
             ->assertOk()
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name', 'slug', 'users_count', 'pipelines_count', 'has_business_settings', 'created_at'],
+                    '*' => ['id', 'name', 'slug', 'active', 'users_count', 'pipelines_count', 'has_business_settings', 'created_at'],
                 ],
             ])
             ->assertJsonFragment([
                 'id' => $company->id,
                 'name' => 'Empresa A',
                 'slug' => 'empresa-a',
+                'active' => true,
                 'users_count' => 1,
                 'pipelines_count' => 1,
                 'has_business_settings' => true,
@@ -60,14 +61,14 @@ class AdminCompaniesApiTest extends TestCase
         $company = Company::create(['name' => 'Empresa Tenant', 'slug' => 'empresa-tenant-admin-api']);
 
         foreach (['admin', 'gestor', 'sdr'] as $role) {
-            $user = $this->createTenantUser($company->id, $role, $role . '.admin.companies@test.local');
+            $user = $this->createTenantUser($company->id, $role, $role.'.admin.companies@test.local');
             $token = $this->login($user->email);
 
-            $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+            $this->withHeaders(['Authorization' => 'Bearer '.$token])
                 ->getJson('/api/v1/admin/companies')
                 ->assertForbidden();
 
-            $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+            $this->withHeaders(['Authorization' => 'Bearer '.$token])
                 ->postJson('/api/v1/admin/companies', $this->validPayload())
                 ->assertForbidden();
         }
@@ -85,7 +86,7 @@ class AdminCompaniesApiTest extends TestCase
         $token = $this->login($platformAdmin->email);
         $payload = $this->validPayload();
 
-        $response = $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->postJson('/api/v1/admin/companies', $payload)
             ->assertCreated()
             ->assertJsonPath('message', 'Company created successfully.')
@@ -130,7 +131,7 @@ class AdminCompaniesApiTest extends TestCase
 
         Company::create(['name' => 'Empresa Existente', 'slug' => 'clinica-exemplo']);
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->postJson('/api/v1/admin/companies', $this->validPayload())
             ->assertStatus(422)
             ->assertJsonValidationErrors(['company.slug']);
@@ -143,7 +144,7 @@ class AdminCompaniesApiTest extends TestCase
         $otherCompany = Company::create(['name' => 'Empresa Existente', 'slug' => 'empresa-existente-email']);
         $this->createTenantUser($otherCompany->id, 'admin', 'dono@cliente.com');
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
             ->postJson('/api/v1/admin/companies', $this->validPayload())
             ->assertStatus(422)
             ->assertJsonValidationErrors(['admin_user.email']);
@@ -171,8 +172,8 @@ class AdminCompaniesApiTest extends TestCase
         $pipeline = Pipeline::create(['company_id' => $company->id, 'name' => 'Pipeline Show', 'is_default' => true]);
         KanbanColumn::create(['company_id' => $company->id, 'pipeline_id' => $pipeline->id, 'name' => 'Novo Contato', 'position' => 1]);
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->getJson('/api/v1/admin/companies/' . $company->id)
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->getJson('/api/v1/admin/companies/'.$company->id)
             ->assertOk()
             ->assertJsonPath('data.company.id', $company->id)
             ->assertJsonPath('data.admin_users.0.id', $admin->id)
@@ -187,8 +188,8 @@ class AdminCompaniesApiTest extends TestCase
         $token = $this->login($platformAdmin->email);
         $company = Company::create(['name' => 'Empresa Antiga', 'slug' => 'empresa-antiga']);
 
-        $this->withHeaders(['Authorization' => 'Bearer ' . $token])
-            ->patchJson('/api/v1/admin/companies/' . $company->id, [
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->patchJson('/api/v1/admin/companies/'.$company->id, [
                 'name' => 'Empresa Nova',
                 'slug' => 'empresa-nova',
             ])

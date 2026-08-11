@@ -53,6 +53,17 @@
         "bearerFormat": "Token"
       }
     },
+    "parameters": {
+      "TenantContextHeader": {
+        "name": "X-Tenant-Context",
+        "in": "header",
+        "required": false,
+        "description": "Contexto temporário retornado pela Central da Agência. Aceito somente para platform_admin e somente nos endpoints GET explicitamente autorizados.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
     "schemas": {
       "LoginRequest": {
         "type": "object",
@@ -266,6 +277,49 @@
         "properties": {
           "message": {
             "type": "string"
+          }
+        }
+      },
+      "MetaOAuthErrorResponse": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "meta_error": {
+            "type": "object",
+            "description": "Somente metadados não sensíveis retornados pela Meta; nunca contém code OAuth, client_secret ou access_token.",
+            "properties": {
+              "code": {
+                "oneOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "nullable": true
+              },
+              "type": {
+                "type": "string",
+                "nullable": true
+              },
+              "error_subcode": {
+                "oneOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "nullable": true
+              }
+            }
           }
         }
       },
@@ -1644,6 +1698,40 @@
             "type": "string",
             "nullable": true
           },
+          "waba_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "ID da conta WhatsApp Business retornado pelo Embedded Signup."
+          },
+          "business_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "ID do negócio Meta retornado pelo Embedded Signup, quando disponível."
+          },
+          "page_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "catalog_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dataset_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "instagram_account_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "webhook_verify_token_configured": {
             "type": "boolean"
           },
@@ -1707,6 +1795,87 @@
           "last_error": {
             "type": "string",
             "nullable": true
+          }
+        }
+      },
+      "WhatsAppEmbeddedSignupCompleteRequest": {
+        "type": "object",
+        "required": [
+          "code",
+          "embedded_signup"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Código de uso único retornado pelo callback do FB.login(). Nunca envie access_token neste endpoint."
+          },
+          "embedded_signup": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "data",
+              "type",
+              "event"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "WA_EMBEDDED_SIGNUP"
+                ]
+              },
+              "event": {
+                "type": "string",
+                "enum": [
+                  "FINISH"
+                ]
+              },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "phone_number_id",
+                  "waba_id"
+                ],
+                "properties": {
+                  "phone_number_id": {
+                    "type": "string"
+                  },
+                  "waba_id": {
+                    "type": "string"
+                  },
+                  "business_id": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "page_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "catalog_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "dataset_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "instagram_account_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -1822,6 +1991,7 @@
         "description": "Somente admin/gestor. Isolado por company_id e independente do estado da conexão WhatsApp.",
         "security": [{ "BearerAuth": [] }],
         "parameters": [
+          { "$ref": "#/components/parameters/TenantContextHeader" },
           { "name": "search", "in": "query", "schema": { "type": "string" } },
           { "name": "analysis_status", "in": "query", "schema": { "type": "string", "enum": ["pending", "analyzed"] } },
           { "name": "min_score", "in": "query", "schema": { "type": "integer", "minimum": 0, "maximum": 100 } },
@@ -1843,7 +2013,10 @@
         "tags": ["Conversation Intelligence"],
         "summary": "Detalha transcrição e snapshots de uma conversa",
         "security": [{ "BearerAuth": [] }],
-        "parameters": [{ "name": "conversation", "in": "path", "required": true, "schema": { "type": "integer" } }],
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantContextHeader" },
+          { "name": "conversation", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
         "responses": {
           "200": {
             "description": "Detalhe somente leitura",
@@ -1858,6 +2031,9 @@
         "tags": ["Conversation Intelligence"],
         "summary": "Resumo gerencial dos últimos snapshots",
         "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantContextHeader" }
+        ],
         "responses": {
           "200": {
             "description": "Resumo de qualidade",
@@ -1994,6 +2170,11 @@
             "BearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantContextHeader"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Resumo carregado",
@@ -2110,6 +2291,11 @@
         "security": [
           {
             "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantContextHeader"
           }
         ],
         "responses": {
@@ -2361,6 +2547,11 @@
             "BearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantContextHeader"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Pipelines carregados",
@@ -2419,6 +2610,9 @@
           }
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantContextHeader"
+          },
           {
             "name": "pipelineId",
             "in": "path",
@@ -2528,6 +2722,9 @@
           }
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantContextHeader"
+          },
           {
             "name": "leadId",
             "in": "path",
@@ -3080,6 +3277,11 @@
             "BearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantContextHeader"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Checklist carregado",
@@ -3166,6 +3368,9 @@
           }
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantContextHeader"
+          },
           {
             "name": "search",
             "in": "query",
@@ -3518,6 +3723,9 @@
         ],
         "parameters": [
           {
+            "$ref": "#/components/parameters/TenantContextHeader"
+          },
+          {
             "name": "search",
             "in": "query",
             "required": false,
@@ -3650,6 +3858,9 @@
           }
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantContextHeader"
+          },
           {
             "name": "conversationId",
             "in": "path",
@@ -3800,6 +4011,9 @@
           }
         ],
         "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantContextHeader"
+          },
           {
             "name": "conversationId",
             "in": "path",
@@ -4080,6 +4294,9 @@
                           "slug": {
                             "type": "string"
                           },
+                          "active": {
+                            "type": "boolean"
+                          },
                           "users_count": {
                             "type": "integer"
                           },
@@ -4098,6 +4315,7 @@
                           "id",
                           "name",
                           "slug",
+                          "active",
                           "users_count",
                           "pipelines_count",
                           "has_business_settings",
@@ -4116,6 +4334,7 @@
                       "id": 2,
                       "name": "Clínica Exemplo",
                       "slug": "clinica-exemplo",
+                      "active": true,
                       "users_count": 3,
                       "pipelines_count": 1,
                       "has_business_settings": true,
@@ -4373,6 +4592,93 @@
         }
       }
     },
+    "/api/v1/admin/companies/{companyId}/view-context": {
+      "post": {
+        "tags": [
+          "SaaS Admin"
+        ],
+        "summary": "Abre contexto temporário de leitura de uma clínica",
+        "description": "Cria um contexto de 15 minutos vinculado ao platform_admin autenticado e à clínica ativa. Não altera users.company_id, não impersona usuário do tenant e registra auditoria de entrada.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Contexto de consulta criado",
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": {
+                    "context_token": "ptvc_contexto_temporario",
+                    "company": {
+                      "id": 2,
+                      "name": "Clínica Exemplo",
+                      "slug": "clinica-exemplo"
+                    },
+                    "read_only": true,
+                    "expires_at": "2026-08-10T15:15:00.000000Z"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado"
+          },
+          "403": {
+            "description": "Acesso restrito a platform_admin"
+          },
+          "404": {
+            "description": "Clínica não encontrada"
+          },
+          "422": {
+            "description": "Clínica inativa"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/view-context": {
+      "delete": {
+        "tags": [
+          "SaaS Admin"
+        ],
+        "summary": "Encerra contexto temporário de uma clínica",
+        "description": "Revoga o contexto do platform_admin e registra auditoria de saída.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantContextHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contexto encerrado"
+          },
+          "403": {
+            "description": "Contexto inválido, expirado ou revogado"
+          },
+          "422": {
+            "description": "Header X-Tenant-Context ausente"
+          }
+        }
+      }
+    },
     "/api/v1/admin/companies/{companyId}": {
       "get": {
         "tags": [
@@ -4603,6 +4909,11 @@
             "BearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TenantContextHeader"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Configuração carregada com sucesso",
@@ -4724,6 +5035,108 @@
           },
           "422": {
             "description": "Erro de validação (provider inválido ou payload inválido)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/whatsapp/embedded-signup/complete": {
+      "post": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Concluir WhatsApp Embedded Signup",
+        "description": "Recebe somente o código de uso único do FB.login e o evento FINISH. O backend usa POST com Content-Type application/json no OAuth da Meta, com grant_type=authorization_code e o META_REDIRECT_URI exato da autorização que gerou o code. Código, app secret e access token nunca são retornados.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsAppEmbeddedSignupCompleteRequest"
+              },
+              "example": {
+                "code": "one-time-code-from-fb-login",
+                "embedded_signup": {
+                  "data": {
+                    "phone_number_id": "phone-number-id",
+                    "waba_id": "whatsapp-business-account-id",
+                    "business_id": "meta-business-id",
+                    "page_ids": [],
+                    "catalog_ids": [],
+                    "dataset_ids": [],
+                    "instagram_account_ids": []
+                  },
+                  "type": "WA_EMBEDDED_SIGNUP",
+                  "event": "FINISH"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Embedded Signup concluído e integração persistida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyWhatsAppIntegrationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Perfil sem permissão; somente admin e gestor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Payload do Embedded Signup inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "A Meta recusou ou retornou resposta inválida, sem exposição de detalhes sensíveis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaOAuthErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Credenciais Meta ausentes no servidor",
             "content": {
               "application/json": {
                 "schema": {

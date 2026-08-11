@@ -15,6 +15,8 @@ import type {
 
 type Props = {
   token: string;
+  tenantContext?: string;
+  readOnly?: boolean;
   initialConversationId?: number | null;
 };
 
@@ -259,7 +261,7 @@ function AnalysisPanel({ analysis, currentStage }: { analysis: ConversationQuali
   );
 }
 
-export function ConversationIntelligencePage({ token, initialConversationId = null }: Props) {
+export function ConversationIntelligencePage({ token, tenantContext, readOnly = false, initialConversationId = null }: Props) {
   const [summary, setSummary] = useState<ConversationIntelligenceSummaryResponse['data'] | null>(null);
   const [conversations, setConversations] = useState<ConversationIntelligenceListItem[]>([]);
   const [detail, setDetail] = useState<ConversationIntelligenceDetail | null>(null);
@@ -286,12 +288,12 @@ export function ConversationIntelligencePage({ token, initialConversationId = nu
     setError(null);
     try {
       const [summaryResponse, listResponse] = await Promise.all([
-        getConversationIntelligenceSummary(token),
+        getConversationIntelligenceSummary(token, tenantContext),
         getConversationIntelligenceList(token, {
           search: search.trim() || undefined,
           analysis_status: analysisStatus === 'all' ? undefined : analysisStatus,
           page: targetPage,
-        }),
+        }, tenantContext),
       ]);
       setSummary(summaryResponse.data);
       setConversations(listResponse.data);
@@ -310,7 +312,7 @@ export function ConversationIntelligencePage({ token, initialConversationId = nu
     setError(null);
     setActionMessage(null);
     try {
-      const response = await getConversationIntelligenceDetail(token, conversationId);
+      const response = await getConversationIntelligenceDetail(token, conversationId, tenantContext);
       setDetail(response.data);
       setSelectedAnalysisId(response.data.latest_analysis?.id ?? null);
     } catch (err) {
@@ -322,7 +324,7 @@ export function ConversationIntelligencePage({ token, initialConversationId = nu
   }
 
   async function handleAnalyze() {
-    if (!selectedConversationId) return;
+    if (!selectedConversationId || readOnly) return;
     setAnalyzing(true);
     setError(null);
     setActionMessage(null);
@@ -447,15 +449,21 @@ export function ConversationIntelligencePage({ token, initialConversationId = nu
                       <Badge variant="neutral">Origem: {sourceLabel(detail.lead.source)}</Badge>
                     </div>
                   </div>
-                  <Button type="button" onClick={() => void handleAnalyze()} disabled={analyzing}>
-                    {analyzing ? 'Analisando conversa...' : detail.latest_analysis ? 'Reanalisar' : 'Analisar com IA'}
-                  </Button>
+                  {!readOnly ? (
+                    <Button type="button" onClick={() => void handleAnalyze()} disabled={analyzing}>
+                      {analyzing ? 'Analisando conversa...' : detail.latest_analysis ? 'Reanalisar' : 'Analisar com IA'}
+                    </Button>
+                  ) : <Badge variant="neutral">Consulta somente leitura</Badge>}
                 </div>
 
                 {selectedAnalysis ? (
                   <AnalysisPanel analysis={selectedAnalysis} currentStage={detail.lead.current_stage} />
                 ) : (
-                  <Alert variant="info">Esta conversa ainda não possui diagnóstico. Use “Analisar com IA” para gerar a primeira leitura executiva.</Alert>
+                  <Alert variant="info">
+                    {readOnly
+                      ? 'Esta conversa ainda não possui diagnóstico disponível para consulta.'
+                      : 'Esta conversa ainda não possui diagnóstico. Use “Analisar com IA” para gerar a primeira leitura executiva.'}
+                  </Alert>
                 )}
 
                 {detail.analysis_history.length > 1 ? (

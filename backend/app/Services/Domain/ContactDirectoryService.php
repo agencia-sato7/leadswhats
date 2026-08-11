@@ -2,7 +2,6 @@
 
 namespace App\Services\Domain;
 
-use App\Models\Conversation;
 use App\Models\Lead;
 use App\Models\LeadStageHistory;
 use App\Models\Message;
@@ -14,15 +13,15 @@ use Illuminate\Support\Facades\DB;
 class ContactDirectoryService
 {
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      * @return array{data: array<int, array<string, mixed>>, meta: array<string, int>}
      */
-    public function listForUser(User $user, array $filters): array
+    public function listForUser(User $user, array $filters, ?int $effectiveCompanyId = null): array
     {
         $perPage = max(1, min((int) ($filters['per_page'] ?? 20), 100));
         $page = max(1, (int) ($filters['page'] ?? 1));
 
-        $paginator = $this->baseQueryForUser($user, $filters)
+        $paginator = $this->baseQueryForUser($user, $filters, $effectiveCompanyId)
             ->select($this->contactSelectColumns())
             ->orderByDesc('latest_message.last_message_at')
             ->orderByDesc('leads.created_at')
@@ -41,7 +40,7 @@ class ContactDirectoryService
     }
 
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      * @return array<int, array<string, mixed>>
      */
     public function exportRowsForUser(User $user, array $filters): array
@@ -70,11 +69,11 @@ class ContactDirectoryService
     }
 
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      */
-    private function baseQueryForUser(User $user, array $filters): Builder
+    private function baseQueryForUser(User $user, array $filters, ?int $effectiveCompanyId = null): Builder
     {
-        $companyId = (int) $user->company_id;
+        $companyId = $effectiveCompanyId ?? (int) $user->company_id;
 
         $query = Lead::query()
             ->from('leads')
@@ -172,7 +171,7 @@ class ContactDirectoryService
     }
 
     /**
-     * @param array<string, mixed> $filters
+     * @param  array<string, mixed>  $filters
      */
     private function applyFilters(Builder $query, array $filters): void
     {
@@ -180,20 +179,20 @@ class ContactDirectoryService
         if ($search !== '') {
             $normalizedSearch = preg_replace('/\D+/', '', $search) ?? '';
             $query->where(function ($searchQuery) use ($search, $normalizedSearch) {
-                $searchQuery->where('leads.name', 'like', '%' . $search . '%')
-                    ->orWhere('leads.phone_e164', 'like', '%' . $search . '%');
+                $searchQuery->where('leads.name', 'like', '%'.$search.'%')
+                    ->orWhere('leads.phone_e164', 'like', '%'.$search.'%');
 
                 if ($normalizedSearch !== '') {
-                    $searchQuery->orWhere('leads.phone_e164', 'like', '%' . $normalizedSearch . '%');
+                    $searchQuery->orWhere('leads.phone_e164', 'like', '%'.$normalizedSearch.'%');
                 }
             });
         }
 
-        if (!empty($filters['source'])) {
+        if (! empty($filters['source'])) {
             $query->where('leads.source', $filters['source']);
         }
 
-        if (!empty($filters['classification'])) {
+        if (! empty($filters['classification'])) {
             $classification = (string) $filters['classification'];
             if ($classification === 'lead_novo') {
                 $query->where('leads.is_repeat_lead', false);
@@ -216,19 +215,19 @@ class ContactDirectoryService
             }
         }
 
-        if (!empty($filters['created_from'])) {
+        if (! empty($filters['created_from'])) {
             $query->whereDate('leads.created_at', '>=', $filters['created_from']);
         }
 
-        if (!empty($filters['created_to'])) {
+        if (! empty($filters['created_to'])) {
             $query->whereDate('leads.created_at', '<=', $filters['created_to']);
         }
 
-        if (!empty($filters['last_message_from'])) {
+        if (! empty($filters['last_message_from'])) {
             $query->where('latest_message.last_message_at', '>=', $filters['last_message_from']);
         }
 
-        if (!empty($filters['last_message_to'])) {
+        if (! empty($filters['last_message_to'])) {
             $query->where('latest_message.last_message_at', '<=', $filters['last_message_to']);
         }
     }

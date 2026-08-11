@@ -38,6 +38,15 @@ docker compose up -d
 
 Na primeira subida, o ambiente instala dependencias do frontend e sobe os servicos definidos no `docker-compose.yml`.
 
+Para habilitar o WhatsApp Embedded Signup no frontend, copie `frontend/.env.example` para `frontend/.env` e informe apenas os identificadores públicos gerados pela Meta:
+
+```env
+VITE_META_APP_ID=<id-publico-do-app>
+VITE_META_EMBEDDED_SIGNUP_CONFIG_ID=<id-publico-da-configuracao>
+```
+
+O `META_APP_SECRET` e o access token permanecem exclusivamente no backend e nunca devem usar o prefixo `VITE_`.
+
 Antes de analisar conversas com o provider real, copie o arquivo de ambiente da raiz e configure a chave:
 
 ```bash
@@ -127,6 +136,13 @@ Build do frontend:
 
 ```bash
 docker compose exec frontend sh -lc 'cd /app && npm run build'
+```
+
+Tipagem e testes do frontend:
+
+```bash
+docker compose exec frontend sh -lc 'cd /app && npm run typecheck'
+docker compose exec frontend sh -lc 'cd /app && npm test'
 ```
 
 Validacao do OpenAPI:

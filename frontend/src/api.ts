@@ -2,6 +2,7 @@ import type {
   AdminCompanyCreateRequest,
   AdminCompanyCreateResponse,
   AdminCompanyListItem,
+  AdminTenantViewContextResponse,
   ContactItem,
   ContactsResponse,
   ChecklistTaskItem,
@@ -19,10 +20,10 @@ import type {
   OverviewResponse,
   PipelineKanban,
   PipelineListItem,
+  CompleteWhatsAppEmbeddedSignupRequest,
+  CompleteWhatsAppEmbeddedSignupResponse,
   WhatsAppSettings,
   WhatsAppSettingsResponse,
-  WhatsAppSettingsUpdateRequest,
-  WhatsAppSettingsUpdateResponse,
   AnalyzeConversationResponse,
   ConversationIntelligenceDetailResponse,
   ConversationIntelligenceListResponse,
@@ -30,6 +31,13 @@ import type {
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://leadswhats.appsato7.com.br/api/v1';
+
+function authenticatedHeaders(token: string, tenantContext?: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    ...(tenantContext ? { 'X-Tenant-Context': tenantContext } : {}),
+  };
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -56,15 +64,15 @@ export function login(email: string, password: string): Promise<LoginResponse> {
   });
 }
 
-export function getOverview(token: string): Promise<OverviewResponse> {
+export function getOverview(token: string, tenantContext?: string): Promise<OverviewResponse> {
   return request<OverviewResponse>('/bootstrap/overview', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
 }
 
-export function getDashboardSummary(token: string): Promise<DashboardSummaryResponse> {
+export function getDashboardSummary(token: string, tenantContext?: string): Promise<DashboardSummaryResponse> {
   return request<DashboardSummaryResponse>('/dashboard/summary', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
 }
 
@@ -92,17 +100,17 @@ export function classifyLeadSource(token: string, leadId: number, source: string
   });
 }
 
-export async function getPipelines(token: string): Promise<PipelineListItem[]> {
+export async function getPipelines(token: string, tenantContext?: string): Promise<PipelineListItem[]> {
   const data = await request<{ data: PipelineListItem[] }>('/pipelines', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
 
   return data.data;
 }
 
-export async function getPipelineKanban(token: string, pipelineId: number): Promise<PipelineKanban> {
+export async function getPipelineKanban(token: string, pipelineId: number, tenantContext?: string): Promise<PipelineKanban> {
   const data = await request<{ data: PipelineKanban }>(`/pipelines/${pipelineId}/kanban`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
 
   return data.data;
@@ -119,9 +127,9 @@ export function moveLeadStage(token: string, leadId: number, kanbanColumnId: num
   });
 }
 
-export async function getLeadStageHistory(token: string, leadId: number): Promise<LeadStageHistoryItem[]> {
+export async function getLeadStageHistory(token: string, leadId: number, tenantContext?: string): Promise<LeadStageHistoryItem[]> {
   const data = await request<{ data: LeadStageHistoryItem[] }>(`/leads/${leadId}/stage-history`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
 
   return data.data;
@@ -149,9 +157,9 @@ export function updateKanbanColumn(token: string, columnId: number, payload: { n
   });
 }
 
-export async function getTasksChecklist(token: string): Promise<ChecklistTaskItem[]> {
+export async function getTasksChecklist(token: string, tenantContext?: string): Promise<ChecklistTaskItem[]> {
   const data = await request<{ data: ChecklistTaskItem[] }>('/tasks/checklist', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
 
   return data.data;
@@ -167,6 +175,7 @@ export async function getContacts(
     page?: number;
     per_page?: number;
   },
+  tenantContext?: string,
 ): Promise<ContactsResponse> {
   const query = new URLSearchParams();
 
@@ -179,7 +188,7 @@ export async function getContacts(
 
   const path = query.size > 0 ? `/contacts?${query.toString()}` : '/contacts';
   return request<{ data: ContactItem[]; meta: ContactsResponse['meta'] }>(path, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
 }
 
@@ -226,6 +235,7 @@ export async function getInboxConversations(
     page?: number;
     per_page?: number;
   },
+  tenantContext?: string,
 ): Promise<InboxConversationsResponse> {
   const query = new URLSearchParams();
 
@@ -239,20 +249,20 @@ export async function getInboxConversations(
 
   const path = query.size > 0 ? `/inbox/conversations?${query.toString()}` : '/inbox/conversations';
   return request<InboxConversationsResponse>(path, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
 }
 
-export async function getInboxConversationDetail(token: string, conversationId: number): Promise<InboxConversationDetail> {
+export async function getInboxConversationDetail(token: string, conversationId: number, tenantContext?: string): Promise<InboxConversationDetail> {
   const data = await request<{ data: InboxConversationDetail }>(`/inbox/conversations/${conversationId}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
   return data.data;
 }
 
-export async function getInboxConversationEvents(token: string, conversationId: number): Promise<InboxConversationEvent[]> {
+export async function getInboxConversationEvents(token: string, conversationId: number, tenantContext?: string): Promise<InboxConversationEvent[]> {
   const data = await request<{ data: InboxConversationEvent[] }>(`/inbox/conversations/${conversationId}/events`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
   return data.data;
 }
@@ -289,16 +299,33 @@ export function createAdminCompany(token: string, payload: AdminCompanyCreateReq
   });
 }
 
-export async function getWhatsAppSettings(token: string): Promise<WhatsAppSettings> {
+export function createAdminTenantViewContext(token: string, companyId: number): Promise<AdminTenantViewContextResponse> {
+  return request<AdminTenantViewContextResponse>(`/admin/companies/${companyId}/view-context`, {
+    method: 'POST',
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function revokeAdminTenantViewContext(token: string, tenantContext: string): Promise<{ message: string }> {
+  return request<{ message: string }>('/admin/view-context', {
+    method: 'DELETE',
+    headers: authenticatedHeaders(token, tenantContext),
+  });
+}
+
+export async function getWhatsAppSettings(token: string, tenantContext?: string): Promise<WhatsAppSettings> {
   const data = await request<WhatsAppSettingsResponse>('/settings/whatsapp', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
   return data.data;
 }
 
-export async function updateWhatsAppSettings(token: string, payload: WhatsAppSettingsUpdateRequest): Promise<WhatsAppSettings> {
-  const data = await request<WhatsAppSettingsUpdateResponse>('/settings/whatsapp', {
-    method: 'PUT',
+export async function completeWhatsAppEmbeddedSignup(
+  token: string,
+  payload: CompleteWhatsAppEmbeddedSignupRequest,
+): Promise<WhatsAppSettings> {
+  const data = await request<CompleteWhatsAppEmbeddedSignupResponse>('/settings/whatsapp/embedded-signup/complete', {
+    method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   });
@@ -307,15 +334,16 @@ export async function updateWhatsAppSettings(token: string, payload: WhatsAppSet
 
 // ==== Conversation Intelligence ====
 
-export function getConversationIntelligenceSummary(token: string): Promise<ConversationIntelligenceSummaryResponse> {
+export function getConversationIntelligenceSummary(token: string, tenantContext?: string): Promise<ConversationIntelligenceSummaryResponse> {
   return request<ConversationIntelligenceSummaryResponse>('/intelligence/summary', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
 }
 
 export function getConversationIntelligenceList(
   token: string,
   filters: { search?: string; analysis_status?: 'pending' | 'analyzed'; page?: number } = {},
+  tenantContext?: string,
 ): Promise<ConversationIntelligenceListResponse> {
   const query = new URLSearchParams();
   if (filters.search) query.set('search', filters.search);
@@ -324,13 +352,13 @@ export function getConversationIntelligenceList(
   const suffix = query.size > 0 ? `?${query.toString()}` : '';
 
   return request<ConversationIntelligenceListResponse>(`/intelligence/conversations${suffix}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
 }
 
-export function getConversationIntelligenceDetail(token: string, conversationId: number): Promise<ConversationIntelligenceDetailResponse> {
+export function getConversationIntelligenceDetail(token: string, conversationId: number, tenantContext?: string): Promise<ConversationIntelligenceDetailResponse> {
   return request<ConversationIntelligenceDetailResponse>(`/intelligence/conversations/${conversationId}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authenticatedHeaders(token, tenantContext),
   });
 }
 

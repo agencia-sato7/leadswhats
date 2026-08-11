@@ -6,13 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Services\Domain\ConversationEventService;
 use App\Services\Domain\InboxConversationTimelineService;
 use App\Services\Domain\InboxService;
+use App\Services\EffectiveTenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class InboxController extends Controller
 {
-    public function index(Request $request, InboxService $inboxService): JsonResponse
-    {
+    public function index(
+        Request $request,
+        InboxService $inboxService,
+        EffectiveTenantContext $tenantContext,
+    ): JsonResponse {
         $filters = $request->validate([
             'search' => ['sometimes', 'string', 'max:120'],
             'owner_user_id' => ['sometimes', 'integer', 'min:1'],
@@ -24,7 +28,11 @@ class InboxController extends Controller
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $result = $inboxService->listConversationsForUser($request->user(), $filters);
+        $result = $inboxService->listConversationsForUser(
+            $request->user(),
+            $filters,
+            $tenantContext->companyId($request),
+        );
 
         return response()->json($result);
     }
@@ -34,23 +42,29 @@ class InboxController extends Controller
         int $conversationId,
         InboxService $inboxService,
         ConversationEventService $conversationEventService,
-    ): JsonResponse
-    {
-        $result = $inboxService->getConversationDetailForUser($request->user(), $conversationId);
-        if (!$result) {
+        EffectiveTenantContext $tenantContext,
+    ): JsonResponse {
+        $result = $inboxService->getConversationDetailForUser(
+            $request->user(),
+            $conversationId,
+            $tenantContext->companyId($request),
+        );
+        if (! $result) {
             return response()->json([
                 'message' => 'Conversa não encontrada.',
             ], 404);
         }
 
-        $conversationEventService->registerConversationOpened(
-            $request->user(),
-            (int) $result['conversation_id'],
-            (int) data_get($result, 'lead.lead_id'),
-            [
-                'source' => 'inbox_api',
-            ],
-        );
+        if (! $tenantContext->isPlatformView($request)) {
+            $conversationEventService->registerConversationOpened(
+                $request->user(),
+                (int) $result['conversation_id'],
+                (int) data_get($result, 'lead.lead_id'),
+                [
+                    'source' => 'inbox_api',
+                ],
+            );
+        }
 
         return response()->json([
             'data' => $result,
@@ -61,9 +75,14 @@ class InboxController extends Controller
         Request $request,
         int $conversationId,
         InboxConversationTimelineService $timelineService,
+        EffectiveTenantContext $tenantContext,
     ): JsonResponse {
-        $timeline = $timelineService->listEventsForConversation($request->user(), $conversationId);
-        if (!$timeline) {
+        $timeline = $timelineService->listEventsForConversation(
+            $request->user(),
+            $conversationId,
+            $tenantContext->companyId($request),
+        );
+        if (! $timeline) {
             return response()->json([
                 'message' => 'Conversa não encontrada.',
             ], 404);

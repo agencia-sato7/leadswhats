@@ -10,15 +10,15 @@ use App\Models\Lead;
 use App\Models\Message;
 use App\Models\Pipeline;
 use App\Services\CompanyWhatsAppIntegrationService;
+use App\Services\EffectiveTenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class BootstrapController extends Controller
 {
-    public function overview(Request $request): JsonResponse
+    public function overview(Request $request, EffectiveTenantContext $tenantContext): JsonResponse
     {
-        $user = $request->user();
-        $companyId = $user->company_id;
+        $companyId = $tenantContext->companyId($request);
         $company = Company::find($companyId);
         $fakeIsActive = (string) config('whatsapp.provider') === 'fake'
             && (string) config('app.env') !== 'production';

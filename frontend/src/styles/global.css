@@ -175,6 +175,38 @@ body {
   min-width: 0;
 }
 
+.lw-agency-context-banner {
+  position: sticky;
+  top: var(--lw-space-3);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lw-space-4);
+  padding: var(--lw-space-3) var(--lw-space-4);
+  border: 1px solid var(--lw-color-info);
+  border-radius: var(--lw-radius-md);
+  background: var(--lw-color-info-bg);
+  box-shadow: var(--lw-shadow-sm);
+}
+
+.lw-agency-context-banner > div {
+  display: flex;
+  align-items: center;
+  gap: var(--lw-space-2);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.lw-agency-context-banner span,
+.lw-agency-context-banner small {
+  color: var(--lw-color-text-soft);
+}
+
+.lw-agency-context-banner strong {
+  color: var(--lw-color-text);
+}
+
 .lw-topbar > div,
 .lw-page-header > div,
 .lw-page-actions,
@@ -562,6 +594,60 @@ form button:focus {
   gap: var(--lw-space-2);
   flex-wrap: wrap;
   margin-top: var(--lw-space-3);
+}
+
+.lw-whatsapp-connect-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lw-space-5);
+  margin-top: var(--lw-space-4);
+  border-color: rgba(16, 185, 129, 0.28);
+  background: linear-gradient(135deg, var(--lw-color-success-bg), var(--lw-color-surface));
+}
+
+.lw-whatsapp-connect-copy {
+  min-width: 0;
+}
+
+.lw-whatsapp-connect-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--lw-space-3);
+}
+
+.lw-whatsapp-connect-heading h3,
+.lw-whatsapp-connect-copy p {
+  margin: 0;
+}
+
+.lw-whatsapp-connect-copy > p {
+  margin-top: var(--lw-space-2);
+  color: var(--lw-color-text-soft);
+  max-width: 72ch;
+}
+
+.lw-whatsapp-connect-copy .lw-whatsapp-security-note {
+  color: var(--lw-color-success);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.lw-whatsapp-connect-card > .lw-button {
+  min-height: 44px;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 720px) {
+  .lw-whatsapp-connect-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .lw-whatsapp-connect-card > .lw-button {
+    width: 100%;
+  }
 }
 
 /* Auth Page */
@@ -2138,6 +2224,16 @@ form button:focus {
 }
 
 @media (max-width: 768px) {
+  .lw-agency-context-banner {
+    position: static;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .lw-agency-context-banner > button {
+    width: 100%;
+  }
+
   .lw-app-shell {
     padding: var(--lw-space-3);
   }

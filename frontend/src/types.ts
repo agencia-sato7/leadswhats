@@ -5,7 +5,7 @@ export type AuthUser = {
   name: string;
   email: string;
   role: Role;
-  company_id: number;
+  company_id: number | null;
 };
 
 export type LoginResponse = {
@@ -250,10 +250,26 @@ export type AdminCompanyListItem = {
   id: number;
   name: string;
   slug: string;
+  active: boolean;
   users_count: number;
   pipelines_count: number;
   has_business_settings: boolean;
   created_at: string;
+};
+
+export type AdminTenantViewContext = {
+  context_token: string;
+  company: {
+    id: number;
+    name: string;
+    slug: string;
+  };
+  read_only: true;
+  expires_at: string;
+};
+
+export type AdminTenantViewContextResponse = {
+  data: AdminTenantViewContext;
 };
 
 export type AdminCompanyCreateRequest = {
@@ -371,6 +387,12 @@ export type WhatsAppSettings = {
   phone_number: string | null;
   phone_number_id: string | null;
   business_account_id: string | null;
+  waba_id: string | null;
+  business_id: string | null;
+  page_ids: string[];
+  catalog_ids: string[];
+  dataset_ids: string[];
+  instagram_account_ids: string[];
   access_token_configured: boolean;
   webhook_verify_token_configured: boolean;
   webhook_verify_token?: string | null;
@@ -382,17 +404,28 @@ export type WhatsAppSettingsResponse = {
   data: WhatsAppSettings;
 };
 
-export type WhatsAppSettingsUpdateRequest = {
-  provider: 'meta_cloud';
-  phone_number?: string | null;
-  phone_number_id?: string | null;
-  business_account_id?: string | null;
-  access_token?: string | null;
-  webhook_verify_token?: string | null;
-  last_error?: string | null;
+export type WhatsAppEmbeddedSignupData = {
+  phone_number_id: string;
+  waba_id: string;
+  business_id?: string;
+  page_ids: string[];
+  catalog_ids: string[];
+  dataset_ids: string[];
+  instagram_account_ids: string[];
 };
 
-export type WhatsAppSettingsUpdateResponse = {
+export type WhatsAppEmbeddedSignupEvent = {
+  data: WhatsAppEmbeddedSignupData;
+  type: 'WA_EMBEDDED_SIGNUP';
+  event: 'FINISH';
+};
+
+export type CompleteWhatsAppEmbeddedSignupRequest = {
+  code: string;
+  embedded_signup: WhatsAppEmbeddedSignupEvent;
+};
+
+export type CompleteWhatsAppEmbeddedSignupResponse = {
   data: WhatsAppSettings;
 };
 

@@ -64,7 +64,15 @@ export function Badge({ children, variant = 'neutral' }: { children: ReactNode; 
 }
 
 export function Alert({ children, variant = 'info' }: { children: ReactNode; variant?: 'info' | 'success' | 'warning' | 'danger' }) {
-  return <div className={join('lw-alert', `lw-alert--${variant}`)}>{children}</div>;
+  return (
+    <div
+      className={join('lw-alert', `lw-alert--${variant}`)}
+      role={variant === 'danger' ? 'alert' : 'status'}
+      aria-live="polite"
+    >
+      {children}
+    </div>
+  );
 }
 
 export function EmptyState({ title, description }: { title: string; description?: string }) {
