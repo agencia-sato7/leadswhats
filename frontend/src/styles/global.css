@@ -332,7 +332,7 @@ form button {
   border-radius: var(--lw-radius-sm);
   padding: 0.6rem 1.15rem;
   background: var(--lw-color-primary);
-  color: #fff;
+  color: var(--lw-color-on-primary);
   font: inherit;
   font-weight: 600;
   font-size: 0.9rem;
@@ -345,8 +345,16 @@ form button {
 .lw-shell-main button:hover:not(:disabled),
 form button:hover:not(:disabled) {
   background: var(--lw-color-primary-hover);
+  color: var(--lw-color-on-primary);
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(139, 92, 246, 0.3);
+}
+
+/* Keep nested labels, metadata, badges and icons legible on the primary hover. */
+.lw-button:hover:not(:disabled) *,
+.lw-shell-main button:hover:not(:disabled) *,
+form button:hover:not(:disabled) * {
+  color: inherit;
 }
 
 .lw-button:active:not(:disabled),

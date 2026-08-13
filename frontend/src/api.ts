@@ -55,7 +55,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `Erro HTTP ${res.status}`);
+    let apiMessage = '';
+
+    try {
+      const payload = JSON.parse(text) as { message?: unknown };
+      if (typeof payload.message === 'string') apiMessage = payload.message;
+    } catch {
+      apiMessage = text;
+    }
+
+    throw new Error(
+      res.status >= 500
+        ? 'O servidor não conseguiu concluir esta solicitação. Tente novamente em instantes.'
+        : apiMessage || `Erro HTTP ${res.status}`,
+    );
   }
 
   return res.json() as Promise<T>;

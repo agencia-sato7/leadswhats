@@ -4,6 +4,7 @@ use App\Models\Company;
 use App\Models\CompanyBusinessSetting;
 use App\Models\Pipeline;
 use App\Services\DemoBootstrapService;
+use App\Services\DemoCampaignIntelligenceService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,20 @@ Artisan::command('leadswhats:demo-bootstrap', function (DemoBootstrapService $de
     $this->line('webhook token (apenas demo/local): ****' . $summary['webhook_token_suffix']);
     $this->newLine();
 })->purpose('Prepara de forma idempotente os dados mínimos do ambiente demo/local');
+
+Artisan::command('leadswhats:demo-campaign', function (DemoCampaignIntelligenceService $demoCampaignService) {
+    $summary = $demoCampaignService->run();
+
+    $this->newLine();
+    $this->info('Campanha de demonstração preparada.');
+    $this->line('empresa: '.$summary['company_name']);
+    $this->line('relatório: #'.$summary['report_id']);
+    $this->line('período: '.$summary['start_date'].' a '.$summary['end_date']);
+    $this->line('status: '.$summary['status']);
+    $this->line('novos leads: '.($summary['metrics']['new_leads'] ?? 0));
+    $this->line('leads resgatados: '.($summary['metrics']['rescued_leads'] ?? 0));
+    $this->newLine();
+})->purpose('Cria uma campanha fechada e determinística para apresentações locais');
 
 Artisan::command('leadswhats:doctor', function () {
     $checks = [];

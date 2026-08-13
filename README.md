@@ -115,6 +115,14 @@ php artisan queue:work --queue=campaign-intelligence --tries=3 --timeout=600
 
 Os endpoints ficam em `/api/v1/intelligence/campaign-reports`. Leitura e historico sao restritos a admin/gestor e ao contexto somente leitura da agencia; somente admin/gestor da propria empresa podem solicitar uma nova analise.
 
+Para preparar uma campanha local completa para apresentação (período fechado de sete dias, volume comparativo, lead resgatado, evidências e relatório concluído), execute:
+
+```bash
+docker compose exec backend php artisan leadswhats:demo-campaign
+```
+
+O comando também garante os dados base da empresa demo e usa um analisador determinístico, sem consumir uma API externa. Ele é bloqueado em `production`.
+
 ## Comandos uteis
 
 ```bash
