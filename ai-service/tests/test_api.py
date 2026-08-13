@@ -6,7 +6,15 @@ from fastapi.testclient import TestClient
 
 from app.config import Settings, get_settings
 from app.main import app, get_analysis_provider
-from app.models import ConversationAnalysisRequest, ProviderConversationAnalysis
+from app.models import (
+    CampaignConsolidationRequest,
+    CampaignEvidenceBatchRequest,
+    ConversationAnalysisRequest,
+    ProviderCampaignConsolidation,
+    ProviderCampaignEvidence,
+    ProviderCampaignEvidenceBatch,
+    ProviderConversationAnalysis,
+)
 from app.provider import OpenAIConversationAnalysisProvider, ProviderError
 from app.prompts import PROMPT_VERSION, SYSTEM_PROMPT
 
@@ -94,6 +102,44 @@ class StubProvider:
 class FailingProvider:
     def analyze(self, _payload: ConversationAnalysisRequest) -> ProviderConversationAnalysis:
         raise ProviderError("detalhe interno que não deve vazar")
+
+
+class CampaignStubProvider:
+    def analyze_campaign_evidence(
+        self, payload: CampaignEvidenceBatchRequest
+    ) -> ProviderCampaignEvidenceBatch:
+        return ProviderCampaignEvidenceBatch(
+            evidences=[
+                ProviderCampaignEvidence(
+                    key=item.key,
+                    score=76,
+                    criteria_scores={
+                        "discovery": 72,
+                        "clarity": 78,
+                        "empathy": 80,
+                        "objection_handling": 70,
+                    },
+                    summary="Atendimento adequado no recorte.",
+                    positive_points=["Continuidade do contato"],
+                    errors=[],
+                    improvement_suggestion="Confirmar o próximo passo.",
+                )
+                for item in payload.evidences
+            ]
+        )
+
+    def consolidate_campaign(
+        self, _payload: CampaignConsolidationRequest
+    ) -> ProviderCampaignConsolidation:
+        return ProviderCampaignConsolidation(
+            executive_summary="O volume cresceu e o atendimento foi adequado.",
+            overall_verdict="good",
+            volume_summary="Foram recebidos mais leads que no período anterior.",
+            service_summary="A qualidade média ficou na faixa boa.",
+            new_leads_summary="Os novos leads receberam condução adequada.",
+            rescued_leads_summary="Os resgates tiveram retomada objetiva.",
+            priorities=["Confirmar próximos passos"],
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -236,3 +282,65 @@ def test_openai_provider_keeps_structured_outputs_without_real_call(monkeypatch)
     assert captured["text_format"] is ProviderConversationAnalysis
     assert captured["store"] is False
     assert captured["input"][0] == {"role": "system", "content": SYSTEM_PROMPT}
+
+
+def campaign_evidence_request() -> dict:
+    return {
+        "evidences": [
+            {
+                "key": "evidence-hash-1",
+                "analysis_date": "2026-08-10",
+                "lead": {"id": 55, "name": "Ana"},
+                "owner": {"id": 9, "name": "João"},
+                "stage_name": "Em Atendimento",
+                "messages": [
+                    {
+                        "id": 1,
+                        "direction": "inbound",
+                        "channel": "text",
+                        "body": "Quero agendar.",
+                        "audio_transcript": None,
+                        "sent_at": "2026-08-10T10:00:00-03:00",
+                        "is_rescue": False,
+                        "context_only": False,
+                    }
+                ],
+                "metrics": {
+                    "message_count": 1,
+                    "inbound_count": 1,
+                    "outbound_count": 0,
+                    "rescue_attempts": 0,
+                },
+            }
+        ]
+    }
+
+
+def test_campaign_evidence_batch_uses_structured_contract() -> None:
+    app.dependency_overrides[get_analysis_provider] = lambda: CampaignStubProvider()
+    response = TestClient(app).post(
+        "/v1/analyze/campaign/evidence-batch", json=campaign_evidence_request()
+    )
+    assert response.status_code == 200
+    assert response.json()["evidences"][0]["key"] == "evidence-hash-1"
+    assert response.json()["evidences"][0]["score"] == 76
+    assert response.json()["evidences"][0]["prompt_version"] == "campaign-evidence-v1"
+
+
+def test_campaign_consolidation_keeps_volume_and_quality_separate() -> None:
+    app.dependency_overrides[get_analysis_provider] = lambda: CampaignStubProvider()
+    response = TestClient(app).post(
+        "/v1/analyze/campaign/consolidate",
+        json={
+            "range": {"start_date": "2026-08-01", "end_date": "2026-08-07"},
+            "metrics": {"volume": {"current_new_leads": 10, "previous_new_leads": 8}},
+            "quality": {"score": 76},
+            "cohorts": {"new": {"score": 75}, "rescued": {"score": 80}},
+            "team": [],
+            "base_report": None,
+            "evidence_summaries": [],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["overall_verdict"] == "good"
+    assert response.json()["prompt_version"] == "campaign-consolidation-v1"

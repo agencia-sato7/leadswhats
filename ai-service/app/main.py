@@ -5,13 +5,22 @@ from fastapi.responses import JSONResponse
 
 from app.config import Settings, get_settings
 from app.models import (
+    CampaignConsolidationRequest,
+    CampaignConsolidationResponse,
+    CampaignEvidenceBatchRequest,
+    CampaignEvidenceBatchResponse,
+    CampaignEvidenceResult,
     ConversationAnalysisRequest,
     ConversationAnalysisResponse,
     ErrorDetail,
     ErrorResponse,
     HealthResponse,
 )
-from app.prompts import PROMPT_VERSION
+from app.prompts import (
+    CAMPAIGN_CONSOLIDATION_PROMPT_VERSION,
+    CAMPAIGN_EVIDENCE_PROMPT_VERSION,
+    PROMPT_VERSION,
+)
 from app.provider import (
     ConversationAnalysisProvider,
     OpenAIConversationAnalysisProvider,
@@ -93,3 +102,50 @@ def analyze_conversation(
         model_name=settings.openai_model,
     )
 
+
+@app.post(
+    "/v1/analyze/campaign/evidence-batch",
+    response_model=CampaignEvidenceBatchResponse,
+    responses={502: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
+)
+def analyze_campaign_evidence(
+    payload: CampaignEvidenceBatchRequest,
+    provider: ConversationAnalysisProvider = Depends(get_analysis_provider),
+    settings: Settings = Depends(get_settings),
+) -> CampaignEvidenceBatchResponse:
+    analysis = provider.analyze_campaign_evidence(payload)
+    expected_keys = [item.key for item in payload.evidences]
+    returned_keys = [item.key for item in analysis.evidences]
+    if returned_keys != expected_keys:
+        raise ProviderError("O provider alterou a ordem ou as chaves das evidências.")
+
+    return CampaignEvidenceBatchResponse(
+        evidences=[
+            CampaignEvidenceResult(
+                **item.model_dump(),
+                prompt_version=CAMPAIGN_EVIDENCE_PROMPT_VERSION,
+                model_provider="openai",
+                model_name=settings.openai_model,
+            )
+            for item in analysis.evidences
+        ]
+    )
+
+
+@app.post(
+    "/v1/analyze/campaign/consolidate",
+    response_model=CampaignConsolidationResponse,
+    responses={502: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
+)
+def consolidate_campaign(
+    payload: CampaignConsolidationRequest,
+    provider: ConversationAnalysisProvider = Depends(get_analysis_provider),
+    settings: Settings = Depends(get_settings),
+) -> CampaignConsolidationResponse:
+    result = provider.consolidate_campaign(payload)
+    return CampaignConsolidationResponse(
+        **result.model_dump(),
+        prompt_version=CAMPAIGN_CONSOLIDATION_PROMPT_VERSION,
+        model_provider="openai",
+        model_name=settings.openai_model,
+    )

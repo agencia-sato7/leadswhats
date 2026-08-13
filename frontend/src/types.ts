@@ -538,3 +538,101 @@ export type AnalyzeConversationResponse = {
   message: string;
   data: ConversationIntelligenceDetail;
 };
+
+// ==== Campaign Intelligence ====
+
+export type CampaignVerdict = 'good' | 'needs_improvement' | 'poor';
+export type CampaignReportStatus = 'queued' | 'processing' | 'completed' | 'failed';
+
+export type CampaignVolumeMetrics = {
+  current_new_leads: number;
+  previous_new_leads: number;
+  absolute_change: number;
+  percentage_change: number | null;
+  trend: 'up' | 'down' | 'stable';
+};
+
+export type CampaignMetrics = {
+  volume: CampaignVolumeMetrics;
+  new_leads: number;
+  rescued_leads: number;
+  rescue_attempts: number;
+  rescued_leads_with_response: number;
+  rescue_response_rate: number | null;
+  conversations_considered: number;
+  messages_considered: number;
+};
+
+export type CampaignQualityRollup = {
+  lead_count: number;
+  score: number | null;
+  verdict: CampaignVerdict | null;
+  criteria_scores: Record<string, number>;
+  strengths: string[];
+  improvements: string[];
+  summary?: string;
+};
+
+export type CampaignReportResult = {
+  executive_summary: string;
+  overall_verdict: CampaignVerdict;
+  volume_assessment: CampaignVolumeMetrics & { summary: string };
+  service_quality: CampaignQualityRollup;
+  cohorts: { new: CampaignQualityRollup; rescued: CampaignQualityRollup };
+  team: Array<CampaignQualityRollup & { owner_user_id: number | null; owner_name: string }>;
+  priorities: string[];
+};
+
+export type CampaignReport = {
+  id: number;
+  start_date: string;
+  end_date: string;
+  comparison_start_date: string;
+  comparison_end_date: string;
+  status: CampaignReportStatus;
+  progress_stage: string;
+  progress_percentage: number;
+  metrics: CampaignMetrics;
+  result: CampaignReportResult | null;
+  reused_evidence_count: number;
+  new_evidence_count: number;
+  base_report_id: number | null;
+  requested_by: string | null;
+  failure_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
+export type CampaignPreviewResponse = {
+  data: {
+    range: { start_date: string; end_date: string; comparison_start_date: string; comparison_end_date: string; days: number; timezone: string };
+    metrics: CampaignMetrics;
+    has_analyzable_data: boolean;
+    cached_report_id: number | null;
+    cached_report_completed_at: string | null;
+    estimated_evidences: number;
+    reusable_evidences: number;
+  };
+};
+
+export type CampaignReportListResponse = {
+  data: CampaignReport[];
+  meta: { page: number; per_page: number; total: number; last_page: number };
+};
+
+export type CampaignReportLead = {
+  lead_id: number;
+  lead_name: string | null;
+  owner_user_id: number | null;
+  owner_name: string | null;
+  stage_name: string | null;
+  cohort: 'new' | 'rescued';
+  average_score: number;
+  verdict: CampaignVerdict;
+  evidence_count: number;
+  message_count: number;
+  rescue_attempts: number;
+  conversation_id: number | null;
+  first_evidence_date: string;
+  last_evidence_date: string;
+};

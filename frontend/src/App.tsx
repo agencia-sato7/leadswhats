@@ -23,6 +23,7 @@ import {
 import { EmbeddedSignupFlowError, WhatsAppEmbeddedSignupFlow } from './meta/embeddedSignup';
 import { AppShell, PageHeader, Sidebar, Topbar } from './components/layout';
 import { ConversationIntelligencePage } from './pages/ConversationIntelligencePage';
+import { CampaignIntelligencePage } from './pages/CampaignIntelligencePage';
 import { AutoCrmPage } from './pages/AutoCrmPage';
 import { DashboardPage } from './pages/DashboardPage';
 import {
@@ -161,7 +162,7 @@ function formatAuditReason(reason: unknown): string {
 }
 
 export function App() {
-  type ActiveView = 'dashboard' | 'inbox' | 'checklist' | 'kanban' | 'contacts' | 'intelligence' | 'adminSaas' | 'whatsappSettings';
+  type ActiveView = 'dashboard' | 'inbox' | 'checklist' | 'kanban' | 'contacts' | 'intelligence' | 'campaignIntelligence' | 'adminSaas' | 'whatsappSettings';
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('leadswhats_theme') as 'light' | 'dark') || 'dark');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -673,7 +674,7 @@ export function App() {
   useEffect(() => {
     const allowedViews: ActiveView[] = isPlatformAdmin
       ? isAgencyViewing
-        ? ['dashboard', 'inbox', 'checklist', 'kanban', 'contacts', 'intelligence', 'whatsappSettings']
+        ? ['dashboard', 'inbox', 'checklist', 'kanban', 'contacts', 'intelligence', 'campaignIntelligence', 'whatsappSettings']
         : ['adminSaas']
       : [
         'dashboard',
@@ -681,7 +682,7 @@ export function App() {
         'checklist',
         'kanban',
         'contacts',
-        ...(canManageSource ? (['intelligence'] as ActiveView[]) : []),
+        ...(canManageSource ? (['intelligence', 'campaignIntelligence'] as ActiveView[]) : []),
         ...(canManageWhatsAppSettings ? (['whatsappSettings'] as ActiveView[]) : []),
       ];
 
@@ -1075,6 +1076,7 @@ export function App() {
         { id: 'kanban', label: 'Auto-CRM', subtitle: 'Funil orientado por inteligência' },
         { id: 'contacts', label: 'Contatos', subtitle: 'Busca de contatos' },
         { id: 'intelligence', label: 'Inteligência de Conversas', subtitle: 'Qualidade, intenção e oportunidades' },
+        { id: 'campaignIntelligence', label: 'Inteligência da Campanha', subtitle: 'Períodos, volume, resgates e qualidade' },
         { id: 'whatsappSettings', label: 'Configurações', subtitle: 'Situação da integração WhatsApp' },
       ]
       : [{ id: 'adminSaas', label: 'Clínicas', subtitle: 'Central da Agência' }]
@@ -1085,6 +1087,7 @@ export function App() {
       { id: 'kanban', label: 'Auto-CRM', subtitle: 'Funil orientado por inteligência' },
       { id: 'contacts', label: 'Contatos', subtitle: 'Busca e exportação' },
       ...(canManageSource ? [{ id: 'intelligence' as ActiveView, label: 'Inteligência de Conversas', subtitle: 'Qualidade, intenção e oportunidades das conversas' }] : []),
+      ...(canManageSource ? [{ id: 'campaignIntelligence' as ActiveView, label: 'Inteligência da Campanha', subtitle: 'Comparação de períodos, resgates e qualidade' }] : []),
       ...(canManageWhatsAppSettings ? [{ id: 'whatsappSettings' as ActiveView, label: 'Configurações', subtitle: 'Integração WhatsApp' }] : []),
     ];
   const activeNav = navSections.find((item) => item.id === activeView) ?? navSections[0];
@@ -1791,6 +1794,18 @@ export function App() {
           tenantContext={tenantContextToken}
           readOnly={isAgencyViewing}
           initialConversationId={intelligenceConversationId}
+        />
+      ) : null}
+
+      {activeView === 'campaignIntelligence' && canViewIntelligence ? (
+        <CampaignIntelligencePage
+          token={session.token}
+          tenantContext={tenantContextToken}
+          readOnly={isAgencyViewing}
+          onOpenConversation={(conversationId) => {
+            setIntelligenceConversationId(conversationId);
+            setActiveView('intelligence');
+          }}
         />
       ) : null}
             </>
