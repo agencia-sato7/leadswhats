@@ -71,12 +71,13 @@ class WhatsappIngestionService
 
         $classification = $this->leadClassifier->classify($existingLead, $direction, $sentAt, $company->id);
         $lead = $existingLead;
+        $profileName = trim((string) ($payload['lead_name'] ?? ''));
 
         if (!$existingLead) {
             $lead = Lead::create([
                 "company_id" => $company->id,
                 "owner_user_id" => $payload["owner_user_id"] ?? null,
-                "name" => $payload["lead_name"] ?? null,
+                "name" => $profileName !== '' ? $profileName : null,
                 "phone_e164" => $phone,
                 "source" => $source,
                 "source_method" => "auto",
@@ -90,7 +91,11 @@ class WhatsappIngestionService
 
             $this->leadSourceService->applyInitialSource($lead, $source);
             $this->kanbanInitialPlacementService->placeLeadInInitialColumnIfMissing($company->id, $lead->id);
-        } elseif ($classification === "lead_repetido") {
+        } elseif ($lead && trim((string) $lead->name) === '' && $profileName !== '') {
+            $lead->name = $profileName;
+        }
+
+        if ($existingLead && $classification === "lead_repetido") {
             $lead->is_repeat_lead = true;
             $this->leadSourceService->applyAutoSourceFromReentry($lead, $source);
         }
@@ -117,7 +122,7 @@ class WhatsappIngestionService
             $lead->last_outbound_at = $sentAt;
         }
 
-        Message::create([
+        $message = Message::create([
             "company_id" => $company->id,
             "lead_id" => $lead->id,
             "conversation_id" => $conversation->id,
@@ -142,6 +147,7 @@ class WhatsappIngestionService
         $lead->save();
 
         return [
+            "message_id" => $message->id,
             "lead_id" => $lead->id,
             "conversation_id" => $conversation->id,
             "classification" => $classification,

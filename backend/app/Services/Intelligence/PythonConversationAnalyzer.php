@@ -8,6 +8,7 @@ use App\Data\Intelligence\ConversationAnalysisResult;
 use App\Exceptions\ConversationAnalyzerUnavailableException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -27,7 +28,10 @@ class PythonConversationAnalyzer implements ConversationAnalyzer
                 ->timeout(max((int) config('intelligence.timeout_seconds', 90), 1))
                 ->post($serviceUrl.'/v1/analyze/conversation', [
                     'conversation_id' => $input->conversationId,
-                    'lead' => $input->leadMetadata,
+                    'lead' => [
+                        ...$input->leadMetadata,
+                        'metadata' => $this->normalizeLeadMetadata($input->leadMetadata['metadata'] ?? null),
+                    ],
                     'transcript' => $input->messages,
                     'current_kanban_column_id' => $input->currentKanbanColumnId,
                     'kanban_columns' => $input->kanbanColumns,
@@ -40,6 +44,15 @@ class PythonConversationAnalyzer implements ConversationAnalyzer
         }
 
         if (!$response->successful()) {
+            if ($response->status() === 422) {
+                Log::warning('Conversation analyzer rejected the request contract.', [
+                    'company_id' => $input->companyId,
+                    'conversation_id' => $input->conversationId,
+                    'status' => $response->status(),
+                    'validation_errors' => $this->safeValidationErrors($response->json('detail')),
+                ]);
+            }
+
             $message = $response->json('detail.message');
             throw new ConversationAnalyzerUnavailableException(
                 is_string($message) && trim($message) !== ''
@@ -103,5 +116,45 @@ class PythonConversationAnalyzer implements ConversationAnalyzer
             modelProvider: $validated['model_provider'],
             modelName: $validated['model_name'],
         );
+    }
+
+    /**
+     * The Python contract models metadata as a JSON object. PHP encodes an empty
+     * array as [], so only associative arrays may pass through unchanged.
+     *
+     * @return array<string, mixed>|object
+     */
+    private function normalizeLeadMetadata(mixed $metadata): array|object
+    {
+        if (is_array($metadata) && $metadata !== [] && !array_is_list($metadata)) {
+            return $metadata;
+        }
+
+        return (object) [];
+    }
+
+    /**
+     * @return array<int, array{type:?string,loc:array<int, string|int>,msg:?string}>
+     */
+    private function safeValidationErrors(mixed $detail): array
+    {
+        if (!is_array($detail)) {
+            return [];
+        }
+
+        return collect($detail)
+            ->filter(static fn ($error): bool => is_array($error))
+            ->map(static fn (array $error): array => [
+                'type' => is_string($error['type'] ?? null) ? $error['type'] : null,
+                'loc' => is_array($error['loc'] ?? null)
+                    ? array_values(array_filter(
+                        $error['loc'],
+                        static fn ($part): bool => is_string($part) || is_int($part),
+                    ))
+                    : [],
+                'msg' => is_string($error['msg'] ?? null) ? $error['msg'] : null,
+            ])
+            ->values()
+            ->all();
     }
 }

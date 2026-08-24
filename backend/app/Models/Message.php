@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Message extends Model
 {
@@ -20,6 +21,8 @@ class Message extends Model
         'audio_transcript',
         'sent_at',
         'external_message_id',
+        'delivery_status',
+        'delivery_error',
         'raw_payload',
         'is_rescue',
         'metadata',
@@ -33,5 +36,10 @@ class Message extends Model
             'is_rescue' => 'boolean',
             'metadata' => 'array',
         ];
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(MessageAttachment::class);
     }
 }

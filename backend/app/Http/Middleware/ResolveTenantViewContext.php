@@ -23,6 +23,7 @@ class ResolveTenantViewContext
         'tenant.inbox.conversations.index',
         'tenant.inbox.conversations.show',
         'tenant.inbox.conversations.events',
+        'tenant.inbox.attachments.show',
         'tenant.tasks.checklist',
         'tenant.pipelines.index',
         'tenant.pipelines.kanban',

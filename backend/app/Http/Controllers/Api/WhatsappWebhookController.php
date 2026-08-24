@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\CompanyBusinessSetting;
 use App\Models\CompanyWhatsAppIntegration;
+use App\Models\Message;
+use App\Jobs\ProcessInboundWhatsAppMedia;
 use App\Services\CompanyWhatsAppIntegrationService;
 use App\Services\WhatsappIngestionService;
 use Carbon\Carbon;
@@ -155,6 +157,17 @@ class WhatsappWebhookController extends Controller
                     continue;
                 }
 
+                foreach ((array) data_get($value, 'statuses', []) as $status) {
+                    $externalId = trim((string) data_get($status, 'id', ''));
+                    $state = trim((string) data_get($status, 'status', ''));
+                    if ($externalId !== '' && in_array($state, ['sent', 'delivered', 'read', 'failed'], true)) {
+                        Message::query()->where('company_id', $company->id)->where('external_message_id', $externalId)->update([
+                            'delivery_status' => $state,
+                            'delivery_error' => $state === 'failed' ? (string) data_get($status, 'errors.0.title', 'Falha de entrega.') : null,
+                        ]);
+                    }
+                }
+
                 $messages = data_get($value, 'messages');
                 if (!is_array($messages) || $messages === []) {
                     $ignored++;
@@ -163,14 +176,18 @@ class WhatsappWebhookController extends Controller
 
                 foreach ($messages as $message) {
                     $type = (string) data_get($message, 'type', '');
-                    if ($type !== 'text') {
+                    if (! in_array($type, ['text', 'image', 'video', 'audio', 'document'], true)) {
                         $ignored++;
                         continue;
                     }
 
                     $phone = trim((string) data_get($message, 'from', ''));
-                    $body = (string) data_get($message, 'text.body', '');
-                    if ($phone === '' || trim($body) === '') {
+                    $profileName = collect((array) data_get($value, 'contacts', []))
+                        ->first(fn ($contact) => trim((string) data_get($contact, 'wa_id', '')) === $phone);
+                    $profileName = trim((string) data_get($profileName, 'profile.name', ''));
+                    $body = $type === 'text' ? (string) data_get($message, 'text.body', '') : (string) data_get($message, "{$type}.caption", '');
+                    $mediaId = $type === 'text' ? '' : trim((string) data_get($message, "{$type}.id", ''));
+                    if ($phone === '' || ($type === 'text' && trim($body) === '') || ($type !== 'text' && $mediaId === '')) {
                         $ignored++;
                         continue;
                     }
@@ -181,13 +198,20 @@ class WhatsappWebhookController extends Controller
                         ? Carbon::createFromTimestampUTC((int) $timestamp)->toISOString()
                         : null;
 
+                    if ($mediaId !== '') {
+                        ProcessInboundWhatsAppMedia::dispatch($company->id, $integration->id, $message, $value);
+                        $processed++;
+                        continue;
+                    }
+
                     $result = $service->ingest($company, [
                         'provider' => CompanyWhatsAppIntegrationService::PROVIDER_META_CLOUD,
                         'phone' => $phone,
                         'direction' => 'inbound',
-                        'channel' => 'text',
+                        'channel' => $type,
                         'body' => $body,
                         'source' => 'meta_cloud',
+                        'lead_name' => $profileName !== '' ? $profileName : null,
                         'external_message_id' => $externalMessageId !== '' ? $externalMessageId : null,
                         'sent_at' => $sentAt,
                         'raw_payload' => [

@@ -118,6 +118,31 @@ services:
       - leadswhats_network
     restart: unless-stopped
 
+  queue-worker:
+    image: laravelsail/php84-composer:latest
+    container_name: leadswhats_queue_worker
+    working_dir: /var/www
+    volumes:
+      - ./backend:/var/www
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_DEBUG: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    command: >
+      sh -c "
+        apt-get update && apt-get install -y libpq-dev &&
+        docker-php-ext-install pdo_pgsql &&
+        php artisan queue:work --tries=3 --timeout=120
+      "
+    networks:
+      - leadswhats_network
+    restart: unless-stopped
+
   frontend:
     image: node:24-alpine
     container_name: leadswhats_frontend
@@ -126,7 +151,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      VITE_API_BASE_URL: http://localhost:9000/api/v1
+      VITE_API_BASE_URL: https://leadswhats.appsato7.com.br/api/v1
     command: sh -lc "npm install && npm run build && npm run preview -- --host 0.0.0.0 --port 5173 --strictPort"
     ports:
       - "5174:5173"

@@ -318,6 +318,18 @@ export type InboxMessageItem = {
   provider: string | null;
   external_message_id: string | null;
   created_at: string;
+  channel: 'text' | 'image' | 'video' | 'audio' | 'document';
+  audio_transcript: string | null;
+  delivery_status: 'sent' | 'delivered' | 'read' | 'failed' | null;
+  delivery_error: string | null;
+  attachments: Array<{
+    id: number;
+    type: 'image' | 'video' | 'audio' | 'document';
+    mime_type: string;
+    original_name: string | null;
+    size_bytes: number;
+    url: string;
+  }>;
 };
 
 export type InboxConversationDetail = {
@@ -402,6 +414,14 @@ export type WhatsAppSettings = {
 
 export type WhatsAppSettingsResponse = {
   data: WhatsAppSettings;
+};
+
+export type UpdateWhatsAppSettingsRequest = {
+  provider: 'meta_cloud';
+  phone_number: string;
+  phone_number_id: string;
+  business_account_id: string;
+  access_token: string;
 };
 
 export type WhatsAppEmbeddedSignupData = {

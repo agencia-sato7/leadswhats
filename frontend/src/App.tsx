@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
 import {
   createAdminTenantViewContext,
   createAdminCompany,
@@ -19,12 +20,14 @@ import {
   login,
   revokeAdminTenantViewContext,
   updateLeadOwner,
+  updateWhatsAppSettings,
 } from './api';
 import { EmbeddedSignupFlowError, WhatsAppEmbeddedSignupFlow } from './meta/embeddedSignup';
 import { AppShell, PageHeader, Sidebar, Topbar } from './components/layout';
 import { ConversationIntelligencePage } from './pages/ConversationIntelligencePage';
 import { AutoCrmPage } from './pages/AutoCrmPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { AttendancePage } from './pages/AttendancePage';
 import {
   Alert,
   Table,
@@ -59,6 +62,7 @@ import type {
   PipelineKanban,
   PipelineListItem,
   WhatsAppSettings,
+  UpdateWhatsAppSettingsRequest,
 } from './types';
 
 type Session = {
@@ -161,7 +165,7 @@ function formatAuditReason(reason: unknown): string {
 }
 
 export function App() {
-  type ActiveView = 'dashboard' | 'inbox' | 'checklist' | 'kanban' | 'contacts' | 'intelligence' | 'adminSaas' | 'whatsappSettings';
+  type ActiveView = 'dashboard' | 'attendance' | 'inbox' | 'checklist' | 'kanban' | 'contacts' | 'intelligence' | 'adminSaas' | 'whatsappSettings';
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('leadswhats_theme') as 'light' | 'dark') || 'dark');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -238,6 +242,14 @@ export function App() {
   const [whatsAppConnecting, setWhatsAppConnecting] = useState(false);
   const [whatsAppError, setWhatsAppError] = useState<string | null>(null);
   const [whatsAppSuccess, setWhatsAppSuccess] = useState<string | null>(null);
+  const [whatsAppTechnicalSaving, setWhatsAppTechnicalSaving] = useState(false);
+  const [whatsAppTechnicalForm, setWhatsAppTechnicalForm] = useState<UpdateWhatsAppSettingsRequest>({
+    provider: 'meta_cloud',
+    phone_number: '',
+    phone_number_id: '',
+    business_account_id: '',
+    access_token: '',
+  });
   const whatsAppSignupFlowRef = useRef<WhatsAppEmbeddedSignupFlow<WhatsAppSettings> | null>(null);
   const [adminForm, setAdminForm] = useState<AdminCompanyCreateRequest>({
     company: { name: '', slug: '' },
@@ -552,6 +564,17 @@ export function App() {
   }, [session, canViewWhatsAppSettings, activeView, tenantContextToken]);
 
   useEffect(() => {
+    if (!whatsAppSettings) return;
+    setWhatsAppTechnicalForm({
+      provider: 'meta_cloud',
+      phone_number: whatsAppSettings.phone_number ?? '',
+      phone_number_id: whatsAppSettings.phone_number_id ?? '',
+      business_account_id: whatsAppSettings.business_account_id ?? '',
+      access_token: '',
+    });
+  }, [whatsAppSettings]);
+
+  useEffect(() => {
     if (!session || !canManageWhatsAppSettings || activeView !== 'whatsappSettings') return;
 
     const flow = new WhatsAppEmbeddedSignupFlow<WhatsAppSettings>({
@@ -673,10 +696,11 @@ export function App() {
   useEffect(() => {
     const allowedViews: ActiveView[] = isPlatformAdmin
       ? isAgencyViewing
-        ? ['dashboard', 'inbox', 'checklist', 'kanban', 'contacts', 'intelligence', 'whatsappSettings']
+        ? ['dashboard', 'attendance', 'inbox', 'checklist', 'kanban', 'contacts', 'intelligence', 'whatsappSettings']
         : ['adminSaas']
       : [
         'dashboard',
+        'attendance',
         'inbox',
         'checklist',
         'kanban',
@@ -1046,6 +1070,41 @@ export function App() {
     }
   }
 
+  async function handleSaveWhatsAppTechnicalSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!session || !canManageWhatsAppSettings) return;
+
+    const payload = {
+      ...whatsAppTechnicalForm,
+      phone_number: whatsAppTechnicalForm.phone_number.trim(),
+      phone_number_id: whatsAppTechnicalForm.phone_number_id.trim(),
+      business_account_id: whatsAppTechnicalForm.business_account_id.trim(),
+      access_token: whatsAppTechnicalForm.access_token.trim(),
+    };
+
+    if (!payload.phone_number || !payload.phone_number_id || !payload.business_account_id || !payload.access_token) {
+      setWhatsAppError('Preencha o número de teste, os dois identificadores da Meta e o token temporário.');
+      setWhatsAppSuccess(null);
+      return;
+    }
+
+    setWhatsAppTechnicalSaving(true);
+    setWhatsAppError(null);
+    setWhatsAppSuccess(null);
+    try {
+      const updatedSettings = await updateWhatsAppSettings(session.token, payload);
+      setWhatsAppSettings(updatedSettings);
+      setWhatsAppTechnicalForm((current) => ({ ...current, access_token: '' }));
+      setWhatsAppSuccess('Credenciais do número de teste salvas com segurança.');
+      await refreshData(session.token).catch(() => undefined);
+    } catch (err) {
+      setWhatsAppTechnicalForm((current) => ({ ...current, access_token: '' }));
+      setWhatsAppError(parseApiErrorMessage(err, 'Não foi possível salvar as credenciais de teste. Confira os dados da Meta.'));
+    } finally {
+      setWhatsAppTechnicalSaving(false);
+    }
+  }
+
   if (!session) {
     return (
       <main className="lw-login-shell">
@@ -1070,6 +1129,7 @@ export function App() {
     ? isAgencyViewing
       ? [
         { id: 'dashboard', label: 'Visão Geral', subtitle: 'Indicadores e prioridades comerciais' },
+        { id: 'attendance', label: 'Atendimento', subtitle: 'Inbox operacional em tempo real' },
         { id: 'inbox', label: 'Conversas', subtitle: 'Histórico e auditoria' },
         { id: 'checklist', label: 'Acompanhamento', subtitle: 'Pendências e próximos contatos' },
         { id: 'kanban', label: 'Auto-CRM', subtitle: 'Funil orientado por inteligência' },
@@ -1080,6 +1140,7 @@ export function App() {
       : [{ id: 'adminSaas', label: 'Clínicas', subtitle: 'Central da Agência' }]
     : [
       { id: 'dashboard', label: 'Visão Geral', subtitle: 'Indicadores e prioridades comerciais' },
+      { id: 'attendance', label: 'Atendimento', subtitle: 'Responder mensagens do WhatsApp' },
       { id: 'inbox', label: 'Conversas', subtitle: 'Histórico somente leitura e auditoria' },
       { id: 'checklist', label: 'Acompanhamento', subtitle: 'Pendências e próximos contatos' },
       { id: 'kanban', label: 'Auto-CRM', subtitle: 'Funil orientado por inteligência' },
@@ -1389,6 +1450,75 @@ export function App() {
                   </Card>
                 ) : null}
 
+                {!whatsAppLoading && canManageWhatsAppSettings ? (
+                  <Card className="lw-whatsapp-technical-card">
+                    <div className="lw-whatsapp-connect-copy">
+                      <div className="lw-whatsapp-connect-heading">
+                        <h3>Número de teste da Meta</h3>
+                        <Badge variant="warning">Teste / desenvolvimento</Badge>
+                      </div>
+                      <p>
+                        Use este cadastro manual somente com as credenciais temporárias exibidas em WhatsApp &gt; API Setup no painel da Meta.
+                        Para números empresariais, prefira o botão Conectar WhatsApp acima.
+                      </p>
+                    </div>
+
+                    <form className="lw-whatsapp-technical-form" onSubmit={handleSaveWhatsAppTechnicalSettings}>
+                      <div className="lw-grid-2">
+                        <FormGroup label="Número de teste" hint="Inclua o código do país, por exemplo +15551234567.">
+                          <Input
+                            type="tel"
+                            autoComplete="tel"
+                            placeholder="+15551234567"
+                            value={whatsAppTechnicalForm.phone_number}
+                            onChange={(event) => setWhatsAppTechnicalForm((current) => ({ ...current, phone_number: event.target.value }))}
+                            required
+                          />
+                        </FormGroup>
+                        <FormGroup label="Phone Number ID">
+                          <Input
+                            inputMode="numeric"
+                            autoComplete="off"
+                            value={whatsAppTechnicalForm.phone_number_id}
+                            onChange={(event) => setWhatsAppTechnicalForm((current) => ({ ...current, phone_number_id: event.target.value }))}
+                            required
+                          />
+                        </FormGroup>
+                        <FormGroup label="WhatsApp Business Account ID">
+                          <Input
+                            inputMode="numeric"
+                            autoComplete="off"
+                            value={whatsAppTechnicalForm.business_account_id}
+                            onChange={(event) => setWhatsAppTechnicalForm((current) => ({ ...current, business_account_id: event.target.value }))}
+                            required
+                          />
+                        </FormGroup>
+                        <FormGroup
+                          label="Token temporário"
+                          hint={whatsAppSettings?.access_token_configured
+                            ? 'Já existe um token protegido. Digite outro somente para substituí-lo.'
+                            : 'O token será criptografado e não será exibido novamente.'}
+                        >
+                          <Input
+                            type="password"
+                            autoComplete="new-password"
+                            placeholder={whatsAppSettings?.access_token_configured ? 'Token já configurado — informe um novo' : 'Cole o token temporário'}
+                            value={whatsAppTechnicalForm.access_token}
+                            onChange={(event) => setWhatsAppTechnicalForm((current) => ({ ...current, access_token: event.target.value }))}
+                            required
+                          />
+                        </FormGroup>
+                      </div>
+                      <div className="lw-whatsapp-technical-actions">
+                        <Button type="submit" disabled={whatsAppTechnicalSaving}>
+                          {whatsAppTechnicalSaving ? 'Salvando...' : 'Salvar número de teste'}
+                        </Button>
+                        {whatsAppSettings?.access_token_configured ? <Badge variant="success">Token protegido configurado</Badge> : null}
+                      </div>
+                    </form>
+                  </Card>
+                ) : null}
+
                 {!whatsAppLoading && !whatsAppSettings ? (
                   <EmptyState title="Configuração indisponível no momento." description="Tente recarregar a página e salvar novamente." />
                 ) : null}
@@ -1404,6 +1534,8 @@ export function App() {
               onNavigate={(destination) => setActiveView(destination)}
             />
           ) : null}
+
+      {activeView === 'attendance' ? <AttendancePage token={session.token} tenantContext={tenantContextToken} readOnly={isAgencyViewing} /> : null}
 
       {activeView === 'inbox' ? (
       <Section>

@@ -65,6 +65,7 @@ class InboxService
         $serviceWindow = $this->buildServiceWindow($conversation->last_inbound_at);
 
         $messages = Message::query()
+            ->with('attachments')
             ->where('company_id', $companyId)
             ->where('conversation_id', $conversationId)
             ->orderBy('sent_at')
@@ -76,19 +77,13 @@ class InboxService
                 'sent_at',
                 'provider',
                 'external_message_id',
+                'channel',
+                'audio_transcript',
+                'delivery_status',
+                'delivery_error',
                 'created_at',
             ])
-            ->map(static function (Message $message): array {
-                return [
-                    'id' => $message->id,
-                    'direction' => $message->direction,
-                    'body' => $message->body,
-                    'sent_at' => optional($message->sent_at)?->toISOString(),
-                    'provider' => $message->provider,
-                    'external_message_id' => $message->external_message_id,
-                    'created_at' => optional($message->created_at)?->toISOString(),
-                ];
-            })
+            ->map(fn (Message $message): array => $this->serializeMessage($message))
             ->values()
             ->all();
 
@@ -109,6 +104,22 @@ class InboxService
             'service_window_open' => $serviceWindow['open'],
             'service_window_expires_at' => $serviceWindow['expires_at'],
             'messages' => $messages,
+        ];
+    }
+
+    public function serializeMessage(Message $message): array
+    {
+        return [
+            'id' => $message->id, 'direction' => $message->direction, 'channel' => $message->channel,
+            'body' => $message->body, 'audio_transcript' => $message->audio_transcript,
+            'sent_at' => optional($message->sent_at)?->toISOString(), 'provider' => $message->provider,
+            'external_message_id' => $message->external_message_id, 'delivery_status' => $message->delivery_status,
+            'delivery_error' => $message->delivery_error, 'created_at' => optional($message->created_at)?->toISOString(),
+            'attachments' => $message->attachments->map(fn ($attachment) => [
+                'id' => $attachment->id, 'type' => $attachment->type, 'mime_type' => $attachment->mime_type,
+                'original_name' => $attachment->original_name, 'size_bytes' => $attachment->size_bytes,
+                'url' => "/inbox/attachments/{$attachment->id}",
+            ])->values()->all(),
         ];
     }
 

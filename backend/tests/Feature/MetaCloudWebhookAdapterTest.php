@@ -14,6 +14,12 @@ class MetaCloudWebhookAdapterTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('whatsapp.cloud_app_secret', '');
+    }
+
     public function test_meta_get_verification_valid_returns_challenge(): void
     {
         config()->set('whatsapp.cloud_webhook_verify_token', 'meta-verify-global');
@@ -73,6 +79,10 @@ class MetaCloudWebhookAdapterTest extends TestCase
                                 'metadata' => [
                                     'phone_number_id' => 'phone-number-id-1',
                                 ],
+                                'contacts' => [[
+                                    'wa_id' => '5511998887777',
+                                    'profile' => ['name' => 'Nome do WhatsApp'],
+                                ]],
                                 'messages' => [
                                     [
                                         'id' => 'wamid.meta.adapter.1',
@@ -108,6 +118,20 @@ class MetaCloudWebhookAdapterTest extends TestCase
             'direction' => 'inbound',
             'channel' => 'text',
             'body' => 'Olá via Meta',
+        ]);
+        $this->assertDatabaseHas('leads', [
+            'company_id' => $company->id,
+            'phone_e164' => '+5511998887777',
+            'name' => 'Nome do WhatsApp',
+        ]);
+
+        data_set($payload, 'entry.0.changes.0.value.messages.0.id', 'wamid.meta.adapter.2');
+        data_set($payload, 'entry.0.changes.0.value.contacts.0.profile.name', 'Nome alterado depois');
+        $this->postJson('/api/v1/webhooks/whatsapp/meta', $payload)->assertOk();
+        $this->assertDatabaseMissing('leads', [
+            'company_id' => $company->id,
+            'phone_e164' => '+5511998887777',
+            'name' => 'Nome alterado depois',
         ]);
     }
 

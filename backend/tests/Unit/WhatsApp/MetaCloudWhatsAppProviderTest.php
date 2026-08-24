@@ -99,7 +99,7 @@ class MetaCloudWhatsAppProviderTest extends TestCase
 
             $payload = $request->data();
             $this->assertSame('whatsapp', data_get($payload, 'messaging_product'));
-            $this->assertSame('+5511912345678', data_get($payload, 'to'));
+            $this->assertSame('5511912345678', data_get($payload, 'to'));
             $this->assertSame('text', data_get($payload, 'type'));
             $this->assertSame('Mensagem teste', data_get($payload, 'text.body'));
 
@@ -111,6 +111,15 @@ class MetaCloudWhatsAppProviderTest extends TestCase
             ->value('access_token_encrypted');
 
         $this->assertNotSame('token-super-secreto', $cipherInDatabase);
+    }
+
+    public function test_provider_rejects_invalid_recipient_without_calling_meta(): void
+    {
+        Http::fake();
+        $result = app(MetaCloudWhatsAppProvider::class)->sendTextMessage('++--', 'Olá', ['company_id' => 1]);
+        $this->assertFalse($result->success);
+        $this->assertSame('invalid_recipient', $result->errorCode);
+        Http::assertNothingSent();
     }
 
     public function test_provider_returns_failure_with_api_error_when_meta_cloud_responds_http_error(): void

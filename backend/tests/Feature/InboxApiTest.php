@@ -15,6 +15,8 @@ use App\Services\Domain\ConversationEventService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class InboxApiTest extends TestCase
@@ -431,6 +433,50 @@ class InboxApiTest extends TestCase
             ->assertJsonPath('meta.last_page', 2)
             ->assertJsonCount(1, 'data');
 
+        Carbon::setTestNow();
+    }
+
+    public function test_gestor_sends_text_and_media_inside_service_window(): void
+    {
+        Carbon::setTestNow('2026-05-14 12:00:00');
+        Storage::fake('local');
+        [$company, $gestor, , $column] = $this->seedCompanyWithManagerAndAdmin('empresa-send', 'gestor.send@test.local', 'admin.send@test.local');
+        $conversation = $this->seedConversationWithMessages($company->id, $column->id, 'Lead Send', '+5511981000099', 'whatsapp', 'inbound', now()->subMinute(), now()->subMinute());
+        $token = $this->login($gestor->email);
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->postJson("/api/v1/inbox/conversations/{$conversation->id}/messages", ['body' => 'Resposta humana'])
+            ->assertCreated()
+            ->assertJsonPath('data.direction', 'outbound')
+            ->assertJsonPath('data.delivery_status', 'sent');
+
+        $response = $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->post("/api/v1/inbox/conversations/{$conversation->id}/messages", [
+                'body' => 'Documento',
+                'file' => UploadedFile::fake()->create('proposta.pdf', 10, 'application/pdf'),
+            ])->assertCreated()->assertJsonPath('data.channel', 'document');
+
+        $attachmentId = $response->json('data.attachments.0.id');
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->get("/api/v1/inbox/attachments/{$attachmentId}")
+            ->assertOk()->assertHeader('content-type', 'application/pdf');
+        $this->assertDatabaseHas('conversation_events', ['conversation_id' => $conversation->id, 'event_type' => 'message_sent']);
+        Carbon::setTestNow();
+    }
+
+    public function test_send_is_blocked_outside_service_window_and_cross_tenant(): void
+    {
+        Carbon::setTestNow('2026-05-14 12:00:00');
+        [$companyA, $gestorA, , $columnA] = $this->seedCompanyWithManagerAndAdmin('empresa-send-a', 'gestor.send.a@test.local', 'admin.send.a@test.local');
+        [$companyB, $gestorB] = $this->seedCompanyWithManagerAndAdmin('empresa-send-b', 'gestor.send.b@test.local', 'admin.send.b@test.local');
+        $closed = $this->seedConversationWithMessages($companyA->id, $columnA->id, 'Closed', '+5511981000088', 'whatsapp', 'inbound', now()->subHours(30), now()->subHours(30));
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$this->login($gestorA->email)])
+            ->postJson("/api/v1/inbox/conversations/{$closed->id}/messages", ['body' => 'Não pode'])
+            ->assertUnprocessable();
+        $this->withHeaders(['Authorization' => 'Bearer '.$this->login($gestorB->email)])
+            ->postJson("/api/v1/inbox/conversations/{$closed->id}/messages", ['body' => 'Outro tenant'])
+            ->assertNotFound();
         Carbon::setTestNow();
     }
 

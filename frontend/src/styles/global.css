@@ -639,6 +639,30 @@ form button:focus {
   flex: 0 0 auto;
 }
 
+.lw-whatsapp-technical-card {
+  display: grid;
+  gap: var(--lw-space-4);
+  margin-top: var(--lw-space-4);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.lw-whatsapp-technical-form {
+  display: grid;
+  gap: var(--lw-space-4);
+}
+
+.lw-whatsapp-technical-form .lw-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--lw-space-4);
+}
+
+.lw-whatsapp-technical-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--lw-space-3);
+}
+
 @media (max-width: 720px) {
   .lw-whatsapp-connect-card {
     align-items: stretch;
@@ -648,7 +672,54 @@ form button:focus {
   .lw-whatsapp-connect-card > .lw-button {
     width: 100%;
   }
+
+  .lw-whatsapp-technical-form .lw-grid-2 {
+    grid-template-columns: 1fr;
+  }
 }
+
+.lw-attendance-shell {
+  display: grid; grid-template-columns: minmax(260px, 320px) minmax(420px, 1fr) minmax(210px, 260px);
+  height: calc(100vh - 118px); min-height: 620px; overflow: hidden; border: 1px solid var(--lw-color-border);
+  border-radius: var(--lw-radius-lg); background: var(--lw-color-surface); box-shadow: var(--lw-shadow-sm);
+}
+.lw-attendance-list, .lw-attendance-info { overflow-y: auto; background: var(--lw-color-surface); }
+.lw-attendance-list { border-right: 1px solid var(--lw-color-border); }
+.lw-attendance-list-header { position: sticky; top: 0; z-index: 2; padding: var(--lw-space-4); background: var(--lw-color-surface); border-bottom: 1px solid var(--lw-color-border); }
+.lw-attendance-list-header h2 { margin: 0 0 var(--lw-space-3); }
+.lw-attendance-contact { width: 100%; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: var(--lw-space-3); padding: var(--lw-space-3); border: 0; border-bottom: 1px solid var(--lw-color-border); border-radius: 0; background: transparent; color: inherit; text-align: left; box-shadow: none; }
+.lw-attendance-contact:hover, .lw-attendance-contact.is-active { background: var(--lw-color-surface-muted); transform: none; }
+.lw-attendance-contact span:nth-child(2) { min-width: 0; display: grid; }
+.lw-attendance-contact small { overflow: hidden; color: var(--lw-color-text-soft); text-overflow: ellipsis; white-space: nowrap; }
+.lw-attendance-contact time { align-self: start; color: var(--lw-color-text-tertiary); font-size: .72rem; }
+.lw-attendance-avatar { width: 42px; height: 42px; display: inline-grid; place-items: center; flex: 0 0 auto; border-radius: 50%; background: #dcefe7; color: #08775b; font-weight: 800; }
+.lw-attendance-chat { min-width: 0; display: grid; grid-template-rows: auto 1fr auto; background: #efeae2; }
+.lw-attendance-chat-header { display: flex; align-items: center; gap: var(--lw-space-3); padding: var(--lw-space-3) var(--lw-space-4); background: var(--lw-color-surface); border-bottom: 1px solid var(--lw-color-border); }
+.lw-attendance-chat-header div { display: grid; }
+.lw-attendance-chat-header small { color: var(--lw-color-text-soft); }
+.lw-attendance-messages { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: var(--lw-space-5); background-image: radial-gradient(rgba(0,0,0,.035) 1px, transparent 1px); background-size: 14px 14px; }
+.lw-attendance-bubble { max-width: min(72%, 680px); padding: 8px 10px 5px; border-radius: 9px; background: #fff; box-shadow: 0 1px 1px rgba(0,0,0,.12); overflow-wrap: anywhere; }
+.lw-attendance-bubble.inbound { align-self: flex-start; border-top-left-radius: 2px; }
+.lw-attendance-bubble.outbound { align-self: flex-end; border-top-right-radius: 2px; background: #d9fdd3; }
+.lw-attendance-bubble p { margin: 4px 0; white-space: pre-wrap; }
+.lw-attendance-bubble footer { color: #667781; font-size: .68rem; text-align: right; }
+.lw-attendance-media { display: block; max-width: 100%; max-height: 420px; border-radius: 7px; }
+.lw-attendance-audio { width: min(360px, 100%); }
+.lw-attendance-document { display: block; padding: var(--lw-space-3); border-radius: 7px; background: rgba(255,255,255,.55); color: inherit; }
+.lw-attendance-info { padding: var(--lw-space-4); border-left: 1px solid var(--lw-color-border); }
+.lw-attendance-info h3 { margin-top: 0; }
+.lw-attendance-info p { padding-bottom: var(--lw-space-3); border-bottom: 1px solid var(--lw-color-border); color: var(--lw-color-text-soft); }
+.lw-attendance-composer { padding: var(--lw-space-2) var(--lw-space-3); background: #f0f2f5; }
+.lw-attendance-composer > div:last-child { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: end; gap: var(--lw-space-2); }
+.lw-attendance-composer textarea { min-height: 44px; max-height: 130px; resize: vertical; padding: 11px 14px; border: 1px solid transparent; border-radius: 22px; font: inherit; }
+.lw-attendance-composer button { min-height: 42px; }
+.lw-attendance-attach { cursor: pointer; font-size: 1.3rem; padding: 8px; }
+.lw-attendance-attach input { display: none; }
+.lw-attendance-file-preview { display: flex !important; grid-template-columns: 1fr auto !important; align-items: center; margin-bottom: var(--lw-space-2); padding: var(--lw-space-2); border-radius: var(--lw-radius-sm); background: var(--lw-color-surface); }
+.lw-attendance-composer .is-recording { color: #dc2626; animation: lw-recording-pulse 1s infinite; }
+@keyframes lw-recording-pulse { 50% { opacity: .45; } }
+@media (max-width: 1100px) { .lw-attendance-shell { grid-template-columns: minmax(240px, 300px) 1fr; } .lw-attendance-info { display: none; } }
+@media (max-width: 720px) { .lw-attendance-shell { grid-template-columns: 1fr; height: auto; min-height: calc(100vh - 100px); } .lw-attendance-list { max-height: 280px; border-right: 0; } .lw-attendance-chat { min-height: 620px; } .lw-attendance-bubble { max-width: 88%; } }
 
 /* Auth Page */
 .lw-login-shell {
@@ -3195,4 +3266,154 @@ form button:focus {
 
 .lw-display-block {
   display: block !important;
+}
+
+/* Attendance workspace: scoped after global theme resets. */
+.lw-shell-main .lw-attendance-shell {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: calc(100dvh - 112px);
+  min-height: 620px;
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(210px, 260px);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.lw-shell-main .lw-attendance-shell > * {
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.lw-shell-main .lw-attendance-list,
+.lw-shell-main .lw-attendance-messages,
+.lw-shell-main .lw-attendance-info {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.lw-shell-main button.lw-attendance-contact,
+.lw-shell-main button.lw-attendance-contact:hover:not(:disabled),
+.lw-shell-main button.lw-attendance-contact:focus-visible:not(:disabled),
+.lw-shell-main button.lw-attendance-contact:active:not(:disabled) {
+  border: 0;
+  border-bottom: 1px solid var(--lw-color-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--lw-color-text);
+  box-shadow: none;
+  transform: none;
+}
+
+.lw-shell-main button.lw-attendance-contact:hover:not(:disabled),
+.lw-shell-main button.lw-attendance-contact:focus-visible:not(:disabled) {
+  background: var(--lw-color-surface-hover);
+}
+
+.lw-shell-main button.lw-attendance-contact.is-active,
+.lw-shell-main button.lw-attendance-contact.is-active:hover:not(:disabled) {
+  background: var(--lw-color-primary-glow);
+  box-shadow: inset 3px 0 0 var(--lw-color-primary);
+}
+
+.lw-shell-main .lw-attendance-contact strong {
+  color: var(--lw-color-text);
+}
+
+.lw-shell-main .lw-attendance-contact small,
+.lw-shell-main .lw-attendance-contact time {
+  color: var(--lw-color-text-soft);
+}
+
+.lw-shell-main .lw-attendance-chat {
+  min-height: 0;
+  overflow: hidden;
+  background: var(--lw-color-surface-muted);
+}
+
+.lw-shell-main .lw-attendance-messages {
+  min-height: 0;
+}
+
+.lw-shell-main .lw-attendance-bubble {
+  border: 1px solid var(--lw-color-bubble-inbound-border);
+  background: var(--lw-color-bubble-inbound-bg);
+  color: var(--lw-color-bubble-inbound-text);
+}
+
+.lw-shell-main .lw-attendance-bubble.outbound {
+  border-color: var(--lw-color-bubble-outbound-border);
+  background: var(--lw-color-bubble-outbound-bg);
+  color: var(--lw-color-bubble-outbound-text);
+}
+
+.lw-shell-main .lw-attendance-bubble.inbound footer,
+.lw-shell-main .lw-attendance-bubble.inbound small {
+  color: var(--lw-color-bubble-inbound-text-soft);
+}
+
+.lw-shell-main .lw-attendance-bubble.outbound footer,
+.lw-shell-main .lw-attendance-bubble.outbound small {
+  color: var(--lw-color-bubble-outbound-text-soft);
+}
+
+.lw-shell-main .lw-attendance-composer {
+  position: relative;
+  z-index: 1;
+  background: var(--lw-color-surface);
+  border-top: 1px solid var(--lw-color-border);
+}
+
+.lw-shell-main .lw-attendance-composer textarea {
+  width: 100%;
+  min-width: 0;
+  background: var(--lw-color-surface-muted);
+  color: var(--lw-color-text);
+}
+
+.lw-shell-main .lw-attendance-composer button:not(.lw-button),
+.lw-shell-main .lw-attendance-composer button:not(.lw-button):hover:not(:disabled),
+.lw-shell-main .lw-attendance-composer button:not(.lw-button):active:not(:disabled) {
+  padding: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--lw-color-text-soft);
+  box-shadow: none;
+  transform: none;
+}
+
+.lw-shell-main .lw-attendance-composer button:not(.lw-button):hover:not(:disabled) {
+  background: var(--lw-color-surface-hover);
+  color: var(--lw-color-text);
+}
+
+@media (max-width: 1180px) {
+  .lw-shell-main .lw-attendance-shell {
+    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  }
+
+  .lw-shell-main .lw-attendance-info {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .lw-shell-main .lw-attendance-shell {
+    height: auto;
+    min-height: calc(100dvh - 96px);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(180px, 32dvh) minmax(520px, 1fr);
+    overflow: visible;
+  }
+
+  .lw-shell-main .lw-attendance-list {
+    max-height: none;
+  }
+
+  .lw-shell-main .lw-attendance-chat {
+    min-height: 520px;
+  }
 }

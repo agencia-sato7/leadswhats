@@ -93,6 +93,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/inbox/conversations/{conversationId}/events', [InboxController::class, 'events'])
             ->name('tenant.inbox.conversations.events')
             ->middleware(['role:admin,gestor,sdr,platform_admin', 'tenant.view']);
+        Route::post('/inbox/conversations/{conversationId}/messages', [InboxController::class, 'sendMessage'])
+            ->middleware('role:admin,gestor,sdr');
+        Route::get('/inbox/attachments/{attachmentId}', [InboxController::class, 'attachment'])
+            ->name('tenant.inbox.attachments.show')
+            ->middleware(['role:admin,gestor,sdr,platform_admin', 'tenant.view']);
 
         Route::get('/tasks/checklist', [TaskChecklistController::class, 'index'])
             ->name('tenant.tasks.checklist')

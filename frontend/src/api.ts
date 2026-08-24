@@ -10,6 +10,7 @@ import type {
   AssignableUsersResponse,
   InboxConversationDetail,
   InboxConversationEvent,
+  InboxMessageItem,
   InboxConversationsResponse,
   LeadStageHistoryItem,
   LeadSourceItem,
@@ -24,6 +25,7 @@ import type {
   CompleteWhatsAppEmbeddedSignupResponse,
   WhatsAppSettings,
   WhatsAppSettingsResponse,
+  UpdateWhatsAppSettingsRequest,
   AnalyzeConversationResponse,
   ConversationIntelligenceDetailResponse,
   ConversationIntelligenceListResponse,
@@ -267,6 +269,25 @@ export async function getInboxConversationEvents(token: string, conversationId: 
   return data.data;
 }
 
+export async function sendInboxMessage(token: string, conversationId: number, body: string, file?: File): Promise<InboxMessageItem> {
+  const form = new FormData();
+  if (body.trim()) form.append('body', body.trim());
+  if (file) form.append('file', file);
+  const res = await fetch(`${API_BASE}/inbox/conversations/${conversationId}/messages`, {
+    method: 'POST', headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }, body: form,
+  });
+  if (!res.ok) throw new Error(await res.text() || `Erro HTTP ${res.status}`);
+  return ((await res.json()) as { data: InboxMessageItem }).data;
+}
+
+export async function getInboxAttachmentBlob(token: string, attachmentId: number, tenantContext?: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/inbox/attachments/${attachmentId}`, {
+    headers: { Accept: '*/*', ...authenticatedHeaders(token, tenantContext) },
+  });
+  if (!res.ok) throw new Error(await res.text() || `Erro HTTP ${res.status}`);
+  return res.blob();
+}
+
 export function updateLeadOwner(token: string, leadId: number, ownerUserId: number | null, reason: string): Promise<LeadOwnerUpdateResponse> {
   return request<LeadOwnerUpdateResponse>(`/leads/${leadId}/owner`, {
     method: 'PATCH',
@@ -316,6 +337,18 @@ export function revokeAdminTenantViewContext(token: string, tenantContext: strin
 export async function getWhatsAppSettings(token: string, tenantContext?: string): Promise<WhatsAppSettings> {
   const data = await request<WhatsAppSettingsResponse>('/settings/whatsapp', {
     headers: authenticatedHeaders(token, tenantContext),
+  });
+  return data.data;
+}
+
+export async function updateWhatsAppSettings(
+  token: string,
+  payload: UpdateWhatsAppSettingsRequest,
+): Promise<WhatsAppSettings> {
+  const data = await request<WhatsAppSettingsResponse>('/settings/whatsapp', {
+    method: 'PUT',
+    headers: authenticatedHeaders(token),
+    body: JSON.stringify(payload),
   });
   return data.data;
 }

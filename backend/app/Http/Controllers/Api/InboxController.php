@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Services\Domain\ConversationEventService;
 use App\Services\Domain\InboxConversationTimelineService;
 use App\Services\Domain\InboxService;
+use App\Services\Domain\InboxMessageService;
+use App\Models\MessageAttachment;
+use Illuminate\Support\Facades\Storage;
 use App\Services\EffectiveTenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -89,5 +92,29 @@ class InboxController extends Controller
         }
 
         return response()->json($timeline);
+    }
+
+    public function sendMessage(Request $request, int $conversationId, InboxMessageService $service): JsonResponse
+    {
+        $request->validate(['body' => ['nullable', 'string', 'max:4096'], 'file' => ['nullable', 'file', 'max:102400']]);
+        try {
+            $message = $service->send($request->user(), $conversationId, $request->input('body'), $request->file('file'));
+        } catch (\RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], in_array($exception->getCode(), [404, 422], true) ? $exception->getCode() : 422);
+        }
+        return response()->json(['data' => $message], 201);
+    }
+
+    public function attachment(Request $request, int $attachmentId, InboxService $inboxService, EffectiveTenantContext $tenantContext)
+    {
+        $attachment = MessageAttachment::query()->with('message')->find($attachmentId);
+        if (! $attachment || ! $attachment->message || ! $inboxService->getConversationDetailForUser($request->user(), $attachment->message->conversation_id, $tenantContext->companyId($request))) abort(404);
+        if (! Storage::disk($attachment->disk)->exists($attachment->path)) abort(404);
+        $disposition = $attachment->type === 'document' ? 'attachment' : 'inline';
+        return response()->file(Storage::disk($attachment->disk)->path($attachment->path), [
+            'Content-Type' => $attachment->mime_type,
+            'Content-Disposition' => $disposition.'; filename="'.addslashes($attachment->original_name ?: 'arquivo').'"',
+            'Cache-Control' => 'private, max-age=300',
+        ]);
     }
 }
