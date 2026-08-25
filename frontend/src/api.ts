@@ -30,6 +30,10 @@ import type {
   ConversationIntelligenceDetailResponse,
   ConversationIntelligenceListResponse,
   ConversationIntelligenceSummaryResponse,
+  CampaignPreviewResponse,
+  CampaignReport,
+  CampaignReportLead,
+  CampaignReportListResponse,
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://leadswhats.appsato7.com.br/api/v1';
@@ -53,7 +57,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `Erro HTTP ${res.status}`);
+    let apiMessage = '';
+
+    try {
+      const payload = JSON.parse(text) as { message?: unknown };
+      if (typeof payload.message === 'string') apiMessage = payload.message;
+    } catch {
+      apiMessage = text;
+    }
+
+    throw new Error(
+      res.status >= 500
+        ? 'O servidor não conseguiu concluir esta solicitação. Tente novamente em instantes.'
+        : apiMessage || `Erro HTTP ${res.status}`,
+    );
   }
 
   return res.json() as Promise<T>;
@@ -399,5 +416,49 @@ export function analyzeConversation(token: string, conversationId: number): Prom
   return request<AnalyzeConversationResponse>(`/intelligence/conversations/${conversationId}/analyze`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+// ==== Campaign Intelligence ====
+
+export function previewCampaignReport(token: string, startDate: string, endDate: string, tenantContext?: string): Promise<CampaignPreviewResponse> {
+  const query = new URLSearchParams({ start_date: startDate, end_date: endDate });
+  return request<CampaignPreviewResponse>(`/intelligence/campaign-reports/preview?${query.toString()}`, {
+    headers: authenticatedHeaders(token, tenantContext),
+  });
+}
+
+export function createCampaignReport(token: string, startDate: string, endDate: string): Promise<{ message: string; reused: boolean; data: CampaignReport }> {
+  return request('/intelligence/campaign-reports', {
+    method: 'POST',
+    headers: authenticatedHeaders(token),
+    body: JSON.stringify({ start_date: startDate, end_date: endDate }),
+  });
+}
+
+export function getCampaignReports(token: string, page = 1, tenantContext?: string): Promise<CampaignReportListResponse> {
+  return request<CampaignReportListResponse>(`/intelligence/campaign-reports?page=${page}`, {
+    headers: authenticatedHeaders(token, tenantContext),
+  });
+}
+
+export function getCampaignReport(token: string, reportId: number, tenantContext?: string): Promise<{ data: CampaignReport }> {
+  return request<{ data: CampaignReport }>(`/intelligence/campaign-reports/${reportId}`, {
+    headers: authenticatedHeaders(token, tenantContext),
+  });
+}
+
+export function getCampaignReportLeads(
+  token: string,
+  reportId: number,
+  filters: { cohort?: 'new' | 'rescued'; owner_user_id?: number; page?: number } = {},
+  tenantContext?: string,
+): Promise<{ data: CampaignReportLead[]; meta: { page: number; per_page: number; total: number; last_page: number } }> {
+  const query = new URLSearchParams();
+  if (filters.cohort) query.set('cohort', filters.cohort);
+  if (filters.owner_user_id !== undefined) query.set('owner_user_id', String(filters.owner_user_id));
+  if (filters.page) query.set('page', String(filters.page));
+  return request(`/intelligence/campaign-reports/${reportId}/leads?${query.toString()}`, {
+    headers: authenticatedHeaders(token, tenantContext),
   });
 }

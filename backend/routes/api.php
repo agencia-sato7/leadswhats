@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AdminCompanyController;
 use App\Http\Controllers\Api\AdminCompanyViewContextController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BootstrapController;
+use App\Http\Controllers\Api\CampaignIntelligenceController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\ConversationIntelligenceController;
 use App\Http\Controllers\Api\DashboardController;
@@ -70,6 +71,21 @@ Route::prefix('v1')->group(function () {
             ->middleware(['role:admin,gestor,platform_admin', 'tenant.view']);
         Route::post('/intelligence/conversations/{conversation}/analyze', [ConversationIntelligenceController::class, 'analyze'])
             ->middleware('role:admin,gestor');
+
+        Route::get('/intelligence/campaign-reports/preview', [CampaignIntelligenceController::class, 'preview'])
+            ->name('tenant.intelligence.campaign-reports.preview')
+            ->middleware(['role:admin,gestor,platform_admin', 'tenant.view']);
+        Route::get('/intelligence/campaign-reports', [CampaignIntelligenceController::class, 'index'])
+            ->name('tenant.intelligence.campaign-reports.index')
+            ->middleware(['role:admin,gestor,platform_admin', 'tenant.view']);
+        Route::post('/intelligence/campaign-reports', [CampaignIntelligenceController::class, 'store'])
+            ->middleware('role:admin,gestor');
+        Route::get('/intelligence/campaign-reports/{report}', [CampaignIntelligenceController::class, 'show'])
+            ->name('tenant.intelligence.campaign-reports.show')
+            ->middleware(['role:admin,gestor,platform_admin', 'tenant.view']);
+        Route::get('/intelligence/campaign-reports/{report}/leads', [CampaignIntelligenceController::class, 'leads'])
+            ->name('tenant.intelligence.campaign-reports.leads')
+            ->middleware(['role:admin,gestor,platform_admin', 'tenant.view']);
 
         // Estas rotas trabalham somente com dados já persistidos. A conexão com a
         // Meta é exigida apenas nos fluxos que efetivamente chamam a API oficial.

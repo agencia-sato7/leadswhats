@@ -99,6 +99,98 @@ class ConversationAnalysisResponse(ProviderConversationAnalysis):
     model_name: NonEmptyText
 
 
+class CampaignEvidenceMessage(StrictModel):
+    id: int = Field(gt=0)
+    direction: Direction
+    channel: NonEmptyText
+    body: str | None = None
+    audio_transcript: str | None = None
+    sent_at: NonEmptyText
+    is_rescue: bool = False
+    context_only: bool = False
+
+
+class CampaignEvidenceLead(StrictModel):
+    id: int = Field(gt=0)
+    name: str | None = None
+
+
+class CampaignEvidenceOwner(StrictModel):
+    id: int | None = Field(default=None, gt=0)
+    name: str | None = None
+
+
+class CampaignEvidenceMetrics(StrictModel):
+    message_count: int = Field(ge=0)
+    inbound_count: int = Field(ge=0)
+    outbound_count: int = Field(ge=0)
+    rescue_attempts: int = Field(ge=0)
+
+
+class CampaignEvidenceInput(StrictModel):
+    key: NonEmptyText
+    analysis_date: NonEmptyText
+    lead: CampaignEvidenceLead
+    owner: CampaignEvidenceOwner
+    stage_name: str | None = None
+    messages: list[CampaignEvidenceMessage]
+    metrics: CampaignEvidenceMetrics
+
+
+class CampaignEvidenceBatchRequest(StrictModel):
+    evidences: list[CampaignEvidenceInput] = Field(min_length=1, max_length=20)
+
+
+class ProviderCampaignEvidence(StrictModel):
+    key: NonEmptyText
+    score: Score
+    criteria_scores: CriteriaScores
+    summary: NonEmptyText
+    positive_points: list[str]
+    errors: list[str]
+    improvement_suggestion: NonEmptyText
+
+
+class CampaignEvidenceResult(ProviderCampaignEvidence):
+    prompt_version: NonEmptyText
+    model_provider: NonEmptyText
+    model_name: NonEmptyText
+
+
+class ProviderCampaignEvidenceBatch(StrictModel):
+    evidences: list[ProviderCampaignEvidence]
+
+
+class CampaignEvidenceBatchResponse(StrictModel):
+    evidences: list[CampaignEvidenceResult]
+
+
+class CampaignConsolidationRequest(StrictModel):
+    range: dict[str, Any]
+    metrics: dict[str, Any]
+    quality: dict[str, Any]
+    cohorts: dict[str, Any]
+    team: list[dict[str, Any]]
+    base_report: dict[str, Any] | None = None
+    evidence_summaries: list[dict[str, Any]]
+
+
+class ProviderCampaignConsolidation(StrictModel):
+    executive_summary: NonEmptyText
+    overall_verdict: str = Field(pattern="^(good|needs_improvement|poor)$")
+    volume_summary: NonEmptyText
+    service_summary: NonEmptyText
+    new_leads_summary: NonEmptyText
+    rescued_leads_summary: NonEmptyText
+    priorities: list[str]
+
+
+class CampaignConsolidationResponse(ProviderCampaignConsolidation):
+    prompt_version: NonEmptyText
+    model_provider: NonEmptyText
+    model_name: NonEmptyText
+
+
 class HealthResponse(StrictModel):
     status: str
     provider: str

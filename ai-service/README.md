@@ -14,8 +14,12 @@ OPENAI_TIMEOUT_SECONDS=60
 
 - `GET /health`
 - `POST /v1/analyze/conversation`
+- `POST /v1/analyze/campaign/evidence-batch`
+- `POST /v1/analyze/campaign/consolidate`
 
 O endpoint de análise usa Structured Outputs e valida tanto a entrada quanto a resposta com Pydantic. Falhas do provider retornam `502`; configuração ausente retorna `503`.
+
+Os endpoints de campanha reutilizam a rubrica de qualidade da conversa: o primeiro pontua lotes de evidencias lead/dia e o segundo produz a sintese executiva mantendo volume e qualidade como eixos separados.
 
 ## Testes
 

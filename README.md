@@ -101,6 +101,28 @@ O Laravel usa `PythonConversationAnalyzer` quando `CONVERSATION_ANALYZER=python`
 
 Não existe fallback silencioso. Falha ou ausência de configuração do provider retorna erro controlado. O `FakeConversationAnalyzer` só pode ser usado em `local/testing` quando `CONVERSATION_ANALYZER=fake` for definido explicitamente; a suíte Laravel faz isso no `phpunit.xml`.
 
+## Inteligencia da Campanha
+
+A area **Inteligencia da Campanha** compara periodos fechados de ate 90 dias. Ela separa leads novos de leads antigos resgatados, compara o volume com o bloco imediatamente anterior de igual duracao e avalia a qualidade do atendimento com a mesma rubrica da Conversation Intelligence.
+
+Os snapshots concluidos e as evidencias por lead/dia sao imutaveis. Repetir um periodo sem alteracao retorna o snapshot existente; ampliar ou sobrepor o intervalo reaproveita evidencias cujo hash de entrada continua valido.
+
+O processamento usa a fila `campaign-intelligence`. No Compose, o servico `campaign-worker` inicia automaticamente. Fora do Compose, mantenha um worker ativo:
+
+```bash
+php artisan queue:work --queue=campaign-intelligence --tries=3 --timeout=600
+```
+
+Os endpoints ficam em `/api/v1/intelligence/campaign-reports`. Leitura e historico sao restritos a admin/gestor e ao contexto somente leitura da agencia; somente admin/gestor da propria empresa podem solicitar uma nova analise.
+
+Para preparar uma campanha local completa para apresentação (período fechado de sete dias, volume comparativo, lead resgatado, evidências e relatório concluído), execute:
+
+```bash
+docker compose exec backend php artisan leadswhats:demo-campaign
+```
+
+O comando também garante os dados base da empresa demo e usa um analisador determinístico, sem consumir uma API externa. Ele é bloqueado em `production`.
+
 ## Comandos uteis
 
 ```bash

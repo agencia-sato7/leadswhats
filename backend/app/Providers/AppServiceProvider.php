@@ -3,8 +3,12 @@
 namespace App\Providers;
 
 use App\Contracts\Intelligence\ConversationAnalyzer;
+use App\Contracts\Intelligence\CampaignAnalyzer;
+use App\Services\Intelligence\FakeCampaignAnalyzer;
 use App\Services\Intelligence\FakeConversationAnalyzer;
+use App\Services\Intelligence\PythonCampaignAnalyzer;
 use App\Services\Intelligence\PythonConversationAnalyzer;
+use App\Services\Intelligence\UnavailableCampaignAnalyzer;
 use App\Services\Intelligence\UnavailableConversationAnalyzer;
 use App\Services\WhatsApp\FakeWhatsAppProvider;
 use App\Services\WhatsApp\MetaCloudWhatsAppProvider;
@@ -52,6 +56,16 @@ class AppServiceProvider extends ServiceProvider
                 'python' => app(PythonConversationAnalyzer::class),
                 'fake' => app(FakeConversationAnalyzer::class),
                 'unavailable' => app(UnavailableConversationAnalyzer::class),
+            };
+        });
+
+        $this->app->bind(CampaignAnalyzer::class, function () {
+            $analyzer = (string) config('intelligence.analyzer', 'unavailable');
+
+            return match ($analyzer) {
+                'python' => app(PythonCampaignAnalyzer::class),
+                'fake' => app(FakeCampaignAnalyzer::class),
+                default => app(UnavailableCampaignAnalyzer::class),
             };
         });
     }

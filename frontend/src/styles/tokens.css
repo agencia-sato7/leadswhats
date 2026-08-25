@@ -28,6 +28,7 @@
   --lw-color-primary-hover: hsl(var(--accent-h), var(--accent-s), calc(var(--accent-l) - 8%));
   --lw-color-primary-glow: hsla(var(--accent-h), var(--accent-s), var(--accent-l), 0.15);
   --lw-color-primary-active: hsl(var(--accent-h), var(--accent-s), calc(var(--accent-l) - 12%));
+  --lw-color-on-primary: #ffffff;
 
   /* Transition timings for micro-animations */
   --lw-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);

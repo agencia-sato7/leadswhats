@@ -332,7 +332,7 @@ form button {
   border-radius: var(--lw-radius-sm);
   padding: 0.6rem 1.15rem;
   background: var(--lw-color-primary);
-  color: #fff;
+  color: var(--lw-color-on-primary);
   font: inherit;
   font-weight: 600;
   font-size: 0.9rem;
@@ -345,8 +345,16 @@ form button {
 .lw-shell-main button:hover:not(:disabled),
 form button:hover:not(:disabled) {
   background: var(--lw-color-primary-hover);
+  color: var(--lw-color-on-primary);
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(139, 92, 246, 0.3);
+}
+
+/* Keep nested labels, metadata, badges and icons legible on the primary hover. */
+.lw-button:hover:not(:disabled) *,
+.lw-shell-main button:hover:not(:disabled) *,
+form button:hover:not(:disabled) * {
+  color: inherit;
 }
 
 .lw-button:active:not(:disabled),
@@ -2428,6 +2436,158 @@ form button:focus {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* Campaign Intelligence */
+.lw-campaign-page,
+.lw-campaign-result {
+  min-width: 0;
+  display: grid;
+  gap: var(--lw-space-4);
+}
+
+.lw-campaign-filter-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: var(--lw-space-3);
+}
+
+.lw-campaign-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lw-space-2);
+  margin-bottom: var(--lw-space-3);
+}
+
+.lw-campaign-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--lw-space-3);
+}
+
+.lw-campaign-card-heading,
+.lw-campaign-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--lw-space-3);
+}
+
+.lw-campaign-card-heading h3,
+.lw-campaign-hero h3,
+.lw-campaign-axis-grid h3 {
+  margin: 0;
+}
+
+.lw-campaign-card-heading p,
+.lw-campaign-hero p,
+.lw-campaign-axis-grid p {
+  line-height: 1.6;
+}
+
+.lw-campaign-axis-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--lw-space-4);
+}
+
+.lw-campaign-quality-card {
+  min-width: 0;
+  display: grid;
+  gap: var(--lw-space-3);
+}
+
+.lw-campaign-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--lw-space-3);
+}
+
+.lw-campaign-mini-grid ul,
+.lw-campaign-priorities {
+  margin: var(--lw-space-2) 0 0;
+  padding-left: 1.25rem;
+  color: var(--lw-color-text-soft);
+}
+
+.lw-campaign-mini-grid li + li,
+.lw-campaign-priorities li + li {
+  margin-top: var(--lw-space-2);
+}
+
+.lw-campaign-progress {
+  height: 10px;
+  overflow: hidden;
+  border-radius: var(--lw-radius-full);
+  background: var(--lw-color-border);
+}
+
+.lw-campaign-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--lw-color-info);
+  transition: width 240ms ease;
+}
+
+.lw-campaign-history {
+  display: grid;
+  gap: var(--lw-space-2);
+  margin-top: var(--lw-space-3);
+}
+
+.lw-shell-main .lw-campaign-history-item {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--lw-space-3);
+  padding: var(--lw-space-3);
+  border: 1px solid var(--lw-color-border);
+  border-radius: var(--lw-radius-md);
+  background: var(--lw-color-surface-muted);
+  color: var(--lw-color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--lw-transition-fast), border-color var(--lw-transition-fast);
+}
+
+.lw-shell-main .lw-campaign-history-item:hover,
+.lw-shell-main .lw-campaign-history-item:focus-visible,
+.lw-shell-main .lw-campaign-history-item--active {
+  border-color: var(--lw-color-info);
+  background: var(--lw-color-info-bg);
+  transform: none;
+}
+
+.lw-campaign-history-item span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.lw-campaign-history-item small {
+  color: var(--lw-color-text-soft);
+}
+
+@media (max-width: 1050px) {
+  .lw-campaign-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .lw-campaign-filter-grid,
+  .lw-campaign-axis-grid,
+  .lw-campaign-mini-grid,
+  .lw-campaign-metrics { grid-template-columns: 1fr; }
+  .lw-campaign-card-heading,
+  .lw-campaign-hero,
+  .lw-campaign-history-item { align-items: stretch; flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lw-campaign-page * { transition-duration: 0.01ms !important; }
 }
 
 /* Webhook card specific styling */

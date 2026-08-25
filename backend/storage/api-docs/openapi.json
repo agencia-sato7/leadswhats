@@ -2060,6 +2060,91 @@
         }
       }
     },
+    "/api/v1/intelligence/campaign-reports/preview": {
+      "get": {
+        "tags": ["Campaign Intelligence"],
+        "summary": "Prepara a prévia de um período fechado",
+        "description": "Separa leads novos e resgatados, compara com o período anterior equivalente e informa se existe snapshot reutilizável.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantContextHeader" },
+          { "name": "start_date", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } },
+          { "name": "end_date", "in": "query", "required": true, "schema": { "type": "string", "format": "date" } }
+        ],
+        "responses": {
+          "200": { "description": "Prévia, métricas determinísticas e cache disponível" },
+          "403": { "description": "Perfil sem acesso" },
+          "422": { "description": "Período inválido, aberto ou superior a 90 dias" }
+        }
+      }
+    },
+    "/api/v1/intelligence/campaign-reports": {
+      "get": {
+        "tags": ["Campaign Intelligence"],
+        "summary": "Lista snapshots de análises por período",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantContextHeader" },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1 } }
+        ],
+        "responses": { "200": { "description": "Histórico paginado da empresa" } }
+      },
+      "post": {
+        "tags": ["Campaign Intelligence"],
+        "summary": "Solicita ou reutiliza uma análise de campanha",
+        "description": "Somente admin/gestor. Retorna 200 para snapshot idêntico concluído ou 202 para processamento em fila.",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object", "required": ["start_date", "end_date"],
+            "properties": {
+              "start_date": { "type": "string", "format": "date" },
+              "end_date": { "type": "string", "format": "date" }
+            }
+          } } }
+        },
+        "responses": {
+          "200": { "description": "Snapshot existente reutilizado" },
+          "202": { "description": "Análise adicionada à fila" },
+          "422": { "description": "Período inválido ou sem dados analisáveis" }
+        }
+      }
+    },
+    "/api/v1/intelligence/campaign-reports/{report}": {
+      "get": {
+        "tags": ["Campaign Intelligence"],
+        "summary": "Consulta progresso ou resultado de um relatório",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantContextHeader" },
+          { "name": "report", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": { "description": "Status, métricas e resultado estruturado" },
+          "404": { "description": "Relatório não encontrado na empresa" }
+        }
+      }
+    },
+    "/api/v1/intelligence/campaign-reports/{report}/leads": {
+      "get": {
+        "tags": ["Campaign Intelligence"],
+        "summary": "Lista os leads que sustentam o diagnóstico",
+        "description": "Retorna evidências agregadas por lead sem telefone no payload.",
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [
+          { "$ref": "#/components/parameters/TenantContextHeader" },
+          { "name": "report", "in": "path", "required": true, "schema": { "type": "integer" } },
+          { "name": "cohort", "in": "query", "schema": { "type": "string", "enum": ["new", "rescued"] } },
+          { "name": "owner_user_id", "in": "query", "schema": { "type": "integer", "minimum": 0 } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "minimum": 1 } }
+        ],
+        "responses": {
+          "200": { "description": "Drill-down paginado por lead" },
+          "404": { "description": "Relatório não encontrado na empresa" }
+        }
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "tags": [

@@ -143,6 +143,41 @@ services:
       - leadswhats_network
     restart: unless-stopped
 
+  campaign-worker:
+    image: laravelsail/php84-composer:latest
+    container_name: leadswhats_campaign_worker
+    working_dir: /var/www
+    volumes:
+      - ./backend:/var/www
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    environment:
+      APP_DEBUG: "true"
+      APP_URL: https://leadswhats.appsato7.com.br
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CONVERSATION_ANALYZER: python
+      AI_SERVICE_URL: http://ai-service:8001
+      AI_SERVICE_TIMEOUT_SECONDS: "90"
+      AI_SERVICE_CONNECT_TIMEOUT_SECONDS: "5"
+    command: >
+      sh -c "
+        apt-get update && apt-get install -y libpq-dev &&
+        docker-php-ext-install pdo_pgsql &&
+        until [ -f artisan ] && [ -d vendor ]; do sleep 2; done &&
+        php artisan queue:work --queue=campaign-intelligence --tries=3 --timeout=600 --sleep=2
+      "
+    networks:
+      - leadswhats_network
+    restart: unless-stopped
+
   frontend:
     image: node:24-alpine
     container_name: leadswhats_frontend
