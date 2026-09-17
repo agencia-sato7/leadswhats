@@ -393,9 +393,19 @@ export type LeadOwnerUpdateResponse = {
   };
 };
 
+export type WhatsAppConnectionMode = 'embedded_signup' | 'coexistence';
+
+export type WhatsAppSyncStatus = 'requested' | 'completed' | 'error' | null;
+
 export type WhatsAppSettings = {
   provider: 'meta_cloud';
   status: 'not_configured' | 'configured' | 'error';
+  connection_mode: WhatsAppConnectionMode;
+  is_coexistence: boolean;
+  coexistence_app_id: string | null;
+  coexistence_config_id: string | null;
+  coexistence_feature_type: string | null;
+  coexistence_session_info_version: string | null;
   phone_number: string | null;
   phone_number_id: string | null;
   business_account_id: string | null;
@@ -405,6 +415,10 @@ export type WhatsAppSettings = {
   catalog_ids: string[];
   dataset_ids: string[];
   instagram_account_ids: string[];
+  coexistence_opted_in_at: string | null;
+  history_sync_status: WhatsAppSyncStatus;
+  contacts_sync_status: WhatsAppSyncStatus;
+  token_expires_at: string | null;
   access_token_configured: boolean;
   webhook_verify_token_configured: boolean;
   webhook_verify_token?: string | null;
@@ -416,38 +430,42 @@ export type WhatsAppSettingsResponse = {
   data: WhatsAppSettings;
 };
 
-export type UpdateWhatsAppSettingsRequest = {
-  provider: 'meta_cloud';
-  phone_number: string;
-  phone_number_id: string;
-  business_account_id: string;
-  access_token: string;
-};
-
-export type WhatsAppEmbeddedSignupData = {
+export type WhatsAppCoexistenceData = {
   phone_number_id: string;
   waba_id: string;
   business_id?: string;
+  phone_number?: string;
   page_ids: string[];
   catalog_ids: string[];
   dataset_ids: string[];
   instagram_account_ids: string[];
 };
 
-export type WhatsAppEmbeddedSignupEvent = {
-  data: WhatsAppEmbeddedSignupData;
+/**
+ * Eventos de session logging do Embedded Signup. A Coexistência conclui com
+ * FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING; os demais são aceitos por segurança.
+ */
+export type WhatsAppCoexistenceFinishEvent =
+  | 'FINISH'
+  | 'FINISH_ONLY_WABA'
+  | 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING';
+
+export type WhatsAppCoexistenceEvent = {
+  data: WhatsAppCoexistenceData;
   type: 'WA_EMBEDDED_SIGNUP';
-  event: 'FINISH';
+  event: WhatsAppCoexistenceFinishEvent;
 };
 
-export type CompleteWhatsAppEmbeddedSignupRequest = {
+export type CompleteWhatsAppCoexistenceRequest = {
   code: string;
-  embedded_signup: WhatsAppEmbeddedSignupEvent;
+  coexistence: WhatsAppCoexistenceEvent;
 };
 
-export type CompleteWhatsAppEmbeddedSignupResponse = {
+export type CompleteWhatsAppCoexistenceResponse = {
   data: WhatsAppSettings;
 };
+
+export type WhatsAppCoexistenceSyncType = 'contacts' | 'history' | 'both';
 
 // ==== Conversation Intelligence ====
 

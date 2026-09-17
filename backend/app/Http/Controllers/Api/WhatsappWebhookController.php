@@ -6,11 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\CompanyBusinessSetting;
 use App\Models\CompanyWhatsAppIntegration;
-use App\Models\Message;
-use App\Jobs\ProcessInboundWhatsAppMedia;
 use App\Services\CompanyWhatsAppIntegrationService;
 use App\Services\WhatsappIngestionService;
-use Carbon\Carbon;
+use App\Services\WhatsApp\MetaWebhookIngestionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -83,7 +81,7 @@ class WhatsappWebhookController extends Controller
         return response($challenge, 200)->header('Content-Type', 'text/plain; charset=UTF-8');
     }
 
-    public function ingestMeta(Request $request, WhatsappIngestionService $service): JsonResponse
+    public function ingestMeta(Request $request, MetaWebhookIngestionService $service): JsonResponse
     {
         $signatureHeader = (string) $request->header('X-Hub-Signature-256', '');
         $appSecret = trim((string) config('whatsapp.cloud_app_secret', ''));
@@ -126,117 +124,9 @@ class WhatsappWebhookController extends Controller
             ]);
         }
 
-        $processed = 0;
-        $ignored = 0;
-        $unmatched = 0;
-        $duplicated = 0;
-
-        foreach ($entries as $entry) {
-            foreach ((array) data_get($entry, 'changes', []) as $change) {
-                $value = (array) data_get($change, 'value', []);
-                $phoneNumberId = trim((string) data_get($value, 'metadata.phone_number_id', ''));
-
-                if ($phoneNumberId === '') {
-                    $ignored++;
-                    continue;
-                }
-
-                $integration = CompanyWhatsAppIntegration::query()
-                    ->where('provider', CompanyWhatsAppIntegrationService::PROVIDER_META_CLOUD)
-                    ->where('phone_number_id', $phoneNumberId)
-                    ->first();
-
-                if (!CompanyWhatsAppIntegrationService::isConfigured($integration) || !$integration?->company_id) {
-                    $unmatched++;
-                    continue;
-                }
-
-                $company = Company::query()->find($integration->company_id);
-                if (!$company) {
-                    $unmatched++;
-                    continue;
-                }
-
-                foreach ((array) data_get($value, 'statuses', []) as $status) {
-                    $externalId = trim((string) data_get($status, 'id', ''));
-                    $state = trim((string) data_get($status, 'status', ''));
-                    if ($externalId !== '' && in_array($state, ['sent', 'delivered', 'read', 'failed'], true)) {
-                        Message::query()->where('company_id', $company->id)->where('external_message_id', $externalId)->update([
-                            'delivery_status' => $state,
-                            'delivery_error' => $state === 'failed' ? (string) data_get($status, 'errors.0.title', 'Falha de entrega.') : null,
-                        ]);
-                    }
-                }
-
-                $messages = data_get($value, 'messages');
-                if (!is_array($messages) || $messages === []) {
-                    $ignored++;
-                    continue;
-                }
-
-                foreach ($messages as $message) {
-                    $type = (string) data_get($message, 'type', '');
-                    if (! in_array($type, ['text', 'image', 'video', 'audio', 'document'], true)) {
-                        $ignored++;
-                        continue;
-                    }
-
-                    $phone = trim((string) data_get($message, 'from', ''));
-                    $profileName = collect((array) data_get($value, 'contacts', []))
-                        ->first(fn ($contact) => trim((string) data_get($contact, 'wa_id', '')) === $phone);
-                    $profileName = trim((string) data_get($profileName, 'profile.name', ''));
-                    $body = $type === 'text' ? (string) data_get($message, 'text.body', '') : (string) data_get($message, "{$type}.caption", '');
-                    $mediaId = $type === 'text' ? '' : trim((string) data_get($message, "{$type}.id", ''));
-                    if ($phone === '' || ($type === 'text' && trim($body) === '') || ($type !== 'text' && $mediaId === '')) {
-                        $ignored++;
-                        continue;
-                    }
-
-                    $externalMessageId = trim((string) data_get($message, 'id', ''));
-                    $timestamp = data_get($message, 'timestamp');
-                    $sentAt = is_numeric($timestamp)
-                        ? Carbon::createFromTimestampUTC((int) $timestamp)->toISOString()
-                        : null;
-
-                    if ($mediaId !== '') {
-                        ProcessInboundWhatsAppMedia::dispatch($company->id, $integration->id, $message, $value);
-                        $processed++;
-                        continue;
-                    }
-
-                    $result = $service->ingest($company, [
-                        'provider' => CompanyWhatsAppIntegrationService::PROVIDER_META_CLOUD,
-                        'phone' => $phone,
-                        'direction' => 'inbound',
-                        'channel' => $type,
-                        'body' => $body,
-                        'source' => 'meta_cloud',
-                        'lead_name' => $profileName !== '' ? $profileName : null,
-                        'external_message_id' => $externalMessageId !== '' ? $externalMessageId : null,
-                        'sent_at' => $sentAt,
-                        'raw_payload' => [
-                            'meta_value' => $value,
-                            'meta_message' => $message,
-                        ],
-                    ]);
-
-                    if ((bool) ($result['duplicated'] ?? false)) {
-                        $duplicated++;
-                    } else {
-                        $processed++;
-                    }
-                }
-            }
-        }
-
         return response()->json([
             'message' => 'Meta webhook processed.',
-            'data' => [
-                'processed' => $processed,
-                'ignored' => $ignored,
-                'unmatched' => $unmatched,
-                'duplicated' => $duplicated,
-            ],
+            'data' => $service->process($entries),
         ]);
     }
 

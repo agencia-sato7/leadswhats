@@ -38,14 +38,18 @@ docker compose up -d
 
 Na primeira subida, o ambiente instala dependencias do frontend e sobe os servicos definidos no `docker-compose.yml`.
 
-Para habilitar o WhatsApp Embedded Signup no frontend, copie `frontend/.env.example` para `frontend/.env` e informe apenas os identificadores públicos gerados pela Meta:
+Para conectar o mesmo número no WhatsApp Business App e na Cloud API, use a **coexistência**. O formulário manual por token foi removido. Veja o [guia de configuração e operação](docs/WHATSAPP_COEXISTENCE.md).
+
+No frontend fora do Docker, copie `frontend/.env.example` para `frontend/.env`:
 
 ```env
 VITE_META_APP_ID=<id-publico-do-app>
-VITE_META_EMBEDDED_SIGNUP_CONFIG_ID=<id-publico-da-configuracao>
+VITE_META_COEXISTENCE_CONFIG_ID=1088502166986777
 ```
 
-O `META_APP_SECRET` e o access token permanecem exclusivamente no backend e nunca devem usar o prefixo `VITE_`.
+No Docker Compose, configure `META_APP_ID` e `META_COEXISTENCE_CONFIG_ID` no ambiente da raiz. O backend também fornece esses identificadores públicos à tela de configuração.
+
+O `META_APP_SECRET` e o access token permanecem exclusivamente no backend e nunca devem usar o prefixo `VITE_`. A coexistência continua usando Embedded Signup, agora com o onboarding do WhatsApp Business App.
 
 Antes de analisar conversas com o provider real, copie o arquivo de ambiente da raiz e configure a chave:
 

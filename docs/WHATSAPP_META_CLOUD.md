@@ -32,13 +32,9 @@ WHATSAPP_CLOUD_APP_SECRET=minha_chave_secreta_do_app_meta
 
 ## 2. Configurações da Integração no App (Painel de Gestão)
 
-Cada empresa (Tenant) gerencia suas próprias credenciais de WhatsApp na aba **WhatsApp** nas configurações da plataforma. Os campos necessários são:
+Cada empresa conecta seu número pelo botão **Conectar WhatsApp** usando coexistência: WhatsApp Business App e Cloud API no mesmo número. O formulário manual por token e a rota `PUT /api/v1/settings/whatsapp` foram removidos. Integrações existentes permanecem armazenadas; para reconectar, use o novo fluxo.
 
-- **Phone number**: O número de telefone formatado do WhatsApp (Exemplo: `+5511999999999`).
-- **Phone number ID**: O ID numérico do número de telefone fornecido pela Meta no painel de desenvolvedor.
-- **Business account ID**: O ID da conta de negócios da Meta vinculada.
-- **Access token**: O Token de Acesso temporário ou permanente do sistema (System User Access Token) gerado na conta empresarial do Facebook.
-- **Webhook verify token**: O token de verificação específico desta empresa para validar o webhook. O sistema gera um automaticamente por padrão (formato aleatório), mas você pode definir o seu próprio.
+Consulte [WHATSAPP_COEXISTENCE.md](WHATSAPP_COEXISTENCE.md) para configurar o aplicativo Meta, o config ID, as variáveis de ambiente e a fila de histórico. Tokens obtidos pela autorização são trocados e criptografados exclusivamente no backend.
 
 ---
 

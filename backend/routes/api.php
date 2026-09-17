@@ -54,9 +54,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/settings/whatsapp', [SettingsWhatsAppController::class, 'show'])
             ->name('tenant.settings.whatsapp.show')
             ->middleware(['role:admin,gestor,platform_admin', 'tenant.view']);
-        Route::put('/settings/whatsapp', [SettingsWhatsAppController::class, 'update'])
+        Route::post('/settings/whatsapp/coexistence/complete', [SettingsWhatsAppController::class, 'completeCoexistence'])
+            ->name('tenant.settings.whatsapp.coexistence.complete')
             ->middleware('role:admin,gestor');
-        Route::post('/settings/whatsapp/embedded-signup/complete', [SettingsWhatsAppController::class, 'completeEmbeddedSignup'])
+        Route::post('/settings/whatsapp/coexistence/sync', [SettingsWhatsAppController::class, 'requestSync'])
+            ->name('tenant.settings.whatsapp.coexistence.sync')
             ->middleware('role:admin,gestor');
 
         // Intelligence lê conversas já persistidas e não depende do estado da conexão WhatsApp.

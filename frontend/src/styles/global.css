@@ -647,28 +647,18 @@ form button:focus {
   flex: 0 0 auto;
 }
 
-.lw-whatsapp-technical-card {
-  display: grid;
-  gap: var(--lw-space-4);
-  margin-top: var(--lw-space-4);
-  border-color: rgba(245, 158, 11, 0.3);
-}
-
-.lw-whatsapp-technical-form {
-  display: grid;
-  gap: var(--lw-space-4);
-}
-
-.lw-whatsapp-technical-form .lw-grid-2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--lw-space-4);
-}
-
-.lw-whatsapp-technical-actions {
+.lw-whatsapp-coexistence-card {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--lw-space-3);
+  justify-content: space-between;
+  gap: var(--lw-space-5);
+  margin-top: var(--lw-space-4);
+  border-color: rgba(59, 130, 246, 0.28);
+}
+
+.lw-whatsapp-coexistence-card > .lw-button {
+  min-height: 44px;
+  flex: 0 0 auto;
 }
 
 @media (max-width: 720px) {
@@ -681,8 +671,13 @@ form button:focus {
     width: 100%;
   }
 
-  .lw-whatsapp-technical-form .lw-grid-2 {
-    grid-template-columns: 1fr;
+  .lw-whatsapp-coexistence-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .lw-whatsapp-coexistence-card > .lw-button {
+    width: 100%;
   }
 }
 

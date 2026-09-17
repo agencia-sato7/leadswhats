@@ -2,21 +2,21 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Exceptions\MetaEmbeddedSignupException;
+use App\Exceptions\MetaCoexistenceException;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\CompleteWhatsAppEmbeddedSignupRequest;
+use App\Http\Requests\CompleteWhatsAppCoexistenceSignupRequest;
 use App\Services\CompanyWhatsAppIntegrationService;
 use App\Services\EffectiveTenantContext;
-use App\Services\WhatsApp\WhatsAppEmbeddedSignupService;
+use App\Services\WhatsApp\WhatsAppCoexistenceSignupService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class SettingsWhatsAppController extends Controller
 {
-    public function completeEmbeddedSignup(
-        CompleteWhatsAppEmbeddedSignupRequest $request,
-        WhatsAppEmbeddedSignupService $service,
+    public function completeCoexistence(
+        CompleteWhatsAppCoexistenceSignupRequest $request,
+        WhatsAppCoexistenceSignupService $service,
     ): JsonResponse {
         $validated = $request->validated();
 
@@ -24,18 +24,36 @@ class SettingsWhatsAppController extends Controller
             $integration = $service->complete(
                 (int) $request->user()->company_id,
                 $validated['code'],
-                $validated['embedded_signup']['data'],
+                $validated['coexistence']['data'],
             );
-        } catch (MetaEmbeddedSignupException $exception) {
-            $response = [
-                'message' => $exception->getMessage(),
-            ];
+        } catch (MetaCoexistenceException $exception) {
+            return $this->metaErrorResponse($exception);
+        }
 
-            if ($metaError = $exception->safeMetaError()) {
-                $response['meta_error'] = $metaError;
-            }
+        return response()->json([
+            'data' => $integration,
+        ]);
+    }
 
-            return response()->json($response, $exception->httpStatus);
+    public function requestSync(
+        Request $request,
+        WhatsAppCoexistenceSignupService $service,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'sync_type' => ['required', 'string', Rule::in(['contacts', 'history', 'both'])],
+        ]);
+
+        $syncTypes = $validated['sync_type'] === 'both'
+            ? ['contacts', 'history']
+            : [$validated['sync_type']];
+
+        try {
+            $integration = $service->requestDataSync(
+                (int) $request->user()->company_id,
+                $syncTypes,
+            );
+        } catch (MetaCoexistenceException $exception) {
+            return $this->metaErrorResponse($exception);
         }
 
         return response()->json([
@@ -55,22 +73,16 @@ class SettingsWhatsAppController extends Controller
         ]);
     }
 
-    public function update(Request $request, CompanyWhatsAppIntegrationService $service): JsonResponse
+    private function metaErrorResponse(MetaCoexistenceException $exception): JsonResponse
     {
-        $validated = $request->validate([
-            'provider' => ['required', 'string', Rule::in([CompanyWhatsAppIntegrationService::PROVIDER_META_CLOUD])],
-            'phone_number' => ['nullable', 'string', 'max:30'],
-            'phone_number_id' => ['nullable', 'string', 'max:255'],
-            'business_account_id' => ['nullable', 'string', 'max:255'],
-            'access_token' => ['nullable', 'string', 'max:5000'],
-            'webhook_verify_token' => ['nullable', 'string', 'max:255'],
-            'last_error' => ['nullable', 'string', 'max:2000'],
-        ]);
+        $response = [
+            'message' => $exception->getMessage(),
+        ];
 
-        $companyId = (int) $request->user()->company_id;
+        if ($metaError = $exception->safeMetaError()) {
+            $response['meta_error'] = $metaError;
+        }
 
-        return response()->json([
-            'data' => $service->upsertForCompany($companyId, $validated),
-        ]);
+        return response()->json($response, $exception->httpStatus);
     }
 }

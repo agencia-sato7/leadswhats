@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
 import {
   createAdminTenantViewContext,
   createAdminCompany,
-  completeWhatsAppEmbeddedSignup,
+  completeWhatsAppCoexistence,
   exportContactsCsv,
   getAdminCompanies,
   getAssignableUsers,
@@ -18,11 +17,11 @@ import {
   getTasksChecklist,
   getWhatsAppSettings,
   login,
+  requestWhatsAppCoexistenceSync,
   revokeAdminTenantViewContext,
   updateLeadOwner,
-  updateWhatsAppSettings,
 } from './api';
-import { EmbeddedSignupFlowError, WhatsAppEmbeddedSignupFlow } from './meta/embeddedSignup';
+import { CoexistenceFlowError, WhatsAppCoexistenceFlow } from './meta/coexistenceSignup';
 import { AppShell, PageHeader, Sidebar, Topbar } from './components/layout';
 import { ConversationIntelligencePage } from './pages/ConversationIntelligencePage';
 import { CampaignIntelligencePage } from './pages/CampaignIntelligencePage';
@@ -63,7 +62,6 @@ import type {
   PipelineKanban,
   PipelineListItem,
   WhatsAppSettings,
-  UpdateWhatsAppSettingsRequest,
 } from './types';
 
 type Session = {
@@ -145,6 +143,13 @@ function formatWhatsAppStatus(status: WhatsAppSettings['status'] | undefined): s
   if (status === 'configured') return 'Configurado';
   if (status === 'error') return 'Com erro';
   return 'Não configurado';
+}
+
+function formatWhatsAppSyncStatus(status: WhatsAppSettings['history_sync_status'], label: string): string {
+  if (status === 'completed') return `${label} sincronizado`;
+  if (status === 'error') return `${label} com erro`;
+  if (status === 'requested') return `${label} em andamento`;
+  return `${label} não solicitado`;
 }
 
 function formatProviderLabel(provider: string | null | undefined): string {
@@ -243,15 +248,8 @@ export function App() {
   const [whatsAppConnecting, setWhatsAppConnecting] = useState(false);
   const [whatsAppError, setWhatsAppError] = useState<string | null>(null);
   const [whatsAppSuccess, setWhatsAppSuccess] = useState<string | null>(null);
-  const [whatsAppTechnicalSaving, setWhatsAppTechnicalSaving] = useState(false);
-  const [whatsAppTechnicalForm, setWhatsAppTechnicalForm] = useState<UpdateWhatsAppSettingsRequest>({
-    provider: 'meta_cloud',
-    phone_number: '',
-    phone_number_id: '',
-    business_account_id: '',
-    access_token: '',
-  });
-  const whatsAppSignupFlowRef = useRef<WhatsAppEmbeddedSignupFlow<WhatsAppSettings> | null>(null);
+  const [whatsAppSyncLoading, setWhatsAppSyncLoading] = useState(false);
+  const whatsAppCoexistenceFlowRef = useRef<WhatsAppCoexistenceFlow<WhatsAppSettings> | null>(null);
   const [adminForm, setAdminForm] = useState<AdminCompanyCreateRequest>({
     company: { name: '', slug: '' },
     admin_user: { name: '', email: '', password: '' },
@@ -565,31 +563,36 @@ export function App() {
   }, [session, canViewWhatsAppSettings, activeView, tenantContextToken]);
 
   useEffect(() => {
-    if (!whatsAppSettings) return;
-    setWhatsAppTechnicalForm({
-      provider: 'meta_cloud',
-      phone_number: whatsAppSettings.phone_number ?? '',
-      phone_number_id: whatsAppSettings.phone_number_id ?? '',
-      business_account_id: whatsAppSettings.business_account_id ?? '',
-      access_token: '',
-    });
-  }, [whatsAppSettings]);
-
-  useEffect(() => {
     if (!session || !canManageWhatsAppSettings || activeView !== 'whatsappSettings') return;
 
-    const flow = new WhatsAppEmbeddedSignupFlow<WhatsAppSettings>({
-      appId: import.meta.env.VITE_META_APP_ID || '',
-      configId: import.meta.env.VITE_META_EMBEDDED_SIGNUP_CONFIG_ID || '',
-      complete: (payload) => completeWhatsAppEmbeddedSignup(session.token, payload),
+    const flow = new WhatsAppCoexistenceFlow<WhatsAppSettings>({
+      // Identificadores públicos vêm do backend (GET /settings/whatsapp) e,
+      // como fallback, das variáveis VITE_ definidas no build.
+      appId: whatsAppSettings?.coexistence_app_id || import.meta.env.VITE_META_APP_ID || '',
+      configId: whatsAppSettings?.coexistence_config_id || import.meta.env.VITE_META_COEXISTENCE_CONFIG_ID || '',
+      extras: whatsAppSettings?.coexistence_feature_type
+        ? {
+            featureType: whatsAppSettings.coexistence_feature_type,
+            sessionInfoVersion: whatsAppSettings.coexistence_session_info_version || '3',
+          }
+        : undefined,
+      complete: (payload) => completeWhatsAppCoexistence(session.token, payload),
     });
-    whatsAppSignupFlowRef.current = flow;
+    whatsAppCoexistenceFlowRef.current = flow;
 
     return () => {
       flow.dispose();
-      if (whatsAppSignupFlowRef.current === flow) whatsAppSignupFlowRef.current = null;
+      if (whatsAppCoexistenceFlowRef.current === flow) whatsAppCoexistenceFlowRef.current = null;
     };
-  }, [session, canManageWhatsAppSettings, activeView]);
+  }, [
+    session,
+    canManageWhatsAppSettings,
+    activeView,
+    whatsAppSettings?.coexistence_app_id,
+    whatsAppSettings?.coexistence_config_id,
+    whatsAppSettings?.coexistence_feature_type,
+    whatsAppSettings?.coexistence_session_info_version,
+  ]);
 
   useEffect(() => {
     if (!session || !selectedPipelineId || (isPlatformAdmin && !isAgencyViewing)) return;
@@ -1036,16 +1039,21 @@ export function App() {
     }
   }
 
-  async function handleConnectWhatsApp() {
+  async function handleConnectWhatsAppCoexistence() {
     if (!session || !canManageWhatsAppSettings) return;
 
-    if (!import.meta.env.VITE_META_APP_ID || !import.meta.env.VITE_META_EMBEDDED_SIGNUP_CONFIG_ID) {
+    const flow = whatsAppCoexistenceFlowRef.current;
+    const hasPublicIds = Boolean(
+      (whatsAppSettings?.coexistence_app_id || import.meta.env.VITE_META_APP_ID)
+      && (whatsAppSettings?.coexistence_config_id || import.meta.env.VITE_META_COEXISTENCE_CONFIG_ID),
+    );
+
+    if (!hasPublicIds) {
       setWhatsAppError('A conexão com a Meta ainda não foi configurada para este ambiente.');
       setWhatsAppSuccess(null);
       return;
     }
 
-    const flow = whatsAppSignupFlowRef.current;
     if (!flow) {
       setWhatsAppError('Não foi possível preparar a conexão com a Meta. Recarregue a página e tente novamente.');
       setWhatsAppSuccess(null);
@@ -1058,11 +1066,15 @@ export function App() {
     try {
       const updatedSettings = await flow.start();
       setWhatsAppSettings(updatedSettings);
-      setWhatsAppSuccess('WhatsApp conectado com sucesso.');
+      setWhatsAppSuccess(
+        updatedSettings.is_coexistence
+          ? 'WhatsApp conectado em coexistência com o aplicativo WhatsApp Business.'
+          : 'WhatsApp conectado com sucesso.',
+      );
       await refreshData(session.token).catch(() => undefined);
     } catch (err) {
       setWhatsAppError(
-        err instanceof EmbeddedSignupFlowError
+        err instanceof CoexistenceFlowError
           ? err.message
           : 'Não foi possível concluir a conexão com o WhatsApp. Tente novamente.',
       );
@@ -1071,38 +1083,26 @@ export function App() {
     }
   }
 
-  async function handleSaveWhatsAppTechnicalSettings(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleRequestCoexistenceSync(syncType: 'contacts' | 'history' | 'both') {
     if (!session || !canManageWhatsAppSettings) return;
 
-    const payload = {
-      ...whatsAppTechnicalForm,
-      phone_number: whatsAppTechnicalForm.phone_number.trim(),
-      phone_number_id: whatsAppTechnicalForm.phone_number_id.trim(),
-      business_account_id: whatsAppTechnicalForm.business_account_id.trim(),
-      access_token: whatsAppTechnicalForm.access_token.trim(),
-    };
-
-    if (!payload.phone_number || !payload.phone_number_id || !payload.business_account_id || !payload.access_token) {
-      setWhatsAppError('Preencha o número de teste, os dois identificadores da Meta e o token temporário.');
-      setWhatsAppSuccess(null);
-      return;
-    }
-
-    setWhatsAppTechnicalSaving(true);
+    setWhatsAppSyncLoading(true);
     setWhatsAppError(null);
     setWhatsAppSuccess(null);
     try {
-      const updatedSettings = await updateWhatsAppSettings(session.token, payload);
+      const updatedSettings = await requestWhatsAppCoexistenceSync(session.token, syncType);
       setWhatsAppSettings(updatedSettings);
-      setWhatsAppTechnicalForm((current) => ({ ...current, access_token: '' }));
-      setWhatsAppSuccess('Credenciais do número de teste salvas com segurança.');
-      await refreshData(session.token).catch(() => undefined);
+      setWhatsAppSuccess(
+        syncType === 'history'
+          ? 'Sincronização do histórico solicitada à Meta.'
+          : syncType === 'contacts'
+            ? 'Sincronização de contatos solicitada à Meta.'
+            : 'Sincronização de contatos e histórico solicitada à Meta.',
+      );
     } catch (err) {
-      setWhatsAppTechnicalForm((current) => ({ ...current, access_token: '' }));
-      setWhatsAppError(parseApiErrorMessage(err, 'Não foi possível salvar as credenciais de teste. Confira os dados da Meta.'));
+      setWhatsAppError(parseApiErrorMessage(err, 'Não foi possível solicitar a sincronização à Meta.'));
     } finally {
-      setWhatsAppTechnicalSaving(false);
+      setWhatsAppSyncLoading(false);
     }
   }
 
@@ -1431,9 +1431,12 @@ export function App() {
                         <Badge variant={whatsAppSettings?.status === 'configured' ? 'success' : 'neutral'}>
                           {whatsAppSettings?.status === 'configured' ? 'Configurado' : 'Não configurado'}
                         </Badge>
+                        {whatsAppSettings?.is_coexistence ? <Badge variant="info">Coexistência</Badge> : null}
                       </div>
                       <p>
-                        A autorização acontece no ambiente oficial da Meta. O LEADSWHATS recebe o código temporário e conclui a conexão com segurança no servidor.
+                        A autorização acontece no ambiente oficial da Meta. O número que já é usado no aplicativo WhatsApp Business é
+                        conectado à plataforma e o LEADSWHATS passa a receber as conversas — inclusive as enviadas pelo próprio
+                        aplicativo, por meio dos eventos de coexistência.
                       </p>
                       <p className="lw-whatsapp-security-note">
                         Nenhum token de acesso ou segredo da Meta é exibido ou armazenado neste navegador.
@@ -1442,83 +1445,41 @@ export function App() {
                     <Button
                       type="button"
                       disabled={whatsAppConnecting}
-                      onClick={() => void handleConnectWhatsApp()}
+                      onClick={() => void handleConnectWhatsAppCoexistence()}
                     >
                       {whatsAppConnecting
                         ? 'Conectando...'
                         : whatsAppSettings?.status === 'configured'
                           ? 'Conectar novamente'
-                          : 'Conectar WhatsApp'}
+                          : 'Conectar WhatsApp (Coexistência)'}
                     </Button>
                   </Card>
                 ) : null}
 
-                {!whatsAppLoading && canManageWhatsAppSettings ? (
-                  <Card className="lw-whatsapp-technical-card">
+                {!whatsAppLoading && canManageWhatsAppSettings && whatsAppSettings?.is_coexistence ? (
+                  <Card className="lw-whatsapp-coexistence-card">
                     <div className="lw-whatsapp-connect-copy">
                       <div className="lw-whatsapp-connect-heading">
-                        <h3>Número de teste da Meta</h3>
-                        <Badge variant="warning">Teste / desenvolvimento</Badge>
+                        <h3>Sincronização do WhatsApp Business</h3>
+                        <Badge variant={whatsAppSettings.history_sync_status === 'completed' ? 'success' : 'neutral'}>
+                          {formatWhatsAppSyncStatus(whatsAppSettings.history_sync_status, 'Histórico')}
+                        </Badge>
+                        <Badge variant={whatsAppSettings.contacts_sync_status === 'completed' ? 'success' : 'neutral'}>
+                          {formatWhatsAppSyncStatus(whatsAppSettings.contacts_sync_status, 'Contatos')}
+                        </Badge>
                       </div>
                       <p>
-                        Use este cadastro manual somente com as credenciais temporárias exibidas em WhatsApp &gt; API Setup no painel da Meta.
-                        Para números empresariais, prefira o botão Conectar WhatsApp acima.
+                        A Meta importa os contatos e as mensagens dos últimos 180 dias do aplicativo WhatsApp Business. O histórico é
+                        processado em segundo plano no servidor, sem mover os leads no funil nem afetar os indicadores de tempo real.
                       </p>
                     </div>
-
-                    <form className="lw-whatsapp-technical-form" onSubmit={handleSaveWhatsAppTechnicalSettings}>
-                      <div className="lw-grid-2">
-                        <FormGroup label="Número de teste" hint="Inclua o código do país, por exemplo +15551234567.">
-                          <Input
-                            type="tel"
-                            autoComplete="tel"
-                            placeholder="+15551234567"
-                            value={whatsAppTechnicalForm.phone_number}
-                            onChange={(event) => setWhatsAppTechnicalForm((current) => ({ ...current, phone_number: event.target.value }))}
-                            required
-                          />
-                        </FormGroup>
-                        <FormGroup label="Phone Number ID">
-                          <Input
-                            inputMode="numeric"
-                            autoComplete="off"
-                            value={whatsAppTechnicalForm.phone_number_id}
-                            onChange={(event) => setWhatsAppTechnicalForm((current) => ({ ...current, phone_number_id: event.target.value }))}
-                            required
-                          />
-                        </FormGroup>
-                        <FormGroup label="WhatsApp Business Account ID">
-                          <Input
-                            inputMode="numeric"
-                            autoComplete="off"
-                            value={whatsAppTechnicalForm.business_account_id}
-                            onChange={(event) => setWhatsAppTechnicalForm((current) => ({ ...current, business_account_id: event.target.value }))}
-                            required
-                          />
-                        </FormGroup>
-                        <FormGroup
-                          label="Token temporário"
-                          hint={whatsAppSettings?.access_token_configured
-                            ? 'Já existe um token protegido. Digite outro somente para substituí-lo.'
-                            : 'O token será criptografado e não será exibido novamente.'}
-                        >
-                          <Input
-                            type="password"
-                            autoComplete="new-password"
-                            placeholder={whatsAppSettings?.access_token_configured ? 'Token já configurado — informe um novo' : 'Cole o token temporário'}
-                            value={whatsAppTechnicalForm.access_token}
-                            onChange={(event) => setWhatsAppTechnicalForm((current) => ({ ...current, access_token: event.target.value }))}
-                            required
-                          />
-                        </FormGroup>
-                      </div>
-                      <div className="lw-whatsapp-technical-actions">
-                        <Button type="submit" disabled={whatsAppTechnicalSaving}>
-                          {whatsAppTechnicalSaving ? 'Salvando...' : 'Salvar número de teste'}
-                        </Button>
-                        {whatsAppSettings?.access_token_configured ? <Badge variant="success">Token protegido configurado</Badge> : null}
-                      </div>
-                    </form>
+                    <Button
+                      type="button"
+                      disabled={whatsAppSyncLoading}
+                      onClick={() => void handleRequestCoexistenceSync('both')}
+                    >
+                      {whatsAppSyncLoading ? 'Solicitando...' : 'Sincronizar novamente'}
+                    </Button>
                   </Card>
                 ) : null}
 

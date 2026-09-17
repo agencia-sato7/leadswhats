@@ -21,11 +21,11 @@ import type {
   OverviewResponse,
   PipelineKanban,
   PipelineListItem,
-  CompleteWhatsAppEmbeddedSignupRequest,
-  CompleteWhatsAppEmbeddedSignupResponse,
+  CompleteWhatsAppCoexistenceRequest,
+  CompleteWhatsAppCoexistenceResponse,
+  WhatsAppCoexistenceSyncType,
   WhatsAppSettings,
   WhatsAppSettingsResponse,
-  UpdateWhatsAppSettingsRequest,
   AnalyzeConversationResponse,
   ConversationIntelligenceDetailResponse,
   ConversationIntelligenceListResponse,
@@ -358,26 +358,26 @@ export async function getWhatsAppSettings(token: string, tenantContext?: string)
   return data.data;
 }
 
-export async function updateWhatsAppSettings(
+export async function completeWhatsAppCoexistence(
   token: string,
-  payload: UpdateWhatsAppSettingsRequest,
+  payload: CompleteWhatsAppCoexistenceRequest,
 ): Promise<WhatsAppSettings> {
-  const data = await request<WhatsAppSettingsResponse>('/settings/whatsapp', {
-    method: 'PUT',
-    headers: authenticatedHeaders(token),
+  const data = await request<CompleteWhatsAppCoexistenceResponse>('/settings/whatsapp/coexistence/complete', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   });
   return data.data;
 }
 
-export async function completeWhatsAppEmbeddedSignup(
+export async function requestWhatsAppCoexistenceSync(
   token: string,
-  payload: CompleteWhatsAppEmbeddedSignupRequest,
+  syncType: WhatsAppCoexistenceSyncType,
 ): Promise<WhatsAppSettings> {
-  const data = await request<CompleteWhatsAppEmbeddedSignupResponse>('/settings/whatsapp/embedded-signup/complete', {
+  const data = await request<WhatsAppSettingsResponse>('/settings/whatsapp/coexistence/sync', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ sync_type: syncType }),
   });
   return data.data;
 }

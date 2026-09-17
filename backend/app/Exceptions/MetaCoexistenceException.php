@@ -4,7 +4,13 @@ namespace App\Exceptions;
 
 use RuntimeException;
 
-class MetaEmbeddedSignupException extends RuntimeException
+/**
+ * Falhas do fluxo de Coexistência (Embedded Signup para WhatsApp Business app).
+ *
+ * Só carrega metadados seguros de erro da Meta: nunca o code, o app secret ou
+ * o access token.
+ */
+class MetaCoexistenceException extends RuntimeException
 {
     public function __construct(
         string $message,

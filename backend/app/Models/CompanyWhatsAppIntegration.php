@@ -16,6 +16,7 @@ class CompanyWhatsAppIntegration extends Model
         'company_id',
         'provider',
         'status',
+        'connection_mode',
         'phone_number',
         'phone_number_id',
         'business_account_id',
@@ -28,6 +29,10 @@ class CompanyWhatsAppIntegration extends Model
         'access_token_encrypted',
         'webhook_verify_token',
         'connected_at',
+        'coexistence_opted_in_at',
+        'history_sync_status',
+        'contacts_sync_status',
+        'token_expires_at',
         'last_error',
     ];
 
@@ -40,6 +45,8 @@ class CompanyWhatsAppIntegration extends Model
             'dataset_ids' => 'array',
             'instagram_account_ids' => 'array',
             'connected_at' => 'datetime',
+            'coexistence_opted_in_at' => 'datetime',
+            'token_expires_at' => 'datetime',
         ];
     }
 
