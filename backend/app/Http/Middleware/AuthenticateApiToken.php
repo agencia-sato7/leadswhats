@@ -30,6 +30,11 @@ class AuthenticateApiToken
             return response()->json(['message' => 'Token inválido.'], 401);
         }
 
+        if (! $apiToken->user->active) {
+            $apiToken->delete();
+            return response()->json(['message' => 'Usuário inativo.'], 403);
+        }
+
         $apiToken->forceFill(['last_used_at' => now()])->save();
         $request->setUserResolver(fn () => $apiToken->user);
 

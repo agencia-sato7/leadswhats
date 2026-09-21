@@ -14,6 +14,21 @@ use Illuminate\Validation\Rule;
 
 class SettingsWhatsAppController extends Controller
 {
+    public function disconnect(Request $request, \App\Services\WhatsApp\WhatsAppDisconnectService $service): JsonResponse
+    {
+        if ($request->hasHeader('X-Tenant-Context')) {
+            return response()->json(['message' => 'O contexto administrativo é somente leitura.'], 403);
+        }
+        try {
+            return response()->json(['data' => $service->disconnect(
+                (int) $request->user()->company_id,
+                (int) $request->user()->id,
+            )]);
+        } catch (MetaCoexistenceException $exception) {
+            return $this->metaErrorResponse($exception);
+        }
+    }
+
     public function completeCoexistence(
         CompleteWhatsAppCoexistenceSignupRequest $request,
         WhatsAppCoexistenceSignupService $service,

@@ -13,6 +13,8 @@ use Illuminate\Support\Str;
 
 class PlatformCompanyService
 {
+    public function __construct(private readonly AccessControlService $accessControl) {}
+
     /**
      * @return array<int, array<string, mixed>>
      */
@@ -58,8 +60,11 @@ class PlatformCompanyService
                 'slug' => $payload['company']['slug'],
             ]);
 
+            $profiles = $this->accessControl->createProfilesForCompany($company);
+
             $adminUser = User::query()->create([
                 'company_id' => $company->id,
+                'access_profile_id' => $profiles['administrador']->id,
                 'name' => $payload['admin_user']['name'],
                 'email' => $payload['admin_user']['email'],
                 'password' => Hash::make($payload['admin_user']['password']),

@@ -597,6 +597,22 @@ form button:focus {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.lw-flex-between {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.lw-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  margin-top: .65rem;
+  cursor: pointer;
+}
+
 .lw-whatsapp-badges {
   display: flex;
   gap: var(--lw-space-2);

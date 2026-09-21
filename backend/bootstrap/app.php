@@ -2,6 +2,8 @@
 
 use App\Http\Middleware\AuthenticateApiToken;
 use App\Http\Middleware\EnsureUserRole;
+use App\Http\Middleware\EnsurePermission;
+use App\Http\Middleware\EnsurePasswordChanged;
 use App\Http\Middleware\ResolveTenantViewContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -18,6 +20,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'auth.token' => AuthenticateApiToken::class,
             'role' => EnsureUserRole::class,
+            'permission' => EnsurePermission::class,
+            'password.changed' => EnsurePasswordChanged::class,
             'tenant.view' => ResolveTenantViewContext::class,
             'whatsapp.connected' => \App\Http\Middleware\EnsureWhatsAppConnected::class,
         ]);

@@ -27,8 +27,12 @@ class ProcessInboundWhatsAppMedia implements ShouldQueue
 
     public function handle(WhatsappIngestionService $ingestion, MetaMediaService $mediaService): void
     {
-        $company = Company::findOrFail($this->companyId);
-        $integration = CompanyWhatsAppIntegration::findOrFail($this->integrationId);
+        $company = Company::find($this->companyId);
+        $integration = CompanyWhatsAppIntegration::find($this->integrationId);
+        if (! $company || ! $integration || $integration->company_id !== $company->id
+            || ! \App\Services\CompanyWhatsAppIntegrationService::isConfigured($integration)) {
+            return;
+        }
         $type = (string) data_get($this->message, 'type');
         $mediaId = (string) data_get($this->message, "{$type}.id");
         $downloaded = $mediaService->download($integration, $mediaId, $type, data_get($this->message, "{$type}.filename"));

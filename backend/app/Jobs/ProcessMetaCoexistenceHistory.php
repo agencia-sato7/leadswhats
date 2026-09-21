@@ -30,8 +30,12 @@ class ProcessMetaCoexistenceHistory implements ShouldQueue
 
     public function handle(MetaWebhookIngestionService $service): void
     {
-        $company = Company::findOrFail($this->companyId);
-        $integration = CompanyWhatsAppIntegration::findOrFail($this->integrationId);
+        $company = Company::find($this->companyId);
+        $integration = CompanyWhatsAppIntegration::find($this->integrationId);
+        if (! $company || ! $integration || $integration->company_id !== $company->id
+            || ! \App\Services\CompanyWhatsAppIntegrationService::isConfigured($integration)) {
+            return;
+        }
 
         $service->ingestHistoryValue($company, $integration, $this->value);
     }

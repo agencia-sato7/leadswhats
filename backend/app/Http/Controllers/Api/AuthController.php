@@ -12,6 +12,11 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    public function __construct(
+        private readonly \App\Services\AccessControlService $accessControl,
+        private readonly \App\Services\AccessAuditService $accessAudit,
+    ) {}
+
     public function login(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -45,13 +50,14 @@ class AuthController extends Controller
             'token' => $plainToken,
             'token_type' => 'Bearer',
             'expires_in_seconds' => 60 * 60 * 24 * 30,
-            'user' => [
+            'user' => array_merge([
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role?->value,
                 'company_id' => $user->company_id,
-            ],
+                'company' => $user->company_id ? \App\Models\Company::query()->find($user->company_id, ['id', 'name', 'slug']) : null,
+            ], $this->accessControl->userAccessPayload($user)),
         ]);
     }
 
@@ -59,13 +65,34 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        return response()->json([
+        return response()->json(array_merge([
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
             'role' => $user->role?->value,
             'company_id' => $user->company_id,
+            'company' => $user->company_id ? \App\Models\Company::query()->find($user->company_id, ['id', 'name', 'slug']) : null,
+        ], $this->accessControl->userAccessPayload($user)));
+    }
+
+    public function changePassword(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'current_password' => ['required', 'string'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
+        $user = $request->user();
+        if (! Hash::check($validated['current_password'], $user->password)) {
+            throw ValidationException::withMessages(['current_password' => ['A senha atual está incorreta.']]);
+        }
+        $wasTemporary = (bool) $user->must_change_password;
+        $user->forceFill(['password' => Hash::make($validated['password']), 'must_change_password' => false])->save();
+        ApiToken::query()->where('user_id', $user->id)->where('token_hash', '!=', hash('sha256', (string) $request->bearerToken()))->delete();
+        $this->accessAudit->record($request, 'user.password_changed', 'user', $user->id, $user->company_id, ['must_change_password' => $wasTemporary], ['must_change_password' => false]);
+        return response()->json(['message' => 'Senha alterada com sucesso.', 'user' => array_merge([
+            'id' => $user->id, 'name' => $user->name, 'email' => $user->email,
+            'role' => $user->role?->value, 'company_id' => $user->company_id,
+        ], $this->accessControl->userAccessPayload($user))]);
     }
 
     public function logout(Request $request): JsonResponse

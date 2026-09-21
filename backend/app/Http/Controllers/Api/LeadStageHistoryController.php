@@ -17,6 +17,12 @@ class LeadStageHistoryController extends Controller
 
         $lead = Lead::query()
             ->where('company_id', $companyId)
+            ->when($request->user()->dataScope() === 'own', function ($query) use ($request) {
+                $query->where(function ($scope) use ($request) {
+                    $scope->where('owner_user_id', $request->user()->id)
+                        ->orWhereHas('conversations', fn ($conversation) => $conversation->where('owner_user_id', $request->user()->id));
+                });
+            })
             ->findOrFail($leadId, ['id']);
 
         $history = LeadStageHistory::query()

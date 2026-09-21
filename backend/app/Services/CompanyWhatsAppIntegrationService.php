@@ -79,6 +79,7 @@ class CompanyWhatsAppIntegrationService
         ?int $tokenExpiresIn = null,
     ): array {
         return DB::transaction(function () use ($companyId, $coexistenceData, $accessToken, $tokenExpiresIn): array {
+            \App\Models\Company::whereKey($companyId)->lockForUpdate()->firstOrFail();
             $integration = CompanyWhatsAppIntegration::query()
                 ->where('company_id', $companyId)
                 ->lockForUpdate()

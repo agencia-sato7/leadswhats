@@ -1,4 +1,8 @@
-export type Role = 'admin' | 'gestor' | 'sdr' | 'platform_admin';
+export type Role = 'admin' | 'gestor' | 'sdr' | 'platform_admin' | 'custom';
+
+export type AccessProfileSummary = {
+  id: number; name: string; data_scope: 'own' | 'company'; is_full_access: boolean;
+};
 
 export type AuthUser = {
   id: number;
@@ -6,6 +10,37 @@ export type AuthUser = {
   email: string;
   role: Role;
   company_id: number | null;
+  company?: { id: number; name: string; slug: string } | null;
+  access_profile: (AccessProfileSummary & { permissions?: string[] }) | null;
+  permissions: string[];
+  data_scope: 'own' | 'company';
+  must_change_password: boolean;
+};
+
+export type AdminUserItem = {
+  id: number; company_id: number; company_name: string; name: string; email: string; role: Role;
+  active: boolean; must_change_password: boolean; access_profile: AccessProfileSummary | null; created_at: string;
+};
+
+export type AdminUsersResponse = {
+  data: AdminUserItem[];
+  meta: { page: number; per_page: number; total: number; last_page: number };
+};
+
+export type PermissionItem = { id: number; code: string; name: string; group_name: string };
+
+export type AccessProfileItem = {
+  id: number; company_id: number | null; company_name: string | null; source_profile_id: number | null;
+  source_version: number | null; name: string; slug: string; description: string | null;
+  data_scope: 'own' | 'company'; version: number; is_system: boolean; is_full_access: boolean;
+  active: boolean; users_count: number; permissions: string[];
+};
+
+export type AccessAuditItem = {
+  id: number; event: string; subject_type: string; subject_id: number | null;
+  before: Record<string, unknown> | null; after: Record<string, unknown> | null; created_at: string;
+  actor?: { id: number; name: string; email: string } | null;
+  company?: { id: number; name: string } | null;
 };
 
 export type LoginResponse = {

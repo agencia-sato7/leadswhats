@@ -251,8 +251,7 @@ class InboxService
 
     private function applyOwnershipScope(Builder $query, User $user): void
     {
-        $role = $user->role?->value ?? (string) $user->role;
-        if ($role !== 'sdr') {
+        if ($user->dataScope() !== 'own') {
             return;
         }
 

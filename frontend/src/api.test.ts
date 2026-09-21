@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { completeWhatsAppCoexistence, requestWhatsAppCoexistenceSync } from './api';
+import { changePassword, completeWhatsAppCoexistence, createAdminUser, disconnectWhatsApp, requestWhatsAppCoexistenceSync } from './api';
 
 const coexistenceSettings = {
   provider: 'meta_cloud',
@@ -89,6 +89,35 @@ describe('Coexistência do WhatsApp (api)', () => {
     expect(result).not.toHaveProperty('access_token');
   });
 
+  it('desconecta usando somente a sessão e retorna o estado desconectado', async () => {
+    const data = { ...coexistenceSettings, status: 'not_configured', access_token_configured: false, phone_number_id: null };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(disconnectWhatsApp('session-token')).resolves.toEqual(data);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/settings\/whatsapp\/disconnect$/),
+      expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ Authorization: 'Bearer session-token' }) }));
+  });
+
+  it('propaga falha da desconexão sem retornar sucesso', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'Falha na Meta' }), { status: 502 })));
+    await expect(disconnectWhatsApp('session-token')).rejects.toThrow();
+  });
+
+  it('propaga a mensagem específica da API também em erros 5xx', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ message: 'Não foi possível desconectar o aplicativo da conta WhatsApp na Meta.' }),
+      { status: 502, headers: { 'Content-Type': 'application/json' } },
+    )));
+    await expect(disconnectWhatsApp('session-token')).rejects.toThrow(
+      'Não foi possível desconectar o aplicativo da conta WhatsApp na Meta.',
+    );
+  });
+
+  it('usa a mensagem genérica em 5xx quando a API não envia mensagem', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
+    await expect(disconnectWhatsApp('session-token')).rejects.toThrow('O servidor não conseguiu concluir esta solicitação');
+  });
+
   it('solicita sincronização manual informando o sync_type', async () => {
     const fetchMock = stubFetch();
 
@@ -100,5 +129,24 @@ describe('Coexistência do WhatsApp (api)', () => {
     );
     expect(readBody(fetchMock)).toEqual({ sync_type: 'both' });
     expect(result.history_sync_status).toBe('requested');
+  });
+});
+
+describe('Usuários e acesso (api)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('cria usuário de clínica com perfil e senha temporária', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ data: { id: 10 } }), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await createAdminUser('platform-token', { company_id: 2, access_profile_id: 7, name: 'Conector', email: 'conector@clinica.test', password: 'temporaria-123' });
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/admin\/users$/), expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ Authorization: 'Bearer platform-token' }) }));
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual(expect.objectContaining({ company_id: 2, access_profile_id: 7 }));
+  });
+
+  it('confirma a nova senha no fluxo obrigatório', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ message: 'ok', user: {} }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await changePassword('session-token', 'temporaria-123', 'nova-senha-123');
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({ current_password: 'temporaria-123', password: 'nova-senha-123', password_confirmation: 'nova-senha-123' });
   });
 });

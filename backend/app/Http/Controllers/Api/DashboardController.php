@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Services\Domain\DashboardMetricsService;
 use App\Services\EffectiveTenantContext;
@@ -17,9 +16,7 @@ class DashboardController extends Controller
         EffectiveTenantContext $tenantContext,
     ): JsonResponse {
         $user = $request->user();
-        $role = $user->role?->value ?? (string) $user->role;
-
-        $summary = $role === UserRole::SDR->value
+        $summary = $user->dataScope() === 'own'
             ? $dashboardMetricsService->summaryForUser($user)
             : $dashboardMetricsService->summaryForCompany($tenantContext->companyId($request));
 

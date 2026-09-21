@@ -15,6 +15,22 @@ use Illuminate\Support\Facades\Log;
  */
 class MetaCoexistenceOnboardingService
 {
+    public function unsubscribeApp(string $wabaId, string $accessToken): void
+    {
+        $response = $this->send(
+            method: 'DELETE',
+            path: trim($wabaId, '/').'/subscribed_apps',
+            accessToken: $accessToken,
+            payload: [],
+            operation: 'unsubscribe_app',
+            failureMessage: 'Não foi possível desconectar o aplicativo da conta WhatsApp na Meta.',
+        );
+
+        if ($response->json('success') !== true) {
+            throw new MetaCoexistenceException('A Meta não confirmou a desconexão. Tente novamente.', 502);
+        }
+    }
+
     public const SYNC_TYPE_CONTACTS = 'contacts';
 
     public const SYNC_TYPE_HISTORY = 'history';
@@ -109,9 +125,11 @@ class MetaCoexistenceOnboardingService
             ->timeout(max((int) config('whatsapp.meta_timeout_seconds', 15), 1));
 
         try {
-            $response = $method === 'GET'
-                ? $request->get($url, $payload)
-                : $request->asJson()->post($url, $payload);
+            $response = match ($method) {
+                'GET' => $request->get($url, $payload),
+                'DELETE' => $request->delete($url),
+                default => $request->asJson()->post($url, $payload),
+            };
         } catch (ConnectionException) {
             throw new MetaCoexistenceException(
                 'Não foi possível concluir a comunicação segura com a Meta.',

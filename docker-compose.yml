@@ -107,10 +107,7 @@ services:
         if [ ! -d vendor ]; then
           composer install --no-interaction
         fi &&
-        php artisan key:generate --no-interaction &&
-        php artisan migrate --force &&
-        php artisan db:seed --force &&
-        php artisan serve --host=0.0.0.0 --port=9000
+        php artisan serve --host=0.0.0.0 --port=9000 --no-reload
       "
     ports:
       - "9000:9000"  # Mapear porta 9000 do host para 9000 do container
