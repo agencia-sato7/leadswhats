@@ -9,6 +9,7 @@ use App\Models\Pipeline;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use App\Services\AccessControlService;
 
 class DatabaseSeeder extends Seeder
 {
@@ -26,6 +27,8 @@ class DatabaseSeeder extends Seeder
                 'active' => true,
             ]
         );
+
+        $profiles = app(AccessControlService::class)->createProfilesForCompany($company);
 
         CompanyBusinessSetting::firstOrCreate(
             ['company_id' => $company->id],
@@ -49,6 +52,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'admin@leadswhats.local'],
             [
                 'company_id' => $company->id,
+                'access_profile_id' => $profiles['administrador']->id,
                 'name' => 'Admin Plataforma',
                 'password' => Hash::make('12345678'),
                 'role' => 'admin',
@@ -60,6 +64,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'gestor@empresa.local'],
             [
                 'company_id' => $company->id,
+                'access_profile_id' => $profiles['gestor']->id,
                 'name' => 'Gestor Demo',
                 'password' => Hash::make('12345678'),
                 'role' => 'gestor',
@@ -71,6 +76,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'sdr@empresa.local'],
             [
                 'company_id' => $company->id,
+                'access_profile_id' => $profiles['sdr']->id,
                 'name' => 'SDR Demo',
                 'password' => Hash::make('12345678'),
                 'role' => 'sdr',

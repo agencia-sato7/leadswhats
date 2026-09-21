@@ -21,11 +21,11 @@ import type {
   OverviewResponse,
   PipelineKanban,
   PipelineListItem,
-  CompleteWhatsAppEmbeddedSignupRequest,
-  CompleteWhatsAppEmbeddedSignupResponse,
+  CompleteWhatsAppCoexistenceRequest,
+  CompleteWhatsAppCoexistenceResponse,
+  WhatsAppCoexistenceSyncType,
   WhatsAppSettings,
   WhatsAppSettingsResponse,
-  UpdateWhatsAppSettingsRequest,
   AnalyzeConversationResponse,
   ConversationIntelligenceDetailResponse,
   ConversationIntelligenceListResponse,
@@ -34,6 +34,11 @@ import type {
   CampaignReport,
   CampaignReportLead,
   CampaignReportListResponse,
+  AdminUsersResponse,
+  AdminUserItem,
+  AccessProfileItem,
+  PermissionItem,
+  AccessAuditItem,
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://leadswhats.appsato7.com.br/api/v1';
@@ -67,9 +72,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
 
     throw new Error(
-      res.status >= 500
-        ? 'O servidor não conseguiu concluir esta solicitação. Tente novamente em instantes.'
-        : apiMessage || `Erro HTTP ${res.status}`,
+      apiMessage
+        || (res.status >= 500
+          ? 'O servidor não conseguiu concluir esta solicitação. Tente novamente em instantes.'
+          : `Erro HTTP ${res.status}`),
     );
   }
 
@@ -351,6 +357,81 @@ export function revokeAdminTenantViewContext(token: string, tenantContext: strin
   });
 }
 
+export function getAdminUsers(token: string, query = ''): Promise<AdminUsersResponse> {
+  return request<AdminUsersResponse>(`/admin/users${query ? `?${query}` : ''}`, { headers: authenticatedHeaders(token) });
+}
+
+export function createAdminUser(token: string, payload: { company_id: number; access_profile_id: number; name: string; email: string; password: string }): Promise<{ data: AdminUserItem }> {
+  return request('/admin/users', { method: 'POST', headers: authenticatedHeaders(token), body: JSON.stringify(payload) });
+}
+
+export function updateAdminUser(token: string, id: number, payload: { name?: string; email?: string; access_profile_id?: number }): Promise<{ data: AdminUserItem }> {
+  return request(`/admin/users/${id}`, { method: 'PATCH', headers: authenticatedHeaders(token), body: JSON.stringify(payload) });
+}
+
+export function deactivateAdminUser(token: string, id: number): Promise<{ data: AdminUserItem }> {
+  return request(`/admin/users/${id}`, { method: 'DELETE', headers: authenticatedHeaders(token) });
+}
+
+export function restoreAdminUser(token: string, id: number): Promise<{ data: AdminUserItem }> {
+  return request(`/admin/users/${id}/restore`, { method: 'POST', headers: authenticatedHeaders(token) });
+}
+
+export function resetAdminUserPassword(token: string, id: number, password: string): Promise<{ message: string }> {
+  return request(`/admin/users/${id}/reset-password`, { method: 'POST', headers: authenticatedHeaders(token), body: JSON.stringify({ password }) });
+}
+
+export async function getAccessProfiles(token: string, query = ''): Promise<AccessProfileItem[]> {
+  const response = await request<{ data: AccessProfileItem[] }>(`/admin/access-profiles${query ? `?${query}` : ''}`, { headers: authenticatedHeaders(token) });
+  return response.data;
+}
+
+export async function getPermissions(token: string): Promise<PermissionItem[]> {
+  const response = await request<{ data: PermissionItem[] }>('/admin/permissions', { headers: authenticatedHeaders(token) });
+  return response.data;
+}
+
+export function createAccessProfile(token: string, payload: { company_id: number | null; name: string; description: string; data_scope: 'own' | 'company'; permissions: string[] }): Promise<{ data: AccessProfileItem }> {
+  return request('/admin/access-profiles', { method: 'POST', headers: authenticatedHeaders(token), body: JSON.stringify(payload) });
+}
+
+export function updateAccessProfile(token: string, id: number, payload: { name: string; description: string; data_scope: 'own' | 'company'; permissions: string[] }): Promise<{ data: AccessProfileItem }> {
+  return request(`/admin/access-profiles/${id}`, { method: 'PATCH', headers: authenticatedHeaders(token), body: JSON.stringify(payload) });
+}
+
+export function archiveAccessProfile(token: string, id: number): Promise<{ message: string }> {
+  return request(`/admin/access-profiles/${id}`, { method: 'DELETE', headers: authenticatedHeaders(token) });
+}
+
+export function copyAccessProfile(token: string, id: number, companyIds: number[]): Promise<{ data: AccessProfileItem[] }> {
+  return request(`/admin/access-profiles/${id}/copy`, { method: 'POST', headers: authenticatedHeaders(token), body: JSON.stringify({ company_ids: companyIds }) });
+}
+
+export function previewAccessProfileSync(token: string, id: number, companyIds: number[]): Promise<{ data: Array<{ company_id: number; company_name: string; profile_id: number | null; current_version: number | null; target_version: number; affected_users: number }> }> {
+  return request(`/admin/access-profiles/${id}/sync-preview`, { method: 'POST', headers: authenticatedHeaders(token), body: JSON.stringify({ company_ids: companyIds }) });
+}
+
+export function syncAccessProfile(token: string, id: number, companyIds: number[]): Promise<{ data: AccessProfileItem[] }> {
+  return request(`/admin/access-profiles/${id}/sync`, { method: 'POST', headers: authenticatedHeaders(token), body: JSON.stringify({ company_ids: companyIds }) });
+}
+
+export async function getAccessAudits(token: string, query = ''): Promise<AccessAuditItem[]> {
+  const response = await request<{ data: AccessAuditItem[] }>(`/admin/access-audits${query ? `?${query}` : ''}`, { headers: authenticatedHeaders(token) });
+  return response.data;
+}
+
+export function changePassword(token: string, currentPassword: string, password: string): Promise<{ message: string; user: import('./types').AuthUser }> {
+  return request('/auth/change-password', { method: 'POST', headers: authenticatedHeaders(token), body: JSON.stringify({ current_password: currentPassword, password, password_confirmation: password }) });
+}
+
+export async function disconnectWhatsApp(token: string): Promise<WhatsAppSettings> {
+  const response = await request<WhatsAppSettingsResponse>('/settings/whatsapp/disconnect', {
+    method: 'POST',
+    headers: authenticatedHeaders(token),
+  });
+  return response.data;
+}
+
 export async function getWhatsAppSettings(token: string, tenantContext?: string): Promise<WhatsAppSettings> {
   const data = await request<WhatsAppSettingsResponse>('/settings/whatsapp', {
     headers: authenticatedHeaders(token, tenantContext),
@@ -358,26 +439,26 @@ export async function getWhatsAppSettings(token: string, tenantContext?: string)
   return data.data;
 }
 
-export async function updateWhatsAppSettings(
+export async function completeWhatsAppCoexistence(
   token: string,
-  payload: UpdateWhatsAppSettingsRequest,
+  payload: CompleteWhatsAppCoexistenceRequest,
 ): Promise<WhatsAppSettings> {
-  const data = await request<WhatsAppSettingsResponse>('/settings/whatsapp', {
-    method: 'PUT',
-    headers: authenticatedHeaders(token),
+  const data = await request<CompleteWhatsAppCoexistenceResponse>('/settings/whatsapp/coexistence/complete', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   });
   return data.data;
 }
 
-export async function completeWhatsAppEmbeddedSignup(
+export async function requestWhatsAppCoexistenceSync(
   token: string,
-  payload: CompleteWhatsAppEmbeddedSignupRequest,
+  syncType: WhatsAppCoexistenceSyncType,
 ): Promise<WhatsAppSettings> {
-  const data = await request<CompleteWhatsAppEmbeddedSignupResponse>('/settings/whatsapp/embedded-signup/complete', {
+  const data = await request<WhatsAppSettingsResponse>('/settings/whatsapp/coexistence/sync', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ sync_type: syncType }),
   });
   return data.data;
 }

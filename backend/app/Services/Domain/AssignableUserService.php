@@ -14,7 +14,11 @@ class AssignableUserService
         return User::query()
             ->where('company_id', $companyId)
             ->where('active', true)
-            ->whereIn('role', ['admin', 'gestor', 'sdr'])
+            ->where(function ($query) {
+                $query->whereHas('accessProfile', fn ($profile) => $profile->where('active', true)->where(function ($q) {
+                    $q->where('is_full_access', true)->orWhereHas('permissions', fn ($permission) => $permission->where('code', 'leads.assignable'));
+                }))->orWhere(fn ($legacy) => $legacy->whereNull('access_profile_id')->whereIn('role', ['admin', 'gestor', 'sdr']));
+            })
             ->orderByRaw("CASE role WHEN 'admin' THEN 1 WHEN 'gestor' THEN 2 WHEN 'sdr' THEN 3 ELSE 4 END")
             ->orderBy('name')
             ->orderBy('id')

@@ -107,10 +107,7 @@ services:
         if [ ! -d vendor ]; then
           composer install --no-interaction
         fi &&
-        php artisan key:generate --no-interaction &&
-        php artisan migrate --force &&
-        php artisan db:seed --force &&
-        php artisan serve --host=0.0.0.0 --port=9000
+        php artisan serve --host=0.0.0.0 --port=9000 --no-reload
       "
     ports:
       - "9000:9000"  # Mapear porta 9000 do host para 9000 do container
@@ -187,6 +184,10 @@ services:
       - /app/node_modules
     environment:
       VITE_API_BASE_URL: https://leadswhats.appsato7.com.br/api/v1
+      # Identificadores públicos da Meta (não são segredos). O backend também os
+      # expõe em GET /api/v1/settings/whatsapp; aqui servem de fallback do build.
+      VITE_META_APP_ID: ${META_APP_ID:-}
+      VITE_META_COEXISTENCE_CONFIG_ID: ${META_COEXISTENCE_CONFIG_ID:-1088502166986777}
     command: sh -lc "npm install && npm run build && npm run preview -- --host 0.0.0.0 --port 5173 --strictPort"
     ports:
       - "5174:5173"

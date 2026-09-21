@@ -8,4 +8,5 @@ enum UserRole: string
     case ADMIN = 'admin';
     case GESTOR = 'gestor';
     case SDR = 'sdr';
+    case CUSTOM = 'custom';
 }

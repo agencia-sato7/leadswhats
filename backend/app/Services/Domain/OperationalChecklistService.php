@@ -28,7 +28,7 @@ class OperationalChecklistService
         $companyId = $effectiveCompanyId ?? (int) $user->company_id;
         $conversations = $this->baseConversationsQuery($companyId)
             // Regra atual para SDR: checklist limitado ao próprio owner da conversa ou lead.
-            ->when(($user->role?->value ?? (string) $user->role) === 'sdr', function ($query) use ($user) {
+            ->when($user->dataScope() === 'own', function ($query) use ($user) {
                 $query->where(function ($scopeQuery) use ($user) {
                     $scopeQuery->where('owner_user_id', $user->id)
                         ->orWhereIn('lead_id', Lead::query()

@@ -41,4 +41,9 @@ class Company extends Model
     {
         return $this->hasOne(CompanyWhatsAppIntegration::class);
     }
+
+    public function accessProfiles(): HasMany
+    {
+        return $this->hasMany(AccessProfile::class);
+    }
 }

@@ -60,7 +60,7 @@ class CompanyWhatsAppIntegrationApiTest extends TestCase
     {
         $this->getJson("/api/v1/settings/whatsapp")->assertUnauthorized();
 
-        $this->putJson("/api/v1/settings/whatsapp", $this->validPayload())
+        $this->postJson('/api/v1/settings/whatsapp/coexistence/complete', [])
             ->assertUnauthorized();
     }
 
@@ -74,99 +74,41 @@ class CompanyWhatsAppIntegrationApiTest extends TestCase
             ->getJson("/api/v1/settings/whatsapp")
             ->assertForbidden();
 
-        $this->withHeaders(["Authorization" => "Bearer " . $token])
-            ->putJson("/api/v1/settings/whatsapp", $this->validPayload())
+        $this->withToken($token)
+            ->postJson('/api/v1/settings/whatsapp/coexistence/complete', [])
             ->assertForbidden();
     }
 
-    public function test_admin_put_creates_integration_encrypts_token_and_hides_secrets(): void
+    public function test_manual_connection_is_removed_for_all_roles(): void
     {
-        $company = $this->createCompany("tenant-d");
-        $admin = $this->createUser($company->id, "admin", "admin.put.whatsapp@test.local");
-        $token = $this->login($admin->email);
-
-        $response = $this->withHeaders(["Authorization" => "Bearer " . $token])
-            ->putJson("/api/v1/settings/whatsapp", $this->validPayload())
-            ->assertOk()
-            ->assertJsonPath("data.provider", "meta_cloud")
-            ->assertJsonPath("data.status", "configured")
-            ->assertJsonPath("data.access_token_configured", true)
-            ->assertJsonPath("data.webhook_verify_token_configured", true)
-            ->assertJsonPath("data.phone_number_id", "123456")
-            ->assertJsonPath("data.business_account_id", "789")
-            ->assertJsonMissingPath("data.access_token")
-            ->assertJsonPath("data.webhook_verify_token", "verify-token");
-
-        $this->assertDatabaseHas("company_whatsapp_integrations", [
-            "company_id" => $company->id,
-            "provider" => "meta_cloud",
-            "status" => "configured",
-            "phone_number" => "+5511999999999",
-            "phone_number_id" => "123456",
-            "business_account_id" => "789",
-        ]);
-
-        $storedCipher = (string) DB::table("company_whatsapp_integrations")
-            ->where("company_id", $company->id)
-            ->value("access_token_encrypted");
-
-        $this->assertNotSame("token-da-meta", $storedCipher);
-        $this->assertNotSame("", $storedCipher);
-
-        $createdAt = $response->json("data.connected_at");
-        $this->assertNotNull($createdAt);
+        foreach (['admin', 'gestor', 'sdr'] as $role) {
+            $company = $this->createCompany('removed-'.$role);
+            $user = $this->createUser($company->id, $role, $role.'.removed@test.local');
+            $this->withToken($this->login($user->email))
+                ->putJson('/api/v1/settings/whatsapp', $this->validPayload())
+                ->assertStatus(405);
+            $this->assertDatabaseMissing('company_whatsapp_integrations', ['company_id' => $company->id]);
+        }
     }
 
-    public function test_gestor_put_updates_existing_without_duplicate_rows(): void
+    public function test_manual_connection_cannot_replace_existing_credentials(): void
     {
-        $company = $this->createCompany("tenant-e");
-        $gestor = $this->createUser($company->id, "gestor", "gestor.put.whatsapp@test.local");
-
-        CompanyWhatsAppIntegration::create([
-            "company_id" => $company->id,
-            "provider" => "meta_cloud",
-            "status" => "not_configured",
-            "phone_number" => null,
-            "phone_number_id" => null,
-            "business_account_id" => null,
-            "access_token_encrypted" => null,
-            "webhook_verify_token" => "old-token",
+        $company = $this->createCompany('legacy');
+        $admin = $this->createUser($company->id, 'admin', 'legacy@test.local');
+        $integration = CompanyWhatsAppIntegration::create([
+            'company_id' => $company->id,
+            'provider' => 'meta_cloud',
+            'status' => 'configured',
+            'phone_number_id' => 'original-phone',
+            'business_account_id' => 'original-waba',
+            'access_token_encrypted' => 'original-secret',
         ]);
-
-        $token = $this->login($gestor->email);
-
-        $this->withHeaders(["Authorization" => "Bearer " . $token])
-            ->putJson("/api/v1/settings/whatsapp", [
-                "provider" => "meta_cloud",
-                "phone_number" => "+5511888777666",
-                "phone_number_id" => "pnid-2",
-                "business_account_id" => "ba-2",
-                "access_token" => "new-token",
-            ])
-            ->assertOk()
-            ->assertJsonPath("data.status", "configured")
-            ->assertJsonPath("data.access_token_configured", true);
-
-        $this->assertSame(1, CompanyWhatsAppIntegration::query()->where("company_id", $company->id)->count());
-        $this->assertDatabaseHas("company_whatsapp_integrations", [
-            "company_id" => $company->id,
-            "phone_number_id" => "pnid-2",
-            "business_account_id" => "ba-2",
-        ]);
-    }
-
-    public function test_provider_invalid_returns_422(): void
-    {
-        $company = $this->createCompany("tenant-f");
-        $admin = $this->createUser($company->id, "admin", "admin.invalid.provider@test.local");
-        $token = $this->login($admin->email);
-
-        $this->withHeaders(["Authorization" => "Bearer " . $token])
-            ->putJson("/api/v1/settings/whatsapp", [
-                "provider" => "twilio",
-            ])
-            ->assertStatus(422)
-            ->assertJsonValidationErrors(["provider"]);
+        $this->withToken($this->login($admin->email))
+            ->putJson('/api/v1/settings/whatsapp', $this->validPayload())
+            ->assertStatus(405);
+        $this->assertSame('original-secret', $integration->fresh()->access_token_encrypted);
+        $this->assertSame('original-phone', $integration->fresh()->phone_number_id);
+        $this->assertSame(1, CompanyWhatsAppIntegration::where('company_id', $company->id)->count());
     }
 
     public function test_cross_tenant_access_is_isolated_by_authenticated_company(): void
@@ -203,13 +145,7 @@ class CompanyWhatsAppIntegrationApiTest extends TestCase
         $token = $this->login($admin->email);
 
         $this->withHeaders(["Authorization" => "Bearer " . $token])
-            ->putJson("/api/v1/settings/whatsapp", [
-                "provider" => "meta_cloud",
-                "phone_number" => "+5511999990000",
-                "phone_number_id" => null,
-                "business_account_id" => null,
-                "access_token" => "",
-            ])
+            ->getJson("/api/v1/settings/whatsapp")
             ->assertOk()
             ->assertJsonPath("data.status", "not_configured")
             ->assertJsonPath("data.access_token_configured", false);
@@ -221,9 +157,15 @@ class CompanyWhatsAppIntegrationApiTest extends TestCase
         $gestor = $this->createUser($company->id, "gestor", "gestor.flags@test.local");
         $token = $this->login($gestor->email);
 
-        $this->withHeaders(["Authorization" => "Bearer " . $token])
-            ->putJson("/api/v1/settings/whatsapp", $this->validPayload())
-            ->assertOk();
+        CompanyWhatsAppIntegration::create([
+            "company_id" => $company->id,
+            "provider" => "meta_cloud",
+            "status" => "configured",
+            "phone_number_id" => "123456",
+            "business_account_id" => "789",
+            "access_token_encrypted" => "existing-secret",
+            "webhook_verify_token" => "verify-token",
+        ]);
 
         $this->withHeaders(["Authorization" => "Bearer " . $token])
             ->getJson("/api/v1/settings/whatsapp")

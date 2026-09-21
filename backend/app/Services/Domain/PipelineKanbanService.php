@@ -8,6 +8,7 @@ use App\Models\KanbanColumn;
 use App\Models\Lead;
 use App\Models\LeadStageHistory;
 use App\Models\Pipeline;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -28,7 +29,7 @@ class PipelineKanbanService
     /**
      * @return array{id:int,name:string,columns:array<int,array<string,mixed>>}|null
      */
-    public function kanbanForPipeline(int $companyId, int $pipelineId): ?array
+    public function kanbanForPipeline(int $companyId, int $pipelineId, ?User $viewer = null): ?array
     {
         $pipeline = Pipeline::query()
             ->where('company_id', $companyId)
@@ -70,6 +71,17 @@ class PipelineKanbanService
         $leads = Lead::query()
             ->where('leads.company_id', $companyId)
             ->whereIn('leads.id', $leadIds)
+            ->when($viewer?->dataScope() === 'own', function ($query) use ($viewer, $companyId) {
+                $query->where(function ($scope) use ($viewer, $companyId) {
+                    $scope->where('leads.owner_user_id', $viewer->id)
+                        ->orWhereExists(function ($conversation) use ($viewer, $companyId) {
+                            $conversation->selectRaw('1')->from('conversations')
+                                ->whereColumn('conversations.lead_id', 'leads.id')
+                                ->where('conversations.company_id', $companyId)
+                                ->where('conversations.owner_user_id', $viewer->id);
+                        });
+                });
+            })
             ->leftJoin('users', 'users.id', '=', 'leads.owner_user_id')
             ->get([
                 'leads.id',

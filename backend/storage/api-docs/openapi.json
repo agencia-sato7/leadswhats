@@ -122,12 +122,24 @@
                   "platform_admin",
                   "admin",
                   "gestor",
-                  "sdr"
+                  "sdr",
+                  "custom"
                 ]
               },
               "company_id": {
                 "type": "integer",
                 "example": 1
+              },
+              "permissions": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "data_scope": {
+                "type": "string",
+                "enum": ["own", "company"]
+              },
+              "must_change_password": {
+                "type": "boolean"
               }
             }
           }
@@ -151,11 +163,23 @@
               "platform_admin",
               "admin",
               "gestor",
-              "sdr"
+              "sdr",
+              "custom"
             ]
           },
           "company_id": {
             "type": "integer"
+          },
+          "permissions": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "data_scope": {
+            "type": "string",
+            "enum": ["own", "company"]
+          },
+          "must_change_password": {
+            "type": "boolean"
           }
         }
       },
@@ -1670,7 +1694,7 @@
       },
       "CompanyWhatsAppIntegrationData": {
         "type": "object",
-        "description": "Nunca retorna access_token nem webhook_verify_token completos.",
+        "description": "Configuração por empresa. Nunca retorna access_token; webhook_verify_token pode ser retornado para configuração do callback.",
         "properties": {
           "provider": {
             "type": "string",
@@ -1746,6 +1770,54 @@
           "last_error": {
             "type": "string",
             "nullable": true
+          },
+          "connection_mode": {
+            "type": "string",
+            "enum": [
+              "embedded_signup",
+              "coexistence"
+            ]
+          },
+          "is_coexistence": {
+            "type": "boolean"
+          },
+          "coexistence_config_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "coexistence_app_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "coexistence_feature_type": {
+            "type": "string",
+            "nullable": true
+          },
+          "coexistence_session_info_version": {
+            "type": "string",
+            "nullable": true
+          },
+          "history_sync_status": {
+            "type": "string",
+            "nullable": true
+          },
+          "contacts_sync_status": {
+            "type": "string",
+            "nullable": true
+          },
+          "webhook_verify_token": {
+            "type": "string",
+            "nullable": true
+          },
+          "coexistence_opted_in_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "token_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         }
       },
@@ -1757,52 +1829,11 @@
           }
         }
       },
-      "CompanyWhatsAppIntegrationUpdateRequest": {
-        "type": "object",
-        "required": [
-          "provider"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "provider": {
-            "type": "string",
-            "enum": [
-              "meta_cloud"
-            ]
-          },
-          "phone_number": {
-            "type": "string",
-            "nullable": true
-          },
-          "phone_number_id": {
-            "type": "string",
-            "nullable": true
-          },
-          "business_account_id": {
-            "type": "string",
-            "nullable": true
-          },
-          "access_token": {
-            "type": "string",
-            "nullable": true,
-            "description": "Token de acesso da Meta Cloud API. Recebido apenas no request e nunca retornado."
-          },
-          "webhook_verify_token": {
-            "type": "string",
-            "nullable": true,
-            "description": "Token de verificação do webhook. Recebido no request e nunca retornado no response."
-          },
-          "last_error": {
-            "type": "string",
-            "nullable": true
-          }
-        }
-      },
-      "WhatsAppEmbeddedSignupCompleteRequest": {
+      "WhatsAppCoexistenceCompleteRequest": {
         "type": "object",
         "required": [
           "code",
-          "embedded_signup"
+          "coexistence"
         ],
         "additionalProperties": false,
         "properties": {
@@ -1810,7 +1841,7 @@
             "type": "string",
             "description": "Código de uso único retornado pelo callback do FB.login(). Nunca envie access_token neste endpoint."
           },
-          "embedded_signup": {
+          "coexistence": {
             "type": "object",
             "additionalProperties": false,
             "required": [
@@ -1827,9 +1858,8 @@
               },
               "event": {
                 "type": "string",
-                "enum": [
-                  "FINISH"
-                ]
+                "pattern": "^FINISH",
+                "maxLength": 100
               },
               "data": {
                 "type": "object",
@@ -1872,6 +1902,11 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "phone_number": {
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 30
                   }
                 }
               }
@@ -4345,6 +4380,61 @@
         }
       }
     },
+    "/api/v1/auth/change-password": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Troca a senha temporária obrigatória",
+        "security": [{"BearerAuth": []}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["current_password", "password", "password_confirmation"], "properties": {"current_password": {"type": "string"}, "password": {"type": "string", "minLength": 8}, "password_confirmation": {"type": "string"}}}}}},
+        "responses": {"200": {"description": "Senha alterada"}, "422": {"description": "Senha atual incorreta ou dados inválidos"}}
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "tags": ["SaaS Admin"], "summary": "Lista usuários das clínicas",
+        "description": "Exclui contas platform_admin e aceita filtros por clínica, perfil, status e busca.",
+        "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Lista paginada"}, "403": {"description": "Exclusivo de platform_admin"}}
+      },
+      "post": {
+        "tags": ["SaaS Admin"], "summary": "Cria usuário com senha temporária",
+        "security": [{"BearerAuth": []}], "responses": {"201": {"description": "Usuário criado"}, "422": {"description": "Dados ou perfil inválidos"}}
+      }
+    },
+    "/api/v1/admin/users/{userId}": {
+      "parameters": [{"name": "userId", "in": "path", "required": true, "schema": {"type": "integer"}}],
+      "patch": {"tags": ["SaaS Admin"], "summary": "Atualiza dados e perfil do usuário", "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Usuário atualizado"}}},
+      "delete": {"tags": ["SaaS Admin"], "summary": "Desativa usuário e revoga suas sessões", "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Usuário desativado"}}}
+    },
+    "/api/v1/admin/users/{userId}/restore": {
+      "post": {"tags": ["SaaS Admin"], "summary": "Reativa usuário sem restaurar sessões", "security": [{"BearerAuth": []}], "parameters": [{"name": "userId", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Usuário reativado"}}}
+    },
+    "/api/v1/admin/users/{userId}/reset-password": {
+      "post": {"tags": ["SaaS Admin"], "summary": "Define nova senha temporária e revoga sessões", "security": [{"BearerAuth": []}], "parameters": [{"name": "userId", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Senha redefinida"}}}
+    },
+    "/api/v1/admin/permissions": {
+      "get": {"tags": ["SaaS Admin"], "summary": "Lista o catálogo de permissões", "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Catálogo agrupável por módulo"}}}
+    },
+    "/api/v1/admin/access-profiles": {
+      "get": {"tags": ["SaaS Admin"], "summary": "Lista modelos globais e perfis de clínicas", "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Perfis de acesso"}}},
+      "post": {"tags": ["SaaS Admin"], "summary": "Cria modelo ou perfil de clínica", "security": [{"BearerAuth": []}], "responses": {"201": {"description": "Perfil criado"}}}
+    },
+    "/api/v1/admin/access-profiles/{profileId}": {
+      "parameters": [{"name": "profileId", "in": "path", "required": true, "schema": {"type": "integer"}}],
+      "patch": {"tags": ["SaaS Admin"], "summary": "Atualiza e versiona perfil", "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Perfil atualizado"}, "409": {"description": "Perfil Administrador protegido"}}},
+      "delete": {"tags": ["SaaS Admin"], "summary": "Arquiva perfil sem usuários", "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Perfil arquivado"}, "409": {"description": "Perfil protegido ou em uso"}}}
+    },
+    "/api/v1/admin/access-profiles/{profileId}/copy": {
+      "post": {"tags": ["SaaS Admin"], "summary": "Copia modelo global para clínicas", "security": [{"BearerAuth": []}], "parameters": [{"name": "profileId", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"201": {"description": "Cópias criadas"}}}
+    },
+    "/api/v1/admin/access-profiles/{profileId}/sync-preview": {
+      "post": {"tags": ["SaaS Admin"], "summary": "Mostra impacto da aplicação de uma versão", "security": [{"BearerAuth": []}], "parameters": [{"name": "profileId", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Clínicas, versões e usuários afetados"}}}
+    },
+    "/api/v1/admin/access-profiles/{profileId}/sync": {
+      "post": {"tags": ["SaaS Admin"], "summary": "Aplica explicitamente uma versão às clínicas", "security": [{"BearerAuth": []}], "parameters": [{"name": "profileId", "in": "path", "required": true, "schema": {"type": "integer"}}], "responses": {"200": {"description": "Cópias atualizadas"}}}
+    },
+    "/api/v1/admin/access-audits": {
+      "get": {"tags": ["SaaS Admin"], "summary": "Lista auditoria de usuários e acessos", "security": [{"BearerAuth": []}], "responses": {"200": {"description": "Histórico paginado sem credenciais"}}}
+    },
     "/api/v1/admin/companies": {
       "get": {
         "tags": [
@@ -5044,100 +5134,32 @@
             }
           }
         }
-      },
-      "put": {
-        "tags": [
-          "Settings"
-        ],
-        "summary": "Criar/atualizar configuração WhatsApp da empresa autenticada",
-        "description": "Cria ou atualiza a integração WhatsApp da empresa autenticada. access_token e webhook_verify_token são aceitos no request, mas nunca retornados no response.",
-        "security": [
-          {
-            "BearerAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CompanyWhatsAppIntegrationUpdateRequest"
-              },
-              "example": {
-                "provider": "meta_cloud",
-                "phone_number": "+5511999999999",
-                "phone_number_id": "123456",
-                "business_account_id": "789",
-                "access_token": "token-da-meta",
-                "webhook_verify_token": "verify-token"
-              }
-            }
-          }
-        },
+      }
+    },
+    "/api/v1/settings/whatsapp/disconnect": {
+      "post": {
+        "tags": ["Settings"],
+        "summary": "Desconectar o WhatsApp da própria empresa",
+        "description": "Restrito a admin/gestor sem X-Tenant-Context. Remove a assinatura do app no WABA e, somente após success=true da Meta, remove o vínculo e credenciais locais. Preserva CRM. Idempotente quando não há vínculo. Não revoga todas as permissões Meta nem exclui o WhatsApp Business do celular. WABA compartilhado é recusado.",
+        "security": [{"BearerAuth": []}],
         "responses": {
           "200": {
-            "description": "Configuração salva com sucesso",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CompanyWhatsAppIntegrationResponse"
-                },
-                "example": {
-                  "data": {
-                    "provider": "meta_cloud",
-                    "status": "configured",
-                    "phone_number": "+5511999999999",
-                    "phone_number_id": "123456",
-                    "business_account_id": "789",
-                    "webhook_verify_token_configured": true,
-                    "access_token_configured": true,
-                    "connected_at": "2026-05-19T03:00:00.000000Z",
-                    "last_error": null
-                  }
-                }
-              }
-            }
+            "description": "Desconectado ou já sem vínculo",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CompanyWhatsAppIntegrationResponse"}}}
           },
-          "401": {
-            "description": "Não autenticado (token ausente/inválido)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Perfil sem acesso (somente admin e gestor)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Erro de validação (provider inválido ou payload inválido)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
+          "401": {"description": "Não autenticado"},
+          "403": {"description": "Perfil sem permissão ou contexto somente leitura"},
+          "409": {"description": "WABA compartilhado ou vínculo incompleto"},
+          "502": {"description": "Meta recusou ou não confirmou a operação; credenciais locais preservadas"}
         }
       }
     },
-    "/api/v1/settings/whatsapp/embedded-signup/complete": {
+    "/api/v1/settings/whatsapp/coexistence/sync": {
       "post": {
         "tags": [
           "Settings"
         ],
-        "summary": "Concluir WhatsApp Embedded Signup",
-        "description": "Recebe somente o código de uso único do FB.login e o evento FINISH. O backend usa POST com Content-Type application/json no OAuth da Meta, com grant_type=authorization_code e o META_REDIRECT_URI exato da autorização que gerou o code. Código, app secret e access token nunca são retornados.",
+        "summary": "Solicitar sincronização do WhatsApp Business App",
         "security": [
           {
             "BearerAuth": []
@@ -5148,22 +5170,19 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/WhatsAppEmbeddedSignupCompleteRequest"
-              },
-              "example": {
-                "code": "one-time-code-from-fb-login",
-                "embedded_signup": {
-                  "data": {
-                    "phone_number_id": "phone-number-id",
-                    "waba_id": "whatsapp-business-account-id",
-                    "business_id": "meta-business-id",
-                    "page_ids": [],
-                    "catalog_ids": [],
-                    "dataset_ids": [],
-                    "instagram_account_ids": []
-                  },
-                  "type": "WA_EMBEDDED_SIGNUP",
-                  "event": "FINISH"
+                "type": "object",
+                "required": [
+                  "sync_type"
+                ],
+                "properties": {
+                  "sync_type": {
+                    "type": "string",
+                    "enum": [
+                      "contacts",
+                      "history",
+                      "both"
+                    ]
+                  }
                 }
               }
             }
@@ -5171,7 +5190,7 @@
         },
         "responses": {
           "200": {
-            "description": "Embedded Signup concluído e integração persistida",
+            "description": "Solicitação enviada; processamento do histórico ocorre em fila.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5201,7 +5220,112 @@
             }
           },
           "422": {
-            "description": "Payload do Embedded Signup inválido",
+            "description": "Payload de coexistência inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "A Meta recusou ou retornou resposta inválida, sem exposição de detalhes sensíveis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaOAuthErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Credenciais Meta ausentes no servidor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Integração não configurada"
+          }
+        }
+      }
+    },
+    "/api/v1/settings/whatsapp/coexistence/complete": {
+      "post": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Concluir conexão WhatsApp por coexistência",
+        "description": "Admin/gestor: recebe o code temporário e o evento de conclusão. Troca o code no servidor, persiste credencial criptografada, assina o app no WABA e solicita sincronização quando habilitada. Não aceita access_token do cliente. Substitui a conexão manual e o endpoint antigo de Embedded Signup.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WhatsAppCoexistenceCompleteRequest"
+              },
+              "example": {
+                "code": "one-time-code-from-fb-login",
+                "coexistence": {
+                  "data": {
+                    "phone_number_id": "phone-number-id",
+                    "waba_id": "whatsapp-business-account-id",
+                    "business_id": "meta-business-id",
+                    "page_ids": [],
+                    "catalog_ids": [],
+                    "dataset_ids": [],
+                    "instagram_account_ids": []
+                  },
+                  "type": "WA_EMBEDDED_SIGNUP",
+                  "event": "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Conexão persistida; consulte history_sync_status e contacts_sync_status para falhas de sincronização.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyWhatsAppIntegrationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Não autenticado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Perfil sem permissão; somente admin e gestor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Payload de coexistência inválido",
             "content": {
               "application/json": {
                 "schema": {
@@ -5372,7 +5496,7 @@
             "description": "Assinatura inválida, ausente ou app secret não configurado"
           }
         },
-        "description": "Converte payload oficial da Meta para webhook interno. Neste PR suporta somente mensagens text inbound. Payload sem texto e phone_number_id não mapeado retornam 200 com ignored/unmatched. Não usa BearerAuth e não usa X-Webhook-Token. Valida a assinatura usando o header X-Hub-Signature-256 se configurado em local/testing ou obrigatoriamente se em production."
+        "description": "Valida HMAC-SHA256 e identifica empresa pelo phone_number_id. Processa messages/statuses, smb_message_echoes de texto como outbound, history em fila e account_update. Eventos não suportados são ignorados. Replays de mensagens com wamid são deduplicados por empresa/provider."
       }
     }
   }

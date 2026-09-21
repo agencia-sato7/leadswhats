@@ -19,6 +19,8 @@ use RuntimeException;
 
 class DemoBootstrapService
 {
+    public function __construct(private readonly AccessControlService $accessControl) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -40,6 +42,7 @@ class DemoBootstrapService
                 'active' => true,
             ]
         );
+        $profiles = $this->accessControl->createProfilesForCompany($company);
 
         $users = [
             [
@@ -85,6 +88,7 @@ class DemoBootstrapService
                 ['email' => $userData['email']],
                 [
                     'company_id' => $userData['company_id'],
+                    'access_profile_id' => $userData['company_id'] ? $profiles[$userData['role'] === 'admin' ? 'administrador' : $userData['role']]->id : null,
                     'name' => $userData['name'],
                     'password' => Hash::make('12345678'),
                     'role' => $userData['role'],

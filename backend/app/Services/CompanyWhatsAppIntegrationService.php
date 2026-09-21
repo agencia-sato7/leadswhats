@@ -16,6 +16,16 @@ class CompanyWhatsAppIntegrationService
 
     public const STATUS_ERROR = 'error';
 
+    public const CONNECTION_MODE_EMBEDDED_SIGNUP = 'embedded_signup';
+
+    public const CONNECTION_MODE_COEXISTENCE = 'coexistence';
+
+    public const SYNC_STATUS_REQUESTED = 'requested';
+
+    public const SYNC_STATUS_COMPLETED = 'completed';
+
+    public const SYNC_STATUS_ERROR = 'error';
+
     /**
      * @return array<string, mixed>
      */
@@ -29,68 +39,47 @@ class CompanyWhatsAppIntegrationService
     }
 
     /**
-     * @param  array<string, mixed>  $validated
-     * @return array<string, mixed>
+     * Marca o andamento da sincronização de dados (history/contacts) do
+     * WhatsApp Business app.
      */
-    public function upsertForCompany(int $companyId, array $validated): array
+    public function markSyncStatus(int $companyId, string $syncType, string $status): void
     {
-        $integration = CompanyWhatsAppIntegration::query()
+        $column = $syncType === 'history' ? 'history_sync_status' : 'contacts_sync_status';
+
+        CompanyWhatsAppIntegration::query()
             ->where('company_id', $companyId)
-            ->first();
-
-        if (! $integration) {
-            $integration = new CompanyWhatsAppIntegration;
-            $integration->company_id = $companyId;
-            $integration->provider = self::PROVIDER_META_CLOUD;
-            $integration->status = self::STATUS_NOT_CONFIGURED;
-        }
-
-        $integration->provider = self::PROVIDER_META_CLOUD;
-        $integration->phone_number = $this->nullableString($validated, 'phone_number');
-        $integration->phone_number_id = $this->nullableString($validated, 'phone_number_id');
-        $integration->business_account_id = $this->nullableString($validated, 'business_account_id');
-        $integration->waba_id = $integration->business_account_id;
-
-        if (array_key_exists('last_error', $validated)) {
-            $integration->last_error = $this->nullableString($validated, 'last_error');
-        }
-
-        if (array_key_exists('webhook_verify_token', $validated)) {
-            $integration->webhook_verify_token = $this->nullableString($validated, 'webhook_verify_token');
-        } elseif (! $integration->webhook_verify_token) {
-            $integration->webhook_verify_token = Str::random(40);
-        }
-
-        if (array_key_exists('access_token', $validated)) {
-            $integration->access_token_encrypted = $this->nullableString($validated, 'access_token');
-        }
-
-        $integration->status = self::hasRequiredCredentials($integration)
-            ? self::STATUS_CONFIGURED
-            : self::STATUS_NOT_CONFIGURED;
-        if ($integration->status === self::STATUS_CONFIGURED && ! $integration->connected_at) {
-            $integration->connected_at = now();
-        }
-
-        if ($integration->status !== self::STATUS_CONFIGURED) {
-            $integration->connected_at = null;
-        }
-
-        $integration->save();
-
-        return $this->toResponseData($integration->fresh());
+            ->update([$column => $status]);
     }
 
     /**
-     * @param  array<string, mixed>  $embeddedSignupData
+     * Registra falha depois de o code já ter sido trocado (ex.: assinatura do
+     * app no WABA recusada pela Meta) sem descartar as credenciais salvas.
+     */
+    public function markCoexistenceFailure(int $companyId, string $message): void
+    {
+        CompanyWhatsAppIntegration::query()
+            ->where('company_id', $companyId)
+            ->update([
+                'status' => self::STATUS_ERROR,
+                'last_error' => Str::limit($message, 2000, ''),
+            ]);
+    }
+
+    /**
+     * Conclui a conexão por Coexistência (Embedded Signup para WhatsApp
+     * Business app), persistindo o token criptografado e os IDs dos ativos.
+     *
+     * @param  array<string, mixed>  $coexistenceData
      * @return array<string, mixed>
      */
-    public function completeEmbeddedSignupForCompany(
+    public function completeCoexistenceForCompany(
         int $companyId,
-        array $embeddedSignupData,
+        array $coexistenceData,
         string $accessToken,
+        ?int $tokenExpiresIn = null,
     ): array {
-        return DB::transaction(function () use ($companyId, $embeddedSignupData, $accessToken): array {
+        return DB::transaction(function () use ($companyId, $coexistenceData, $accessToken, $tokenExpiresIn): array {
+            \App\Models\Company::whereKey($companyId)->lockForUpdate()->firstOrFail();
             $integration = CompanyWhatsAppIntegration::query()
                 ->where('company_id', $companyId)
                 ->lockForUpdate()
@@ -101,23 +90,29 @@ class CompanyWhatsAppIntegrationService
                 $integration->company_id = $companyId;
             }
 
-            $wabaId = trim((string) $embeddedSignupData['waba_id']);
+            $wabaId = trim((string) $coexistenceData['waba_id']);
 
             $integration->provider = self::PROVIDER_META_CLOUD;
             $integration->status = self::STATUS_CONFIGURED;
-            $integration->phone_number_id = trim((string) $embeddedSignupData['phone_number_id']);
+            $integration->connection_mode = self::CONNECTION_MODE_COEXISTENCE;
+            $integration->phone_number_id = trim((string) $coexistenceData['phone_number_id']);
             $integration->waba_id = $wabaId;
             $integration->business_account_id = $wabaId;
             $integration->access_token_encrypted = $accessToken;
             $integration->last_error = null;
             $integration->connected_at ??= now();
+            $integration->coexistence_opted_in_at = now();
+            $integration->token_expires_at = $tokenExpiresIn !== null && $tokenExpiresIn > 0
+                ? now()->addSeconds($tokenExpiresIn)
+                : null;
             $integration->webhook_verify_token ??= Str::random(40);
 
-            $this->setOptionalString($integration, $embeddedSignupData, 'business_id');
-            $this->setOptionalIdList($integration, $embeddedSignupData, 'page_ids');
-            $this->setOptionalIdList($integration, $embeddedSignupData, 'catalog_ids');
-            $this->setOptionalIdList($integration, $embeddedSignupData, 'dataset_ids');
-            $this->setOptionalIdList($integration, $embeddedSignupData, 'instagram_account_ids');
+            $this->setOptionalString($integration, $coexistenceData, 'business_id');
+            $this->setOptionalString($integration, $coexistenceData, 'phone_number');
+            $this->setOptionalIdList($integration, $coexistenceData, 'page_ids');
+            $this->setOptionalIdList($integration, $coexistenceData, 'catalog_ids');
+            $this->setOptionalIdList($integration, $coexistenceData, 'dataset_ids');
+            $this->setOptionalIdList($integration, $coexistenceData, 'instagram_account_ids');
 
             $integration->save();
 
@@ -199,6 +194,12 @@ class CompanyWhatsAppIntegrationService
             return [
                 'provider' => self::PROVIDER_META_CLOUD,
                 'status' => self::STATUS_NOT_CONFIGURED,
+                'connection_mode' => self::CONNECTION_MODE_EMBEDDED_SIGNUP,
+                'is_coexistence' => false,
+                'coexistence_config_id' => $this->coexistenceConfigId(),
+                'coexistence_app_id' => $this->coexistenceAppId(),
+                'coexistence_feature_type' => $this->coexistenceFeatureType(),
+                'coexistence_session_info_version' => (string) config('whatsapp.coexistence_session_info_version', '3'),
                 'phone_number' => null,
                 'phone_number_id' => null,
                 'business_account_id' => null,
@@ -208,6 +209,10 @@ class CompanyWhatsAppIntegrationService
                 'catalog_ids' => [],
                 'dataset_ids' => [],
                 'instagram_account_ids' => [],
+                'coexistence_opted_in_at' => null,
+                'history_sync_status' => null,
+                'contacts_sync_status' => null,
+                'token_expires_at' => null,
                 'webhook_verify_token_configured' => false,
                 'access_token_configured' => false,
                 'connected_at' => null,
@@ -216,10 +221,17 @@ class CompanyWhatsAppIntegrationService
         }
 
         $isConfigured = self::isConfigured($integration);
+        $connectionMode = $integration->connection_mode ?: self::CONNECTION_MODE_EMBEDDED_SIGNUP;
 
         return [
             'provider' => self::PROVIDER_META_CLOUD,
             'status' => $isConfigured ? self::STATUS_CONFIGURED : self::STATUS_NOT_CONFIGURED,
+            'connection_mode' => $connectionMode,
+            'is_coexistence' => $connectionMode === self::CONNECTION_MODE_COEXISTENCE,
+            'coexistence_config_id' => $this->coexistenceConfigId(),
+            'coexistence_app_id' => $this->coexistenceAppId(),
+            'coexistence_feature_type' => $this->coexistenceFeatureType(),
+            'coexistence_session_info_version' => (string) config('whatsapp.coexistence_session_info_version', '3'),
             'phone_number' => $integration->phone_number,
             'phone_number_id' => $integration->phone_number_id,
             'business_account_id' => $integration->business_account_id,
@@ -229,11 +241,39 @@ class CompanyWhatsAppIntegrationService
             'catalog_ids' => $integration->catalog_ids ?? [],
             'dataset_ids' => $integration->dataset_ids ?? [],
             'instagram_account_ids' => $integration->instagram_account_ids ?? [],
+            'coexistence_opted_in_at' => $integration->coexistence_opted_in_at?->toISOString(),
+            'history_sync_status' => $integration->history_sync_status,
+            'contacts_sync_status' => $integration->contacts_sync_status,
+            'token_expires_at' => $integration->token_expires_at?->toISOString(),
             'webhook_verify_token_configured' => (bool) $integration->webhook_verify_token,
             'webhook_verify_token' => $integration->webhook_verify_token,
             'access_token_configured' => (bool) $integration->access_token_encrypted,
             'connected_at' => $isConfigured ? $integration->connected_at?->toISOString() : null,
             'last_error' => $integration->last_error,
         ];
+    }
+
+    private function coexistenceConfigId(): ?string
+    {
+        $configId = trim((string) config('whatsapp.coexistence_config_id', ''));
+
+        return $configId === '' ? null : $configId;
+    }
+
+    /**
+     * App ID público da Meta (o mesmo usado pelo SDK JavaScript). Não é segredo.
+     */
+    private function coexistenceAppId(): ?string
+    {
+        $appId = trim((string) config('whatsapp.meta_app_id', ''));
+
+        return $appId === '' ? null : $appId;
+    }
+
+    private function coexistenceFeatureType(): string
+    {
+        $featureType = trim((string) config('whatsapp.coexistence_feature_type', ''));
+
+        return $featureType === '' ? 'whatsapp_business_app_onboarding' : $featureType;
     }
 }

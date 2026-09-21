@@ -38,14 +38,18 @@ docker compose up -d
 
 Na primeira subida, o ambiente instala dependencias do frontend e sobe os servicos definidos no `docker-compose.yml`.
 
-Para habilitar o WhatsApp Embedded Signup no frontend, copie `frontend/.env.example` para `frontend/.env` e informe apenas os identificadores públicos gerados pela Meta:
+Para conectar o mesmo número no WhatsApp Business App e na Cloud API, use a **coexistência**. O formulário manual por token foi removido. Veja o [guia de configuração e operação](docs/WHATSAPP_COEXISTENCE.md).
+
+No frontend fora do Docker, copie `frontend/.env.example` para `frontend/.env`:
 
 ```env
 VITE_META_APP_ID=<id-publico-do-app>
-VITE_META_EMBEDDED_SIGNUP_CONFIG_ID=<id-publico-da-configuracao>
+VITE_META_COEXISTENCE_CONFIG_ID=1088502166986777
 ```
 
-O `META_APP_SECRET` e o access token permanecem exclusivamente no backend e nunca devem usar o prefixo `VITE_`.
+No Docker Compose, configure `META_APP_ID` e `META_COEXISTENCE_CONFIG_ID` no ambiente da raiz. O backend também fornece esses identificadores públicos à tela de configuração.
+
+O `META_APP_SECRET` e o access token permanecem exclusivamente no backend e nunca devem usar o prefixo `VITE_`. A coexistência continua usando Embedded Signup, agora com o onboarding do WhatsApp Business App.
 
 Antes de analisar conversas com o provider real, copie o arquivo de ambiente da raiz e configure a chave:
 
@@ -73,6 +77,18 @@ O ambiente local deve usar `WHATSAPP_PROVIDER=fake`. Esse provider não abre ses
 - PostgreSQL do Compose: `localhost:5433`
 - Redis do Compose: `localhost:6380`
 
+## Inicialização e desempenho
+
+O backend usa `artisan serve --no-reload` para respeitar `PHP_CLI_SERVER_WORKERS=4` no Laravel instalado. É um servidor de desenvolvimento; uma implantação de produção deve usar um servidor PHP apropriado.
+
+Reiniciar o backend não deve regenerar `APP_KEY`, executar migrations ou seeds automaticamente. A chave existente protege dados criptografados: gere-a apenas no primeiro setup. Migrations e dados demo são operações explícitas, conforme os comandos abaixo.
+
+O polling aguarda todas as chamadas do ciclo terminarem e mais 5 segundos antes de repetir, pausando quando a aba está oculta. Atualizações do dashboard em andamento são compartilhadas apenas para a mesma sessão, empresa e geração de dados. Respostas bem-sucedidas atualizam seus blocos sem apagar dados anteriores quando outro endpoint falha.
+
+O cálculo de tempo comercial soma interseções diárias com expediente e almoço, em vez de percorrer cada minuto. Isso também corrige contagens em limites de expediente com segundos parciais.
+
+Validação: `npm test` e `npm run build` no frontend; testes PHPUnit no backend com `APP_ENV=testing`, `DB_CONNECTION=sqlite` e `DB_DATABASE=:memory:`. Nunca execute testes de reset contra o PostgreSQL com dados reais.
+
 ## Setup inicial apos subir os containers
 
 Gere a chave da aplicacao, rode migrations e carregue os dados demo:
@@ -92,6 +108,22 @@ docker compose exec backend php artisan leadswhats:doctor
 - `sdr@empresa.local` / `12345678`
 
 Use essas credenciais apenas em ambiente local.
+
+## Desconectar WhatsApp
+
+Em **Configurações → Integração WhatsApp**, admin/gestor da própria empresa pode escolher **Desconectar WhatsApp** e confirmar. A operação `POST /api/v1/settings/whatsapp/disconnect` cancela a assinatura do aplicativo no WABA e remove apenas o vínculo local (credenciais e estado de sincronização), preservando leads, contatos e conversas. O WhatsApp Business do celular não é excluído; não se trata de revogação global das permissões na Meta.
+
+### Usuários e controle de acesso
+
+O `platform_admin` possui no painel global as áreas **Usuários** e **Controle de acesso**. Perfis combinam permissões por página/ação com escopo de dados (`own` ou `company`). Os modelos Administrador, Gestor, SDR e Conector WhatsApp são criados globalmente e copiados para cada clínica; mudanças em modelos só chegam às cópias após aplicação explícita.
+
+- Administrador da clínica é um perfil protegido e sempre possui acesso total.
+- Conector WhatsApp acessa somente a página de integração e não pode receber leads.
+- Usuários removidos são desativados, têm os tokens revogados e preservam seu histórico.
+- Novos usuários recebem senha temporária e ficam bloqueados nas demais APIs até `POST /api/v1/auth/change-password`.
+- Mudanças de usuários, perfis, permissões e senhas são registradas em `access_audit_logs`, sem armazenar credenciais.
+
+Se a Meta falhar ou não confirmar `success=true`, o vínculo é preservado para nova tentativa. Contas WABA usadas por outra empresa são bloqueadas para evitar interrupção de terceiros. Sem vínculo, a operação retorna sucesso sem chamada externa. É possível conectar novamente pelo fluxo de coexistência. Jobs pendentes associados ao ID antigo são descartados quando executados com a versão atualizada dos workers; trabalhos já em execução podem terminar. No deploy, recarregue os workers de forma controlada para carregar a proteção nova. Os testes usam SQLite em memória e `Http::fake`, nunca uma conexão real.
 
 ## Conversation Intelligence
 

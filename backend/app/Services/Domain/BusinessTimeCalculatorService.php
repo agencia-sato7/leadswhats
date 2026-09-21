@@ -25,55 +25,34 @@ class BusinessTimeCalculatorService
         $lunchStart = $this->settings->lunchStartTime($company->id);
         $lunchEnd = $this->settings->lunchEndTime($company->id);
 
-        $cursor = $start->copy()->setTimezone($timezone);
+        $startAt = $start->copy()->setTimezone($timezone);
         $endAt = $end->copy()->setTimezone($timezone);
-        $total = 0;
+        $day = $startAt->copy()->startOfDay();
+        $total = 0.0;
 
-        while ($cursor->lt($endAt)) {
-            $next = $cursor->copy()->addMinute();
+        // Visit days, not every elapsed minute. Old unanswered conversations must
+        // not become progressively more expensive on every dashboard refresh.
+        while ($day->lt($endAt)) {
+            if (in_array($day->dayOfWeekIso, $workingDays, true)) {
+                $date = $day->toDateString();
+                $from = Carbon::parse($date . ' ' . $workdayStart, $timezone)->max($startAt);
+                $to = Carbon::parse($date . ' ' . $workdayEnd, $timezone)->min($endAt);
 
-            if ($this->isBusinessMinute($cursor, $workingDays, $workdayStart, $workdayEnd, $lunchStart, $lunchEnd)) {
-                $remaining = $cursor->diffInSeconds($endAt, true);
-                $total += (int) min(60, $remaining);
+                if ($to->gt($from)) {
+                    $seconds = $from->diffInSeconds($to, true);
+                    if ($lunchStart && $lunchEnd) {
+                        $breakFrom = Carbon::parse($date . ' ' . $lunchStart, $timezone)->max($from);
+                        $breakTo = Carbon::parse($date . ' ' . $lunchEnd, $timezone)->min($to);
+                        if ($breakTo->gt($breakFrom)) {
+                            $seconds -= $breakFrom->diffInSeconds($breakTo, true);
+                        }
+                    }
+                    $total += $seconds;
+                }
             }
-
-            $cursor = $next;
+            $day->addDay()->startOfDay();
         }
 
-        return max(0, $total);
-    }
-
-    /**
-     * @param int[] $workingDays
-     */
-    private function isBusinessMinute(
-        Carbon $moment,
-        array $workingDays,
-        string $workdayStartTime,
-        string $workdayEndTime,
-        ?string $lunchStartTime,
-        ?string $lunchEndTime,
-    ): bool {
-        if (!in_array($moment->dayOfWeekIso, $workingDays, true)) {
-            return false;
-        }
-
-        $workStart = Carbon::parse($moment->toDateString() . " " . $workdayStartTime, $moment->getTimezone());
-        $workEnd = Carbon::parse($moment->toDateString() . " " . $workdayEndTime, $moment->getTimezone());
-
-        if ($moment->lt($workStart) || $moment->gte($workEnd)) {
-            return false;
-        }
-
-        if ($lunchStartTime && $lunchEndTime) {
-            $lunchStart = Carbon::parse($moment->toDateString() . " " . $lunchStartTime, $moment->getTimezone());
-            $lunchEnd = Carbon::parse($moment->toDateString() . " " . $lunchEndTime, $moment->getTimezone());
-
-            if ($moment->gte($lunchStart) && $moment->lt($lunchEnd)) {
-                return false;
-            }
-        }
-
-        return true;
+        return max(0, (int) $total);
     }
 }

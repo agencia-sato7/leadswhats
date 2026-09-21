@@ -47,6 +47,15 @@ class WhatsappIngestionService
             : null;
         $sentAt = isset($payload["sent_at"]) ? Carbon::parse($payload["sent_at"]) : now();
 
+        $syncSource = isset($payload["sync_source"]) && trim((string) $payload["sync_source"]) !== ""
+            ? trim((string) $payload["sync_source"])
+            : null;
+
+        // Importação de histórico do WhatsApp Business app (webhook `history`):
+        // não dispara regras de tempo real (resgate/primeira resposta) e não
+        // "regride" as datas já registradas do lead.
+        $isHistoricalSync = (bool) ($payload["is_historical_sync"] ?? false);
+
         if ($externalMessageId) {
             $existingMessage = Message::query()
                 ->where("company_id", $company->id)
@@ -110,16 +119,22 @@ class WhatsappIngestionService
         $isRescue = false;
 
         if ($direction === "inbound") {
-            if (!$lead->first_inbound_at) {
+            if (!$lead->first_inbound_at || ($isHistoricalSync && $sentAt->lessThan($lead->first_inbound_at))) {
                 $lead->first_inbound_at = $sentAt;
             }
-            $lead->last_inbound_at = $sentAt;
+            if (!$lead->last_inbound_at || $sentAt->greaterThan($lead->last_inbound_at)) {
+                $lead->last_inbound_at = $sentAt;
+            }
         }
 
         if ($direction === "outbound") {
-            $isRescue = $this->rescueDetector->isRescue($lead, $sentAt);
-            $this->firstResponseCalculator->applyIfNeeded($lead, $sentAt, $company);
-            $lead->last_outbound_at = $sentAt;
+            if (!$isHistoricalSync) {
+                $isRescue = $this->rescueDetector->isRescue($lead, $sentAt);
+                $this->firstResponseCalculator->applyIfNeeded($lead, $sentAt, $company);
+            }
+            if (!$lead->last_outbound_at || $sentAt->greaterThan($lead->last_outbound_at)) {
+                $lead->last_outbound_at = $sentAt;
+            }
         }
 
         $message = Message::create([
@@ -138,10 +153,14 @@ class WhatsappIngestionService
             "metadata" => [
                 "classification" => $classification,
                 "raw_source" => $source,
+                "sync_source" => $syncSource,
+                "is_historical_sync" => $isHistoricalSync,
             ],
         ]);
 
-        $conversation->last_message_at = $sentAt;
+        if (!$conversation->last_message_at || $sentAt->greaterThan($conversation->last_message_at)) {
+            $conversation->last_message_at = $sentAt;
+        }
         $conversation->save();
 
         $lead->save();

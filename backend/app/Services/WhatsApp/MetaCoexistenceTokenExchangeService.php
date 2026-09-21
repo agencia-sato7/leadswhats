@@ -2,22 +2,28 @@
 
 namespace App\Services\WhatsApp;
 
-use App\Exceptions\MetaEmbeddedSignupException;
+use App\Exceptions\MetaCoexistenceException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
-class MetaEmbeddedSignupTokenExchangeService
+class MetaCoexistenceTokenExchangeService
 {
-    public function exchange(string $code): string
+    /**
+     * Troca o code temporário (TTL de 30s) devolvido pelo Embedded Signup de
+     * Coexistência pelo token de acesso da Meta.
+     *
+     * @return array{access_token:string,expires_in:int|null}
+     */
+    public function exchange(string $code): array
     {
         $appId = trim((string) config('whatsapp.meta_app_id', ''));
         $appSecret = trim((string) config('whatsapp.meta_app_secret', ''));
         $redirectUri = trim((string) config('whatsapp.meta_redirect_uri', ''));
 
-        if ($appId === '' || $appSecret === '' || $redirectUri === '') {
-            throw new MetaEmbeddedSignupException(
-                'As credenciais do Embedded Signup não estão configuradas no servidor.',
+        if ($appId === '' || $appSecret === '') {
+            throw new MetaCoexistenceException(
+                'As credenciais da Coexistência não estão configuradas no servidor.',
                 503,
             );
         }
@@ -29,17 +35,22 @@ class MetaEmbeddedSignupTokenExchangeService
             'client_secret' => $appSecret,
             'code' => $code,
             'grant_type' => 'authorization_code',
-            'redirect_uri' => $redirectUri,
         ];
+
+        // O Embedded Signup de Coexistência troca o code sem redirect_uri, então
+        // ele só é enviado quando houver configuração explícita.
+        if ($redirectUri !== '') {
+            $payload['redirect_uri'] = $redirectUri;
+        }
 
         // Instrumentação temporária: somente metadados em allowlist, sem valores
         // de code, client_secret, resposta OAuth ou access_token.
-        Log::info('Meta Embedded Signup OAuth request metadata.', [
+        Log::info('Meta Coexistence OAuth request metadata.', [
             'url' => $endpoint,
             'method' => 'POST',
             'content_type' => 'application/json',
             'parameter_names' => array_keys($payload),
-            'redirect_uri' => $redirectUri,
+            'redirect_uri' => $redirectUri !== '' ? $redirectUri : null,
             'client_id' => $appId,
             'grant_type' => $payload['grant_type'],
             'graph_api_version' => $apiVersion,
@@ -52,7 +63,7 @@ class MetaEmbeddedSignupTokenExchangeService
                 ->timeout(max((int) config('whatsapp.meta_timeout_seconds', 15), 1))
                 ->post($endpoint, $payload);
         } catch (ConnectionException) {
-            throw new MetaEmbeddedSignupException(
+            throw new MetaCoexistenceException(
                 'Não foi possível concluir a comunicação segura com a Meta.',
             );
         }
@@ -62,15 +73,15 @@ class MetaEmbeddedSignupTokenExchangeService
             $errorType = $response->json('error.type');
             $errorSubcode = $this->scalarOrNull($response->json('error.error_subcode'));
 
-            Log::warning('Meta Embedded Signup OAuth exchange failed.', [
+            Log::warning('Meta Coexistence OAuth exchange failed.', [
                 'http_status' => $response->status(),
                 'error_code' => $errorCode,
                 'error_type' => is_string($errorType) ? $errorType : null,
                 'error_subcode' => $errorSubcode,
             ]);
 
-            throw new MetaEmbeddedSignupException(
-                'A Meta não aceitou a conclusão do Embedded Signup.',
+            throw new MetaCoexistenceException(
+                'A Meta não aceitou a conclusão da Coexistência.',
                 502,
                 $errorCode,
                 is_string($errorType) ? $errorType : null,
@@ -80,12 +91,17 @@ class MetaEmbeddedSignupTokenExchangeService
 
         $accessToken = $response->json('access_token');
         if (! is_string($accessToken) || trim($accessToken) === '') {
-            throw new MetaEmbeddedSignupException(
-                'A Meta retornou uma resposta inválida para o Embedded Signup.',
+            throw new MetaCoexistenceException(
+                'A Meta retornou uma resposta inválida para a Coexistência.',
             );
         }
 
-        return trim($accessToken);
+        $expiresIn = $response->json('expires_in');
+
+        return [
+            'access_token' => trim($accessToken),
+            'expires_in' => is_numeric($expiresIn) ? (int) $expiresIn : null,
+        ];
     }
 
     private function scalarOrNull(mixed $value): int|string|null

@@ -29,7 +29,7 @@ class PipelineController extends Controller
         EffectiveTenantContext $tenantContext,
     ): JsonResponse {
         $companyId = $tenantContext->companyId($request);
-        $kanban = $pipelineKanbanService->kanbanForPipeline($companyId, $pipelineId);
+        $kanban = $pipelineKanbanService->kanbanForPipeline($companyId, $pipelineId, $request->user());
 
         if (! $kanban) {
             abort(404, 'Pipeline não encontrado.');

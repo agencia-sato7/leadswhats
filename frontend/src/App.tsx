@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
 import {
+  disconnectWhatsApp,
   createAdminTenantViewContext,
   createAdminCompany,
-  completeWhatsAppEmbeddedSignup,
+  completeWhatsAppCoexistence,
   exportContactsCsv,
   getAdminCompanies,
   getAssignableUsers,
@@ -18,17 +18,21 @@ import {
   getTasksChecklist,
   getWhatsAppSettings,
   login,
+  requestWhatsAppCoexistenceSync,
   revokeAdminTenantViewContext,
   updateLeadOwner,
-  updateWhatsAppSettings,
 } from './api';
-import { EmbeddedSignupFlowError, WhatsAppEmbeddedSignupFlow } from './meta/embeddedSignup';
+import { createSingleFlight, settleRefreshes, startPolling } from './refresh';
+import { CoexistenceFlowError, WhatsAppCoexistenceFlow } from './meta/coexistenceSignup';
 import { AppShell, PageHeader, Sidebar, Topbar } from './components/layout';
 import { ConversationIntelligencePage } from './pages/ConversationIntelligencePage';
 import { CampaignIntelligencePage } from './pages/CampaignIntelligencePage';
 import { AutoCrmPage } from './pages/AutoCrmPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AttendancePage } from './pages/AttendancePage';
+import { AdminUsersPage } from './pages/AdminUsersPage';
+import { AdminAccessPage } from './pages/AdminAccessPage';
+import { PasswordChangePage } from './pages/PasswordChangePage';
 import {
   Alert,
   Table,
@@ -63,7 +67,6 @@ import type {
   PipelineKanban,
   PipelineListItem,
   WhatsAppSettings,
-  UpdateWhatsAppSettingsRequest,
 } from './types';
 
 type Session = {
@@ -102,6 +105,7 @@ function formatRoleLabel(role: AuthUser['role']): string {
     gestor: 'Gestor',
     sdr: 'Atendente',
     platform_admin: 'Administrador da plataforma',
+    custom: 'Perfil personalizado',
   };
   return labels[role];
 }
@@ -147,6 +151,13 @@ function formatWhatsAppStatus(status: WhatsAppSettings['status'] | undefined): s
   return 'Não configurado';
 }
 
+function formatWhatsAppSyncStatus(status: WhatsAppSettings['history_sync_status'], label: string): string {
+  if (status === 'completed') return `${label} sincronizado`;
+  if (status === 'error') return `${label} com erro`;
+  if (status === 'requested') return `${label} em andamento`;
+  return `${label} não solicitado`;
+}
+
 function formatProviderLabel(provider: string | null | undefined): string {
   if (provider === 'meta_cloud') return 'Meta Cloud API';
   if (provider === 'fake') return 'Demonstração';
@@ -166,7 +177,7 @@ function formatAuditReason(reason: unknown): string {
 }
 
 export function App() {
-  type ActiveView = 'dashboard' | 'attendance' | 'inbox' | 'checklist' | 'kanban' | 'contacts' | 'intelligence' | 'campaignIntelligence' | 'adminSaas' | 'whatsappSettings';
+  type ActiveView = 'dashboard' | 'attendance' | 'inbox' | 'checklist' | 'kanban' | 'contacts' | 'intelligence' | 'campaignIntelligence' | 'adminSaas' | 'adminUsers' | 'adminAccess' | 'whatsappSettings';
   const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem('leadswhats_theme') as 'light' | 'dark') || 'dark');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -241,17 +252,12 @@ export function App() {
   const [whatsAppSettings, setWhatsAppSettings] = useState<WhatsAppSettings | null>(null);
   const [whatsAppLoading, setWhatsAppLoading] = useState(false);
   const [whatsAppConnecting, setWhatsAppConnecting] = useState(false);
+  const [whatsAppDisconnecting, setWhatsAppDisconnecting] = useState(false);
+  const [confirmWhatsAppDisconnect, setConfirmWhatsAppDisconnect] = useState(false);
   const [whatsAppError, setWhatsAppError] = useState<string | null>(null);
   const [whatsAppSuccess, setWhatsAppSuccess] = useState<string | null>(null);
-  const [whatsAppTechnicalSaving, setWhatsAppTechnicalSaving] = useState(false);
-  const [whatsAppTechnicalForm, setWhatsAppTechnicalForm] = useState<UpdateWhatsAppSettingsRequest>({
-    provider: 'meta_cloud',
-    phone_number: '',
-    phone_number_id: '',
-    business_account_id: '',
-    access_token: '',
-  });
-  const whatsAppSignupFlowRef = useRef<WhatsAppEmbeddedSignupFlow<WhatsAppSettings> | null>(null);
+  const [whatsAppSyncLoading, setWhatsAppSyncLoading] = useState(false);
+  const whatsAppCoexistenceFlowRef = useRef<WhatsAppCoexistenceFlow<WhatsAppSettings> | null>(null);
   const [adminForm, setAdminForm] = useState<AdminCompanyCreateRequest>({
     company: { name: '', slug: '' },
     admin_user: { name: '', email: '', password: '' },
@@ -275,6 +281,8 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [kanbanError, setKanbanError] = useState<string | null>(null);
   const tenantDataEpochRef = useRef(0);
+  const pollingInFlightRef = useRef(false);
+  const dashboardRefreshRef = useRef(createSingleFlight());
   const isPlatformAdmin = session?.user.role === 'platform_admin';
   const isAgencyViewing = Boolean(isPlatformAdmin && adminViewContext);
   const tenantContextToken = adminViewContext?.context_token;
@@ -290,13 +298,19 @@ export function App() {
     }
   }, []);
 
-  const canManageSource = session?.user.role === 'gestor' || session?.user.role === 'admin';
-  const canManageWhatsAppSettings = canManageSource && !isPlatformAdmin;
-  const canViewIntelligence = canManageSource || isAgencyViewing;
-  const canViewWhatsAppSettings = canManageWhatsAppSettings || isAgencyViewing;
+  const legacyPermissions = session?.user.role === 'admin' || session?.user.role === 'gestor'
+    ? ['dashboard.view','attendance.view','attendance.respond','conversations.view','conversations.respond','followups.view','crm.view','crm.manage','contacts.view','contacts.export','contacts.classify','conversation_intelligence.view','conversation_intelligence.analyze','campaign_intelligence.view','campaign_intelligence.analyze','whatsapp_settings.view','whatsapp_settings.manage','leads.assignable']
+    : session?.user.role === 'sdr' ? ['dashboard.view','attendance.view','attendance.respond','conversations.view','conversations.respond','followups.view','crm.view','contacts.view','leads.assignable'] : [];
+  const effectivePermissions = session?.user.permissions ?? legacyPermissions;
+  const hasPermission = (permission: string) => Boolean(isPlatformAdmin || effectivePermissions.includes(permission));
+  const canManageCrm = hasPermission('crm.manage');
+  const canExportContacts = hasPermission('contacts.export');
+  const canManageWhatsAppSettings = hasPermission('whatsapp_settings.manage') && !isPlatformAdmin;
+  const canViewIntelligence = hasPermission('conversation_intelligence.view') || isAgencyViewing;
+  const canViewWhatsAppSettings = hasPermission('whatsapp_settings.view') || isAgencyViewing;
   const inboxOwnerOptions = useMemo(() => {
     const map = new Map<number, string>();
-    if (canManageSource && assignableUsers.length > 0) {
+    if (canManageCrm && assignableUsers.length > 0) {
       for (const user of assignableUsers) map.set(user.id, user.name);
     } else {
       for (const conv of inboxConversations) {
@@ -306,11 +320,11 @@ export function App() {
     return Array.from(map.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [canManageSource, assignableUsers, inboxConversations]);
+  }, [canManageCrm, assignableUsers, inboxConversations]);
 
   const inboxAssignableOwnerOptions = useMemo(() => {
     const map = new Map<number, string>();
-    if (canManageSource && assignableUsers.length > 0) {
+    if (canManageCrm && assignableUsers.length > 0) {
       for (const user of assignableUsers) map.set(user.id, user.name);
     } else {
       for (const owner of inboxOwnerOptions) map.set(owner.id, owner.name);
@@ -322,7 +336,7 @@ export function App() {
     return Array.from(map.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [canManageSource, assignableUsers, inboxOwnerOptions, session, inboxDetail]);
+  }, [canManageCrm, assignableUsers, inboxOwnerOptions, session, inboxDetail]);
 
   async function fetchInboxEvents(token: string, conversationId: number, contextToken?: string) {
     const requestEpoch = tenantDataEpochRef.current;
@@ -336,29 +350,34 @@ export function App() {
     setInboxEvents(sorted);
   }
 
-  async function refreshData(token: string, contextToken?: string) {
+  function refreshData(token: string, contextToken?: string): Promise<void> {
     const requestEpoch = tenantDataEpochRef.current;
-    const [overviewData, dashboardData, pipelineData, checklistData] = await Promise.all([
-      getOverview(token, contextToken),
-      getDashboardSummary(token, contextToken),
-      getPipelines(token, contextToken),
-      getTasksChecklist(token, contextToken),
-    ]);
-
-    if (requestEpoch !== tenantDataEpochRef.current) return;
-
-    setOverview(overviewData);
-    setDashboard(dashboardData);
-    setPipelines(pipelineData);
-    setChecklistItems(checklistData);
-
-    if (pipelineData.length === 0) {
-      setSelectedPipelineId(null);
-      setKanban(null);
-    } else if (!selectedPipelineId || !pipelineData.some((p) => p.id === selectedPipelineId)) {
-      setSelectedPipelineId(pipelineData[0].id);
-    }
-
+    const key = JSON.stringify([token, contextToken, requestEpoch]);
+    return dashboardRefreshRef.current(key, async () => {
+      const current = () => requestEpoch === tenantDataEpochRef.current;
+      const refreshes: Promise<unknown>[] = [];
+      if (isAgencyViewing || hasPermission('dashboard.view')) {
+        refreshes.push(getOverview(token, contextToken).then((data) => { if (current()) setOverview(data); }));
+        refreshes.push(getDashboardSummary(token, contextToken).then((data) => { if (current()) setDashboard(data); }));
+      }
+      if (isAgencyViewing || hasPermission('crm.view')) refreshes.push(getPipelines(token, contextToken).then((data) => {
+          if (!current()) return;
+          setPipelines(data);
+          setSelectedPipelineId((selected) => data.some((pipeline) => pipeline.id === selected)
+            ? selected : data[0]?.id ?? null);
+          if (data.length === 0) setKanban(null);
+        }));
+      if (isAgencyViewing || hasPermission('followups.view')) refreshes.push(getTasksChecklist(token, contextToken).then((data) => {
+          if (!current()) return;
+          setChecklistItems(data);
+          setChecklistError(null);
+        }).catch((err: unknown) => {
+          if (current()) setChecklistError(parseApiErrorMessage(err, 'Não foi possível carregar o acompanhamento.'));
+          throw err;
+        }));
+      await settleRefreshes(refreshes);
+      if (current()) setError(null);
+    });
   }
 
   async function refreshKanban(token: string, pipelineId: number, silent = false, contextToken?: string) {
@@ -540,22 +559,27 @@ export function App() {
   useEffect(() => {
     if (!session) return;
     if (isPlatformAdmin && !isAgencyViewing) return;
+    if (!isAgencyViewing && !['dashboard.view', 'crm.view', 'followups.view'].some(hasPermission)) return;
 
     setLoading(true);
     setError(null);
     setChecklistLoading(true);
     setChecklistError(null);
 
+    const requestEpoch = tenantDataEpochRef.current;
+    let disposed = false;
     refreshData(session.token, tenantContextToken)
       .catch((err) => {
+        if (disposed || requestEpoch !== tenantDataEpochRef.current) return;
         setError(parseApiErrorMessage(err, 'Falha ao carregar dados da API.'));
-        setChecklistError(parseApiErrorMessage(err, 'Não foi possível carregar o acompanhamento.'));
         console.error(err);
       })
       .finally(() => {
+        if (disposed || requestEpoch !== tenantDataEpochRef.current) return;
         setLoading(false);
         setChecklistLoading(false);
       });
+    return () => { disposed = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, isPlatformAdmin, isAgencyViewing, tenantContextToken]);
 
@@ -565,51 +589,56 @@ export function App() {
   }, [session, canViewWhatsAppSettings, activeView, tenantContextToken]);
 
   useEffect(() => {
-    if (!whatsAppSettings) return;
-    setWhatsAppTechnicalForm({
-      provider: 'meta_cloud',
-      phone_number: whatsAppSettings.phone_number ?? '',
-      phone_number_id: whatsAppSettings.phone_number_id ?? '',
-      business_account_id: whatsAppSettings.business_account_id ?? '',
-      access_token: '',
-    });
-  }, [whatsAppSettings]);
-
-  useEffect(() => {
     if (!session || !canManageWhatsAppSettings || activeView !== 'whatsappSettings') return;
 
-    const flow = new WhatsAppEmbeddedSignupFlow<WhatsAppSettings>({
-      appId: import.meta.env.VITE_META_APP_ID || '',
-      configId: import.meta.env.VITE_META_EMBEDDED_SIGNUP_CONFIG_ID || '',
-      complete: (payload) => completeWhatsAppEmbeddedSignup(session.token, payload),
+    const flow = new WhatsAppCoexistenceFlow<WhatsAppSettings>({
+      // Identificadores públicos vêm do backend (GET /settings/whatsapp) e,
+      // como fallback, das variáveis VITE_ definidas no build.
+      appId: whatsAppSettings?.coexistence_app_id || import.meta.env.VITE_META_APP_ID || '',
+      configId: whatsAppSettings?.coexistence_config_id || import.meta.env.VITE_META_COEXISTENCE_CONFIG_ID || '',
+      extras: whatsAppSettings?.coexistence_feature_type
+        ? {
+            featureType: whatsAppSettings.coexistence_feature_type,
+            sessionInfoVersion: whatsAppSettings.coexistence_session_info_version || '3',
+          }
+        : undefined,
+      complete: (payload) => completeWhatsAppCoexistence(session.token, payload),
     });
-    whatsAppSignupFlowRef.current = flow;
+    whatsAppCoexistenceFlowRef.current = flow;
 
     return () => {
       flow.dispose();
-      if (whatsAppSignupFlowRef.current === flow) whatsAppSignupFlowRef.current = null;
+      if (whatsAppCoexistenceFlowRef.current === flow) whatsAppCoexistenceFlowRef.current = null;
     };
-  }, [session, canManageWhatsAppSettings, activeView]);
+  }, [
+    session,
+    canManageWhatsAppSettings,
+    activeView,
+    whatsAppSettings?.coexistence_app_id,
+    whatsAppSettings?.coexistence_config_id,
+    whatsAppSettings?.coexistence_feature_type,
+    whatsAppSettings?.coexistence_session_info_version,
+  ]);
 
   useEffect(() => {
-    if (!session || !selectedPipelineId || (isPlatformAdmin && !isAgencyViewing)) return;
+    if (!session || !selectedPipelineId || (isPlatformAdmin && !isAgencyViewing) || (!isAgencyViewing && !hasPermission('crm.view'))) return;
     refreshKanban(session.token, selectedPipelineId, false, tenantContextToken).catch((err) => console.error(err));
   }, [session, selectedPipelineId, isPlatformAdmin, isAgencyViewing, tenantContextToken]);
 
   useEffect(() => {
-    if (!session || (isPlatformAdmin && !isAgencyViewing)) return;
+    if (!session || (isPlatformAdmin && !isAgencyViewing) || (!isAgencyViewing && !hasPermission('contacts.view'))) return;
     refreshContacts(session.token, contactsPage, tenantContextToken).catch((err) => console.error(err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, contactsPage, contactSearch, contactSourceFilter, contactClassificationFilter, contactStageFilter, isPlatformAdmin, isAgencyViewing, tenantContextToken]);
 
   useEffect(() => {
-    if (!session || (isPlatformAdmin && !isAgencyViewing)) return;
+    if (!session || (isPlatformAdmin && !isAgencyViewing) || (!isAgencyViewing && !hasPermission('conversations.view'))) return;
     refreshInboxConversations(session.token, inboxPage, false, tenantContextToken).catch((err) => console.error(err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, inboxPage, inboxSearch, inboxOwnerFilter, inboxSourceFilter, inboxStageFilter, inboxServiceWindowFilter, isPlatformAdmin, isAgencyViewing, tenantContextToken]);
 
   useEffect(() => {
-    if (!session || !canManageSource || isPlatformAdmin) {
+    if (!session || !canManageCrm || isPlatformAdmin) {
       setAssignableUsers([]);
       setAssignableUsersError(null);
       return;
@@ -624,7 +653,7 @@ export function App() {
         setAssignableUsers([]);
         setAssignableUsersError(parseApiErrorMessage(err, 'Não foi possível carregar usuários atribuíveis.'));
       });
-  }, [session, canManageSource, isPlatformAdmin]);
+  }, [session, canManageCrm, isPlatformAdmin]);
 
   useEffect(() => {
     if (!session || !selectedConversationId || (isPlatformAdmin && !isAgencyViewing)) return;
@@ -641,21 +670,28 @@ export function App() {
   useEffect(() => {
     if (!session || (isPlatformAdmin && !isAgencyViewing)) return;
 
-    const interval = setInterval(() => {
-      if (activeView === 'inbox') {
-        void refreshInboxConversations(session.token, inboxPage, true, tenantContextToken).catch((err) => console.error(err));
-        if (selectedConversationId) {
-          void refreshInboxDetail(session.token, selectedConversationId, true, tenantContextToken).catch((err) => console.error(err));
+    return startPolling(async () => {
+      // The ref also protects against a cycle still running after a view/filter change.
+      if (pollingInFlightRef.current || document.hidden) return;
+      pollingInFlightRef.current = true;
+      try {
+        if (activeView === 'inbox') {
+          await settleRefreshes([
+            refreshInboxConversations(session.token, inboxPage, true, tenantContextToken),
+            ...(selectedConversationId
+              ? [refreshInboxDetail(session.token, selectedConversationId, true, tenantContextToken)]
+              : []),
+          ]);
+        } else if (activeView === 'kanban' && selectedPipelineId) {
+          await refreshKanban(session.token, selectedPipelineId, true, tenantContextToken);
+        } else if (activeView === 'dashboard') {
+          await refreshData(session.token, tenantContextToken);
         }
-      } else if (activeView === 'kanban' && selectedPipelineId) {
-        void refreshKanban(session.token, selectedPipelineId, true, tenantContextToken).catch((err) => console.error(err));
-      } else if (activeView === 'dashboard') {
-        void refreshData(session.token, tenantContextToken).catch((err) => console.error(err));
+      } finally {
+        pollingInFlightRef.current = false;
       }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [session, activeView, inboxPage, selectedConversationId, selectedPipelineId, isPlatformAdmin, isAgencyViewing, tenantContextToken]);
+    }, (err) => console.error(err));
+  }, [session, activeView, inboxPage, selectedConversationId, selectedPipelineId, isPlatformAdmin, isAgencyViewing, tenantContextToken, inboxSearch, inboxOwnerFilter, inboxSourceFilter, inboxStageFilter, inboxServiceWindowFilter]);
 
   useEffect(() => {
     if (!session || !selectedConversationId || inboxDetailTab !== 'audit' || (isPlatformAdmin && !isAgencyViewing)) return;
@@ -686,7 +722,9 @@ export function App() {
 
   useEffect(() => {
     if (!session) return;
-    setActiveView(session.user.role === 'platform_admin' ? 'adminSaas' : 'dashboard');
+    if (session.user.role === 'platform_admin') setActiveView('adminSaas');
+    else if (hasPermission('dashboard.view')) setActiveView('dashboard');
+    else if (hasPermission('whatsapp_settings.view')) setActiveView('whatsappSettings');
   }, [session]);
 
   useEffect(() => {
@@ -698,16 +736,17 @@ export function App() {
     const allowedViews: ActiveView[] = isPlatformAdmin
       ? isAgencyViewing
         ? ['dashboard', 'attendance', 'inbox', 'checklist', 'kanban', 'contacts', 'intelligence', 'campaignIntelligence', 'whatsappSettings']
-        : ['adminSaas']
+        : ['adminSaas', 'adminUsers', 'adminAccess']
       : [
-        'dashboard',
-        'attendance',
-        'inbox',
-        'checklist',
-        'kanban',
-        'contacts',
-        ...(canManageSource ? (['intelligence', 'campaignIntelligence'] as ActiveView[]) : []),
-        ...(canManageWhatsAppSettings ? (['whatsappSettings'] as ActiveView[]) : []),
+        ...(hasPermission('dashboard.view') ? ['dashboard' as ActiveView] : []),
+        ...(hasPermission('attendance.view') ? ['attendance' as ActiveView] : []),
+        ...(hasPermission('conversations.view') ? ['inbox' as ActiveView] : []),
+        ...(hasPermission('followups.view') ? ['checklist' as ActiveView] : []),
+        ...(hasPermission('crm.view') ? ['kanban' as ActiveView] : []),
+        ...(hasPermission('contacts.view') ? ['contacts' as ActiveView] : []),
+        ...(hasPermission('conversation_intelligence.view') ? ['intelligence' as ActiveView] : []),
+        ...(hasPermission('campaign_intelligence.view') ? ['campaignIntelligence' as ActiveView] : []),
+        ...(canViewWhatsAppSettings ? (['whatsappSettings'] as ActiveView[]) : []),
       ];
 
     if (!allowedViews.includes(activeView)) {
@@ -929,7 +968,7 @@ export function App() {
   }
 
   async function handleExportContactsCsv() {
-    if (!session || !canManageSource) return;
+    if (!session || !canExportContacts) return;
     setContactsExportLoading(true);
     setContactsExportError(null);
     setContactsExportSuccess(null);
@@ -1036,16 +1075,45 @@ export function App() {
     }
   }
 
-  async function handleConnectWhatsApp() {
+  async function handleDisconnectWhatsApp() {
+    if (!session || !canManageWhatsAppSettings || whatsAppDisconnecting || whatsAppConnecting || whatsAppSyncLoading) return;
+    const epoch = tenantDataEpochRef.current;
+    setWhatsAppDisconnecting(true);
+    setWhatsAppError(null);
+    setWhatsAppSuccess(null);
+    try {
+      const settings = await disconnectWhatsApp(session.token);
+      if (epoch !== tenantDataEpochRef.current) return;
+      tenantDataEpochRef.current += 1;
+      setWhatsAppSettings(settings);
+      setOverview((previous) => previous ? { ...previous, whatsapp_status: 'not_configured' } : previous);
+      setConfirmWhatsAppDisconnect(false);
+      setWhatsAppSuccess('WhatsApp desconectado do LeadsWhats. Seus dados importados foram preservados.');
+    } catch (err) {
+      if (epoch === tenantDataEpochRef.current) {
+        setWhatsAppError(parseApiErrorMessage(err, 'Não foi possível desconectar o WhatsApp.'));
+        setConfirmWhatsAppDisconnect(false);
+      }
+    } finally {
+      setWhatsAppDisconnecting(false);
+    }
+  }
+
+  async function handleConnectWhatsAppCoexistence() {
     if (!session || !canManageWhatsAppSettings) return;
 
-    if (!import.meta.env.VITE_META_APP_ID || !import.meta.env.VITE_META_EMBEDDED_SIGNUP_CONFIG_ID) {
+    const flow = whatsAppCoexistenceFlowRef.current;
+    const hasPublicIds = Boolean(
+      (whatsAppSettings?.coexistence_app_id || import.meta.env.VITE_META_APP_ID)
+      && (whatsAppSettings?.coexistence_config_id || import.meta.env.VITE_META_COEXISTENCE_CONFIG_ID),
+    );
+
+    if (!hasPublicIds) {
       setWhatsAppError('A conexão com a Meta ainda não foi configurada para este ambiente.');
       setWhatsAppSuccess(null);
       return;
     }
 
-    const flow = whatsAppSignupFlowRef.current;
     if (!flow) {
       setWhatsAppError('Não foi possível preparar a conexão com a Meta. Recarregue a página e tente novamente.');
       setWhatsAppSuccess(null);
@@ -1058,11 +1126,15 @@ export function App() {
     try {
       const updatedSettings = await flow.start();
       setWhatsAppSettings(updatedSettings);
-      setWhatsAppSuccess('WhatsApp conectado com sucesso.');
-      await refreshData(session.token).catch(() => undefined);
+      setWhatsAppSuccess(
+        updatedSettings.is_coexistence
+          ? 'WhatsApp conectado em coexistência com o aplicativo WhatsApp Business.'
+          : 'WhatsApp conectado com sucesso.',
+      );
+      if (hasPermission('dashboard.view')) await refreshData(session.token).catch(() => undefined);
     } catch (err) {
       setWhatsAppError(
-        err instanceof EmbeddedSignupFlowError
+        err instanceof CoexistenceFlowError
           ? err.message
           : 'Não foi possível concluir a conexão com o WhatsApp. Tente novamente.',
       );
@@ -1071,38 +1143,26 @@ export function App() {
     }
   }
 
-  async function handleSaveWhatsAppTechnicalSettings(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleRequestCoexistenceSync(syncType: 'contacts' | 'history' | 'both') {
     if (!session || !canManageWhatsAppSettings) return;
 
-    const payload = {
-      ...whatsAppTechnicalForm,
-      phone_number: whatsAppTechnicalForm.phone_number.trim(),
-      phone_number_id: whatsAppTechnicalForm.phone_number_id.trim(),
-      business_account_id: whatsAppTechnicalForm.business_account_id.trim(),
-      access_token: whatsAppTechnicalForm.access_token.trim(),
-    };
-
-    if (!payload.phone_number || !payload.phone_number_id || !payload.business_account_id || !payload.access_token) {
-      setWhatsAppError('Preencha o número de teste, os dois identificadores da Meta e o token temporário.');
-      setWhatsAppSuccess(null);
-      return;
-    }
-
-    setWhatsAppTechnicalSaving(true);
+    setWhatsAppSyncLoading(true);
     setWhatsAppError(null);
     setWhatsAppSuccess(null);
     try {
-      const updatedSettings = await updateWhatsAppSettings(session.token, payload);
+      const updatedSettings = await requestWhatsAppCoexistenceSync(session.token, syncType);
       setWhatsAppSettings(updatedSettings);
-      setWhatsAppTechnicalForm((current) => ({ ...current, access_token: '' }));
-      setWhatsAppSuccess('Credenciais do número de teste salvas com segurança.');
-      await refreshData(session.token).catch(() => undefined);
+      setWhatsAppSuccess(
+        syncType === 'history'
+          ? 'Sincronização do histórico solicitada à Meta.'
+          : syncType === 'contacts'
+            ? 'Sincronização de contatos solicitada à Meta.'
+            : 'Sincronização de contatos e histórico solicitada à Meta.',
+      );
     } catch (err) {
-      setWhatsAppTechnicalForm((current) => ({ ...current, access_token: '' }));
-      setWhatsAppError(parseApiErrorMessage(err, 'Não foi possível salvar as credenciais de teste. Confira os dados da Meta.'));
+      setWhatsAppError(parseApiErrorMessage(err, 'Não foi possível solicitar a sincronização à Meta.'));
     } finally {
-      setWhatsAppTechnicalSaving(false);
+      setWhatsAppSyncLoading(false);
     }
   }
 
@@ -1126,6 +1186,14 @@ export function App() {
     );
   }
 
+  if (session.user.must_change_password) {
+    return <PasswordChangePage token={session.token} onChanged={(user) => {
+      const next = { ...session, user };
+      setSession(next);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    }} />;
+  }
+
   const navSections: Array<{ id: ActiveView; label: string; subtitle: string }> = isPlatformAdmin
     ? isAgencyViewing
       ? [
@@ -1139,17 +1207,21 @@ export function App() {
         { id: 'campaignIntelligence', label: 'Inteligência da Campanha', subtitle: 'Períodos, volume, resgates e qualidade' },
         { id: 'whatsappSettings', label: 'Configurações', subtitle: 'Situação da integração WhatsApp' },
       ]
-      : [{ id: 'adminSaas', label: 'Clínicas', subtitle: 'Central da Agência' }]
+      : [
+        { id: 'adminSaas', label: 'Clínicas', subtitle: 'Central da Agência' },
+        { id: 'adminUsers', label: 'Usuários', subtitle: 'Usuários das clínicas' },
+        { id: 'adminAccess', label: 'Controle de acesso', subtitle: 'Perfis e permissões' },
+      ]
     : [
-      { id: 'dashboard', label: 'Visão Geral', subtitle: 'Indicadores e prioridades comerciais' },
-      { id: 'attendance', label: 'Atendimento', subtitle: 'Responder mensagens do WhatsApp' },
-      { id: 'inbox', label: 'Conversas', subtitle: 'Histórico somente leitura e auditoria' },
-      { id: 'checklist', label: 'Acompanhamento', subtitle: 'Pendências e próximos contatos' },
-      { id: 'kanban', label: 'Auto-CRM', subtitle: 'Funil orientado por inteligência' },
-      { id: 'contacts', label: 'Contatos', subtitle: 'Busca e exportação' },
-      ...(canManageSource ? [{ id: 'intelligence' as ActiveView, label: 'Inteligência de Conversas', subtitle: 'Qualidade, intenção e oportunidades das conversas' }] : []),
-      ...(canManageSource ? [{ id: 'campaignIntelligence' as ActiveView, label: 'Inteligência da Campanha', subtitle: 'Comparação de períodos, resgates e qualidade' }] : []),
-      ...(canManageWhatsAppSettings ? [{ id: 'whatsappSettings' as ActiveView, label: 'Configurações', subtitle: 'Integração WhatsApp' }] : []),
+      ...(hasPermission('dashboard.view') ? [{ id: 'dashboard' as ActiveView, label: 'Visão Geral', subtitle: 'Indicadores e prioridades comerciais' }] : []),
+      ...(hasPermission('attendance.view') ? [{ id: 'attendance' as ActiveView, label: 'Atendimento', subtitle: 'Responder mensagens do WhatsApp' }] : []),
+      ...(hasPermission('conversations.view') ? [{ id: 'inbox' as ActiveView, label: 'Conversas', subtitle: 'Histórico somente leitura e auditoria' }] : []),
+      ...(hasPermission('followups.view') ? [{ id: 'checklist' as ActiveView, label: 'Acompanhamento', subtitle: 'Pendências e próximos contatos' }] : []),
+      ...(hasPermission('crm.view') ? [{ id: 'kanban' as ActiveView, label: 'Auto-CRM', subtitle: 'Funil orientado por inteligência' }] : []),
+      ...(hasPermission('contacts.view') ? [{ id: 'contacts' as ActiveView, label: 'Contatos', subtitle: 'Busca e exportação' }] : []),
+      ...(hasPermission('conversation_intelligence.view') ? [{ id: 'intelligence' as ActiveView, label: 'Inteligência de Conversas', subtitle: 'Qualidade, intenção e oportunidades das conversas' }] : []),
+      ...(hasPermission('campaign_intelligence.view') ? [{ id: 'campaignIntelligence' as ActiveView, label: 'Inteligência da Campanha', subtitle: 'Comparação de períodos, resgates e qualidade' }] : []),
+      ...(canViewWhatsAppSettings ? [{ id: 'whatsappSettings' as ActiveView, label: 'Configurações', subtitle: 'Integração WhatsApp' }] : []),
     ];
   const activeNav = navSections.find((item) => item.id === activeView) ?? navSections[0];
   const adminSummary = {
@@ -1381,6 +1453,14 @@ export function App() {
             </>
           ) : null}
 
+          {activeView === 'adminUsers' && isPlatformAdmin && !isAgencyViewing ? (
+            <Section><AdminUsersPage token={session.token} companies={adminCompanies} /></Section>
+          ) : null}
+
+          {activeView === 'adminAccess' && isPlatformAdmin && !isAgencyViewing ? (
+            <Section><AdminAccessPage token={session.token} companies={adminCompanies} /></Section>
+          ) : null}
+
           {activeView === 'whatsappSettings' && canViewWhatsAppSettings ? (
             <>
               <Section>
@@ -1431,94 +1511,78 @@ export function App() {
                         <Badge variant={whatsAppSettings?.status === 'configured' ? 'success' : 'neutral'}>
                           {whatsAppSettings?.status === 'configured' ? 'Configurado' : 'Não configurado'}
                         </Badge>
+                        {whatsAppSettings?.is_coexistence ? <Badge variant="info">Coexistência</Badge> : null}
                       </div>
                       <p>
-                        A autorização acontece no ambiente oficial da Meta. O LEADSWHATS recebe o código temporário e conclui a conexão com segurança no servidor.
+                        A autorização acontece no ambiente oficial da Meta. O número que já é usado no aplicativo WhatsApp Business é
+                        conectado à plataforma e o LEADSWHATS passa a receber as conversas — inclusive as enviadas pelo próprio
+                        aplicativo, por meio dos eventos de coexistência.
                       </p>
                       <p className="lw-whatsapp-security-note">
                         Nenhum token de acesso ou segredo da Meta é exibido ou armazenado neste navegador.
                       </p>
                     </div>
+                    <div className="lw-flex-wrap-gap">
                     <Button
                       type="button"
-                      disabled={whatsAppConnecting}
-                      onClick={() => void handleConnectWhatsApp()}
+                      disabled={whatsAppConnecting || whatsAppDisconnecting || whatsAppSyncLoading}
+                      onClick={() => void handleConnectWhatsAppCoexistence()}
                     >
                       {whatsAppConnecting
                         ? 'Conectando...'
                         : whatsAppSettings?.status === 'configured'
                           ? 'Conectar novamente'
-                          : 'Conectar WhatsApp'}
+                          : 'Conectar WhatsApp (Coexistência)'}
                     </Button>
+                    {(whatsAppSettings?.access_token_configured || whatsAppSettings?.waba_id) ? (
+                      <Button type="button" variant="secondary"
+                        disabled={whatsAppDisconnecting || whatsAppConnecting || whatsAppSyncLoading}
+                        onClick={() => setConfirmWhatsAppDisconnect(true)}>
+                        {whatsAppDisconnecting ? 'Desconectando...' : 'Desconectar WhatsApp'}
+                      </Button>
+                    ) : null}
+                    </div>
+                    <Modal open={confirmWhatsAppDisconnect}
+                      onClose={() => { if (!whatsAppDisconnecting) setConfirmWhatsAppDisconnect(false); }}
+                      title="Desconectar WhatsApp?">
+                      <p>A integração com o LeadsWhats será interrompida. Leads, contatos e conversas já importados serão preservados.</p>
+                      <p>Isso não apaga seu WhatsApp do celular nem revoga todas as permissões concedidas na Meta. Você poderá conectar novamente depois.</p>
+                      <div className="lw-flex-wrap-gap">
+                        <Button type="button" variant="secondary" disabled={whatsAppDisconnecting}
+                          onClick={() => setConfirmWhatsAppDisconnect(false)}>Cancelar</Button>
+                        <Button type="button" disabled={whatsAppDisconnecting}
+                          onClick={() => void handleDisconnectWhatsApp()}>
+                          {whatsAppDisconnecting ? 'Desconectando...' : 'Confirmar desconexão'}
+                        </Button>
+                      </div>
+                    </Modal>
                   </Card>
                 ) : null}
 
-                {!whatsAppLoading && canManageWhatsAppSettings ? (
-                  <Card className="lw-whatsapp-technical-card">
+                {!whatsAppLoading && canManageWhatsAppSettings && whatsAppSettings?.is_coexistence ? (
+                  <Card className="lw-whatsapp-coexistence-card">
                     <div className="lw-whatsapp-connect-copy">
                       <div className="lw-whatsapp-connect-heading">
-                        <h3>Número de teste da Meta</h3>
-                        <Badge variant="warning">Teste / desenvolvimento</Badge>
+                        <h3>Sincronização do WhatsApp Business</h3>
+                        <Badge variant={whatsAppSettings.history_sync_status === 'completed' ? 'success' : 'neutral'}>
+                          {formatWhatsAppSyncStatus(whatsAppSettings.history_sync_status, 'Histórico')}
+                        </Badge>
+                        <Badge variant={whatsAppSettings.contacts_sync_status === 'completed' ? 'success' : 'neutral'}>
+                          {formatWhatsAppSyncStatus(whatsAppSettings.contacts_sync_status, 'Contatos')}
+                        </Badge>
                       </div>
                       <p>
-                        Use este cadastro manual somente com as credenciais temporárias exibidas em WhatsApp &gt; API Setup no painel da Meta.
-                        Para números empresariais, prefira o botão Conectar WhatsApp acima.
+                        A Meta importa os contatos e as mensagens dos últimos 180 dias do aplicativo WhatsApp Business. O histórico é
+                        processado em segundo plano no servidor, sem mover os leads no funil nem afetar os indicadores de tempo real.
                       </p>
                     </div>
-
-                    <form className="lw-whatsapp-technical-form" onSubmit={handleSaveWhatsAppTechnicalSettings}>
-                      <div className="lw-grid-2">
-                        <FormGroup label="Número de teste" hint="Inclua o código do país, por exemplo +15551234567.">
-                          <Input
-                            type="tel"
-                            autoComplete="tel"
-                            placeholder="+15551234567"
-                            value={whatsAppTechnicalForm.phone_number}
-                            onChange={(event) => setWhatsAppTechnicalForm((current) => ({ ...current, phone_number: event.target.value }))}
-                            required
-                          />
-                        </FormGroup>
-                        <FormGroup label="Phone Number ID">
-                          <Input
-                            inputMode="numeric"
-                            autoComplete="off"
-                            value={whatsAppTechnicalForm.phone_number_id}
-                            onChange={(event) => setWhatsAppTechnicalForm((current) => ({ ...current, phone_number_id: event.target.value }))}
-                            required
-                          />
-                        </FormGroup>
-                        <FormGroup label="WhatsApp Business Account ID">
-                          <Input
-                            inputMode="numeric"
-                            autoComplete="off"
-                            value={whatsAppTechnicalForm.business_account_id}
-                            onChange={(event) => setWhatsAppTechnicalForm((current) => ({ ...current, business_account_id: event.target.value }))}
-                            required
-                          />
-                        </FormGroup>
-                        <FormGroup
-                          label="Token temporário"
-                          hint={whatsAppSettings?.access_token_configured
-                            ? 'Já existe um token protegido. Digite outro somente para substituí-lo.'
-                            : 'O token será criptografado e não será exibido novamente.'}
-                        >
-                          <Input
-                            type="password"
-                            autoComplete="new-password"
-                            placeholder={whatsAppSettings?.access_token_configured ? 'Token já configurado — informe um novo' : 'Cole o token temporário'}
-                            value={whatsAppTechnicalForm.access_token}
-                            onChange={(event) => setWhatsAppTechnicalForm((current) => ({ ...current, access_token: event.target.value }))}
-                            required
-                          />
-                        </FormGroup>
-                      </div>
-                      <div className="lw-whatsapp-technical-actions">
-                        <Button type="submit" disabled={whatsAppTechnicalSaving}>
-                          {whatsAppTechnicalSaving ? 'Salvando...' : 'Salvar número de teste'}
-                        </Button>
-                        {whatsAppSettings?.access_token_configured ? <Badge variant="success">Token protegido configurado</Badge> : null}
-                      </div>
-                    </form>
+                    <Button
+                      type="button"
+                      disabled={whatsAppSyncLoading || whatsAppDisconnecting || whatsAppConnecting}
+                      onClick={() => void handleRequestCoexistenceSync('both')}
+                    >
+                      {whatsAppSyncLoading ? 'Solicitando...' : 'Sincronizar novamente'}
+                    </Button>
                   </Card>
                 ) : null}
 
@@ -1538,7 +1602,7 @@ export function App() {
             />
           ) : null}
 
-      {activeView === 'attendance' ? <AttendancePage token={session.token} tenantContext={tenantContextToken} readOnly={isAgencyViewing} /> : null}
+      {activeView === 'attendance' ? <AttendancePage token={session.token} tenantContext={tenantContextToken} readOnly={isAgencyViewing || !hasPermission('attendance.respond')} /> : null}
 
       {activeView === 'inbox' ? (
       <Section>
@@ -1640,7 +1704,7 @@ export function App() {
                       <small><strong>Etapa:</strong> {inboxDetail.lead.current_stage || 'Sem etapa'}</small>
                       <small><strong>Responsável:</strong> {inboxDetail.owner.owner_name || 'Sem responsável'}</small>
                     </div>
-                    {canManageSource ? (
+                    {canManageCrm ? (
                       <form onSubmit={(event) => void handleUpdateInboxOwner(event)} className="lw-grid-2 lw-mt-2 lw-mb-2">
                         <div className="lw-flex-wrap-gap lw-flex-align-center-gap">
                           <label className="lw-flex-align-center-gap lw-m-0">
@@ -1669,7 +1733,7 @@ export function App() {
                             {assignableUsersError}
                           </small>
                         ) : null}
-                        {!assignableUsersError && canManageSource && inboxAssignableOwnerOptions.length === 0 ? (
+                        {!assignableUsersError && canManageCrm && inboxAssignableOwnerOptions.length === 0 ? (
                           <small className="lw-text-xs-warning">
                             Nenhum usuário atribuível encontrado. Verifique usuários ativos da empresa.
                           </small>
@@ -1836,7 +1900,7 @@ export function App() {
           kanban={kanban}
           loading={kanbanLoading}
           error={kanbanError}
-          canManage={canManageSource}
+          canManage={canManageCrm}
           onPipelineChange={setSelectedPipelineId}
           onRefresh={async () => {
             if (selectedPipelineId) await refreshKanban(session.token, selectedPipelineId, false, tenantContextToken);
@@ -1877,7 +1941,7 @@ export function App() {
               {(kanban?.columns ?? []).map((column) => <option key={column.id} value={column.id}>{column.name}</option>)}
             </select>
             <button type="submit">Aplicar filtros</button>
-            {canManageSource ? (
+            {canExportContacts ? (
               <button type="button" onClick={() => void handleExportContactsCsv()} disabled={contactsExportLoading}>
                 {contactsExportLoading ? 'Exportando...' : 'Exportar CSV'}
               </button>
@@ -1924,7 +1988,7 @@ export function App() {
         <ConversationIntelligencePage
           token={session.token}
           tenantContext={tenantContextToken}
-          readOnly={isAgencyViewing}
+          readOnly={isAgencyViewing || !hasPermission('conversation_intelligence.analyze')}
           initialConversationId={intelligenceConversationId}
         />
       ) : null}
@@ -1933,7 +1997,7 @@ export function App() {
         <CampaignIntelligencePage
           token={session.token}
           tenantContext={tenantContextToken}
-          readOnly={isAgencyViewing}
+          readOnly={isAgencyViewing || !hasPermission('campaign_intelligence.analyze')}
           onOpenConversation={(conversationId) => {
             setIntelligenceConversationId(conversationId);
             setActiveView('intelligence');

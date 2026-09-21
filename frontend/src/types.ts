@@ -1,4 +1,8 @@
-export type Role = 'admin' | 'gestor' | 'sdr' | 'platform_admin';
+export type Role = 'admin' | 'gestor' | 'sdr' | 'platform_admin' | 'custom';
+
+export type AccessProfileSummary = {
+  id: number; name: string; data_scope: 'own' | 'company'; is_full_access: boolean;
+};
 
 export type AuthUser = {
   id: number;
@@ -6,6 +10,37 @@ export type AuthUser = {
   email: string;
   role: Role;
   company_id: number | null;
+  company?: { id: number; name: string; slug: string } | null;
+  access_profile: (AccessProfileSummary & { permissions?: string[] }) | null;
+  permissions: string[];
+  data_scope: 'own' | 'company';
+  must_change_password: boolean;
+};
+
+export type AdminUserItem = {
+  id: number; company_id: number; company_name: string; name: string; email: string; role: Role;
+  active: boolean; must_change_password: boolean; access_profile: AccessProfileSummary | null; created_at: string;
+};
+
+export type AdminUsersResponse = {
+  data: AdminUserItem[];
+  meta: { page: number; per_page: number; total: number; last_page: number };
+};
+
+export type PermissionItem = { id: number; code: string; name: string; group_name: string };
+
+export type AccessProfileItem = {
+  id: number; company_id: number | null; company_name: string | null; source_profile_id: number | null;
+  source_version: number | null; name: string; slug: string; description: string | null;
+  data_scope: 'own' | 'company'; version: number; is_system: boolean; is_full_access: boolean;
+  active: boolean; users_count: number; permissions: string[];
+};
+
+export type AccessAuditItem = {
+  id: number; event: string; subject_type: string; subject_id: number | null;
+  before: Record<string, unknown> | null; after: Record<string, unknown> | null; created_at: string;
+  actor?: { id: number; name: string; email: string } | null;
+  company?: { id: number; name: string } | null;
 };
 
 export type LoginResponse = {
@@ -393,9 +428,19 @@ export type LeadOwnerUpdateResponse = {
   };
 };
 
+export type WhatsAppConnectionMode = 'embedded_signup' | 'coexistence';
+
+export type WhatsAppSyncStatus = 'requested' | 'completed' | 'error' | null;
+
 export type WhatsAppSettings = {
   provider: 'meta_cloud';
   status: 'not_configured' | 'configured' | 'error';
+  connection_mode: WhatsAppConnectionMode;
+  is_coexistence: boolean;
+  coexistence_app_id: string | null;
+  coexistence_config_id: string | null;
+  coexistence_feature_type: string | null;
+  coexistence_session_info_version: string | null;
   phone_number: string | null;
   phone_number_id: string | null;
   business_account_id: string | null;
@@ -405,6 +450,10 @@ export type WhatsAppSettings = {
   catalog_ids: string[];
   dataset_ids: string[];
   instagram_account_ids: string[];
+  coexistence_opted_in_at: string | null;
+  history_sync_status: WhatsAppSyncStatus;
+  contacts_sync_status: WhatsAppSyncStatus;
+  token_expires_at: string | null;
   access_token_configured: boolean;
   webhook_verify_token_configured: boolean;
   webhook_verify_token?: string | null;
@@ -416,38 +465,42 @@ export type WhatsAppSettingsResponse = {
   data: WhatsAppSettings;
 };
 
-export type UpdateWhatsAppSettingsRequest = {
-  provider: 'meta_cloud';
-  phone_number: string;
-  phone_number_id: string;
-  business_account_id: string;
-  access_token: string;
-};
-
-export type WhatsAppEmbeddedSignupData = {
+export type WhatsAppCoexistenceData = {
   phone_number_id: string;
   waba_id: string;
   business_id?: string;
+  phone_number?: string;
   page_ids: string[];
   catalog_ids: string[];
   dataset_ids: string[];
   instagram_account_ids: string[];
 };
 
-export type WhatsAppEmbeddedSignupEvent = {
-  data: WhatsAppEmbeddedSignupData;
+/**
+ * Eventos de session logging do Embedded Signup. A Coexistência conclui com
+ * FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING; os demais são aceitos por segurança.
+ */
+export type WhatsAppCoexistenceFinishEvent =
+  | 'FINISH'
+  | 'FINISH_ONLY_WABA'
+  | 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING';
+
+export type WhatsAppCoexistenceEvent = {
+  data: WhatsAppCoexistenceData;
   type: 'WA_EMBEDDED_SIGNUP';
-  event: 'FINISH';
+  event: WhatsAppCoexistenceFinishEvent;
 };
 
-export type CompleteWhatsAppEmbeddedSignupRequest = {
+export type CompleteWhatsAppCoexistenceRequest = {
   code: string;
-  embedded_signup: WhatsAppEmbeddedSignupEvent;
+  coexistence: WhatsAppCoexistenceEvent;
 };
 
-export type CompleteWhatsAppEmbeddedSignupResponse = {
+export type CompleteWhatsAppCoexistenceResponse = {
   data: WhatsAppSettings;
 };
+
+export type WhatsAppCoexistenceSyncType = 'contacts' | 'history' | 'both';
 
 // ==== Conversation Intelligence ====
 
