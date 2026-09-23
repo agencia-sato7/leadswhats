@@ -20,6 +20,7 @@ import {
   login,
   requestWhatsAppCoexistenceSync,
   revokeAdminTenantViewContext,
+  updateAdminCompany,
   updateLeadOwner,
 } from './api';
 import { createSingleFlight, settleRefreshes, startPolling } from './refresh';
@@ -52,6 +53,7 @@ import {
 import type {
   AdminCompanyCreateRequest,
   AdminCompanyListItem,
+  AdminCompanyUpdateRequest,
   AdminTenantViewContext,
   AuthUser,
   AssignableUser,
@@ -68,6 +70,9 @@ import type {
   PipelineListItem,
   WhatsAppSettings,
 } from './types';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const SLUG_PATTERN = /^[a-z0-9_-]+$/;
 
 type Session = {
   token: string;
@@ -249,6 +254,13 @@ export function App() {
   const [adminCompanyCreateError, setAdminCompanyCreateError] = useState<string | null>(null);
   const [adminCompanyCreateSuccess, setAdminCompanyCreateSuccess] = useState<string | null>(null);
   const [adminCompanyTokenInfo, setAdminCompanyTokenInfo] = useState<{ configured: boolean; masked: string | null } | null>(null);
+  const [adminCompanyEdit, setAdminCompanyEdit] = useState<AdminCompanyListItem | null>(null);
+  const [adminEditName, setAdminEditName] = useState('');
+  const [adminEditSlug, setAdminEditSlug] = useState('');
+  const [adminEditActive, setAdminEditActive] = useState(true);
+  const [adminRecipientValue, setAdminRecipientValue] = useState('');
+  const [adminCompanyEditLoading, setAdminCompanyEditLoading] = useState(false);
+  const [adminCompanyEditError, setAdminCompanyEditError] = useState<string | null>(null);
   const [whatsAppSettings, setWhatsAppSettings] = useState<WhatsAppSettings | null>(null);
   const [whatsAppLoading, setWhatsAppLoading] = useState(false);
   const [whatsAppConnecting, setWhatsAppConnecting] = useState(false);
@@ -263,6 +275,7 @@ export function App() {
     admin_user: { name: '', email: '', password: '' },
     settings: {
       timezone: 'America/Sao_Paulo',
+      daily_report_recipient: '',
       workday_start_time: '08:00:00',
       workday_end_time: '18:00:00',
       lunch_start_time: '12:00:00',
@@ -1012,12 +1025,18 @@ export function App() {
     });
   }
 
+  function getAdminRecipientEmail(): string {
+    return adminForm.settings.daily_report_recipient.trim() || adminForm.admin_user.email.trim();
+  }
+
   function getAdminFormValidationError(): string | null {
     if (!adminForm.company.name.trim()) return 'Informe o nome da empresa.';
     if (!adminForm.company.slug.trim()) return 'Informe o identificador da empresa.';
     if (!adminForm.admin_user.name.trim()) return 'Informe o nome do administrador inicial.';
     if (!adminForm.admin_user.email.trim()) return 'Informe o e-mail do administrador inicial.';
     if (!adminForm.admin_user.password.trim()) return 'Informe a senha do administrador inicial.';
+    if (!getAdminRecipientEmail()) return 'Informe o e-mail que receberá o relatório diário.';
+    if (!EMAIL_PATTERN.test(getAdminRecipientEmail())) return 'Informe um e-mail válido para o relatório diário.';
     if (adminForm.settings.repeated_lead_window_days < 1) return 'Janela de lead repetido deve ser maior que zero.';
     if (adminForm.settings.rescue_threshold_hours < 1) return 'O limite para resgate deve ser maior que zero.';
     if (adminForm.settings.first_response_sla_minutes < 1) return 'SLA de primeira resposta deve ser maior que zero.';
@@ -1053,6 +1072,10 @@ export function App() {
           email: adminForm.admin_user.email.trim(),
           password: adminForm.admin_user.password,
         },
+        settings: {
+          ...adminForm.settings,
+          daily_report_recipient: getAdminRecipientEmail().toLowerCase(),
+        },
       };
       const response = await createAdminCompany(session.token, payload);
       setAdminCompanyCreateSuccess(response.message || 'Empresa criada com sucesso.');
@@ -1065,6 +1088,7 @@ export function App() {
         ...prev,
         company: { name: '', slug: '' },
         admin_user: { name: '', email: '', password: '' },
+        settings: { ...prev.settings, daily_report_recipient: '' },
       }));
 
       await refreshAdminCompanies(session.token);
@@ -1072,6 +1096,64 @@ export function App() {
       setAdminCompanyCreateError(parseApiErrorMessage(err, 'Não foi possível criar a empresa.'));
     } finally {
       setAdminCompanyCreateLoading(false);
+    }
+  }
+
+  function openAdminCompanyEdit(company: AdminCompanyListItem) {
+    setAdminCompanyEdit(company);
+    setAdminEditName(company.name);
+    setAdminEditSlug(company.slug);
+    setAdminEditActive(company.active);
+    setAdminRecipientValue(company.daily_report_recipient ?? '');
+    setAdminCompanyEditError(null);
+  }
+
+  async function handleSaveAdminCompany() {
+    if (!session || !adminCompanyEdit) return;
+
+    const name = adminEditName.trim();
+    const slug = adminEditSlug.trim().toLowerCase();
+    const recipient = adminRecipientValue.trim().toLowerCase();
+
+    if (!name) {
+      setAdminCompanyEditError('Informe o nome da empresa.');
+      return;
+    }
+    if (!slug) {
+      setAdminCompanyEditError('Informe o identificador da empresa.');
+      return;
+    }
+    if (!SLUG_PATTERN.test(slug)) {
+      setAdminCompanyEditError('O identificador aceita apenas letras, números, hífen e sublinhado.');
+      return;
+    }
+    if (!EMAIL_PATTERN.test(recipient)) {
+      setAdminCompanyEditError('Informe um e-mail válido para o relatório diário.');
+      return;
+    }
+
+    const payload: AdminCompanyUpdateRequest = {};
+    if (name !== adminCompanyEdit.name) payload.name = name;
+    if (slug !== adminCompanyEdit.slug) payload.slug = slug;
+    if (adminEditActive !== adminCompanyEdit.active) payload.active = adminEditActive;
+    if (recipient !== (adminCompanyEdit.daily_report_recipient ?? '')) payload.daily_report_recipient = recipient;
+
+    if (Object.keys(payload).length === 0) {
+      setAdminCompanyEdit(null);
+      return;
+    }
+
+    setAdminCompanyEditLoading(true);
+    setAdminCompanyEditError(null);
+    try {
+      await updateAdminCompany(session.token, adminCompanyEdit.id, payload);
+      setAdminCompanyEdit(null);
+      setAdminRecipientValue('');
+      await refreshAdminCompanies(session.token);
+    } catch (err) {
+      setAdminCompanyEditError(parseApiErrorMessage(err, 'Não foi possível atualizar a clínica.'));
+    } finally {
+      setAdminCompanyEditLoading(false);
     }
   }
 
@@ -1348,6 +1430,23 @@ export function App() {
                   </Card>
 
                   <Card>
+                    <h3>Relatório diário de IA</h3>
+                    <div className="lw-admin-grid">
+                      <FormGroup
+                        label="E-mail destinatário"
+                        hint="Recebe o relatório todo dia às 18:30 (fuso horário da clínica). Deixe vazio para usar o e-mail do administrador inicial."
+                      >
+                        <Input
+                          type="email"
+                          value={adminForm.settings.daily_report_recipient}
+                          onChange={(e) => updateAdminForm('settings.daily_report_recipient', e.target.value)}
+                          placeholder={adminForm.admin_user.email || 'relatorios@clinica.com'}
+                        />
+                      </FormGroup>
+                    </div>
+                  </Card>
+
+                  <Card>
                     <h3>Configurações operacionais</h3>
                     <div className="lw-admin-grid">
                       <FormGroup label="Fuso horário">
@@ -1419,6 +1518,7 @@ export function App() {
                         <th>Usuários</th>
                         <th>Funis</th>
                         <th>Configurações operacionais</th>
+                        <th>Relatório diário</th>
                         <th>Criada em</th>
                         <th>Ações</th>
                       </tr>
@@ -1433,6 +1533,13 @@ export function App() {
                           <td>{company.users_count}</td>
                           <td>{company.pipelines_count}</td>
                           <td><Badge variant={company.has_business_settings ? 'success' : 'warning'}>{company.has_business_settings ? 'Sim' : 'Não'}</Badge></td>
+                          <td>
+                            {company.daily_report_recipient ? (
+                              <Badge variant="success">{company.daily_report_recipient}</Badge>
+                            ) : (
+                              <Badge variant="warning">sem e-mail</Badge>
+                            )}
+                          </td>
                           <td>{formatDateTime(company.created_at)}</td>
                           <td>
                             <Button
@@ -1443,6 +1550,14 @@ export function App() {
                             >
                               {adminViewContextLoadingCompanyId === company.id ? 'Abrindo...' : 'Abrir clínica'}
                             </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              style={{ marginLeft: 8 }}
+                              onClick={() => openAdminCompanyEdit(company)}
+                            >
+                              Editar
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -1450,6 +1565,57 @@ export function App() {
                   </Table>
                 ) : null}
               </Section>
+
+              <Modal
+                open={adminCompanyEdit !== null}
+                onClose={() => setAdminCompanyEdit(null)}
+                title={adminCompanyEdit ? `Editar clínica — ${adminCompanyEdit.name}` : 'Editar clínica'}
+              >
+                {adminCompanyEdit ? (
+                  <div className="lw-admin-grid">
+                    <FormGroup label="Nome da empresa">
+                      <Input
+                        value={adminEditName}
+                        onChange={(e) => setAdminEditName(e.target.value)}
+                        placeholder="Nome da empresa"
+                      />
+                    </FormGroup>
+                    <FormGroup
+                      label="Identificador (slug)"
+                      hint="Usado em URLs e integrações. Aceita letras minúsculas, números, hífen e sublinhado."
+                    >
+                      <Input
+                        value={adminEditSlug}
+                        onChange={(e) => setAdminEditSlug(e.target.value)}
+                        placeholder="identificador-da-empresa"
+                      />
+                    </FormGroup>
+                    <FormGroup label="Status">
+                      <Select value={adminEditActive ? 'active' : 'inactive'} onChange={(e) => setAdminEditActive(e.target.value === 'active')}>
+                        <option value="active">Ativa</option>
+                        <option value="inactive">Inativa</option>
+                      </Select>
+                    </FormGroup>
+                    <FormGroup
+                      label="E-mail do relatório diário"
+                      hint="Enviado todo dia às 18:30 (fuso horário da clínica)."
+                    >
+                      <Input
+                        type="email"
+                        value={adminRecipientValue}
+                        onChange={(e) => setAdminRecipientValue(e.target.value)}
+                        placeholder="relatorios@clinica.com"
+                      />
+                    </FormGroup>
+                    {adminCompanyEditError ? <ErrorState message={adminCompanyEditError} /> : null}
+                    <div>
+                      <Button type="button" disabled={adminCompanyEditLoading} onClick={() => void handleSaveAdminCompany()}>
+                        {adminCompanyEditLoading ? 'Salvando...' : 'Salvar alterações'}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </Modal>
             </>
           ) : null}
 

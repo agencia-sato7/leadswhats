@@ -175,6 +175,45 @@ services:
       - leadswhats_network
     restart: unless-stopped
 
+  # Scheduler: dispara o relatório diário de IA (leadswhats:daily-report).
+  # O comando roda a cada 5 minutos em UTC e decide, por empresa, se a hora
+  # local (company_business_settings.timezone) bate com o horário configurado.
+  # O envio do e-mail vai para a fila padrão e é processado pelo queue-worker.
+  scheduler:
+    image: laravelsail/php84-composer:latest
+    container_name: leadswhats_scheduler
+    working_dir: /var/www
+    volumes:
+      - ./backend:/var/www
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ai-service:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    environment:
+      APP_DEBUG: "true"
+      APP_URL: https://leadswhats.appsato7.com.br
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      CONVERSATION_ANALYZER: python
+      AI_SERVICE_URL: http://ai-service:8001
+      AI_SERVICE_TIMEOUT_SECONDS: "90"
+      AI_SERVICE_CONNECT_TIMEOUT_SECONDS: "5"
+    command: >
+      sh -c "
+        apt-get update && apt-get install -y libpq-dev &&
+        docker-php-ext-install pdo_pgsql &&
+        until [ -f artisan ] && [ -d vendor ]; do sleep 2; done &&
+        php artisan schedule:work
+      "
+    networks:
+      - leadswhats_network
+    restart: unless-stopped
+
   frontend:
     image: node:24-alpine
     container_name: leadswhats_frontend

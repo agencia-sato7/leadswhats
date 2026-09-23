@@ -12,6 +12,8 @@ from app.models import (
     CampaignEvidenceResult,
     ConversationAnalysisRequest,
     ConversationAnalysisResponse,
+    DailyReportRequest,
+    DailyReportResponse,
     ErrorDetail,
     ErrorResponse,
     HealthResponse,
@@ -19,6 +21,7 @@ from app.models import (
 from app.prompts import (
     CAMPAIGN_CONSOLIDATION_PROMPT_VERSION,
     CAMPAIGN_EVIDENCE_PROMPT_VERSION,
+    DAILY_REPORT_PROMPT_VERSION,
     PROMPT_VERSION,
 )
 from app.provider import (
@@ -146,6 +149,25 @@ def consolidate_campaign(
     return CampaignConsolidationResponse(
         **result.model_dump(),
         prompt_version=CAMPAIGN_CONSOLIDATION_PROMPT_VERSION,
+        model_provider="openai",
+        model_name=settings.openai_model,
+    )
+
+
+@app.post(
+    "/v1/analyze/daily-report",
+    response_model=DailyReportResponse,
+    responses={502: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
+)
+def generate_daily_report(
+    payload: DailyReportRequest,
+    provider: ConversationAnalysisProvider = Depends(get_analysis_provider),
+    settings: Settings = Depends(get_settings),
+) -> DailyReportResponse:
+    result = provider.generate_daily_report(payload)
+    return DailyReportResponse(
+        **result.model_dump(),
+        prompt_version=DAILY_REPORT_PROMPT_VERSION,
         model_provider="openai",
         model_name=settings.openai_model,
     )

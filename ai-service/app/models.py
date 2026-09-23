@@ -191,6 +191,29 @@ class CampaignConsolidationResponse(ProviderCampaignConsolidation):
     model_name: NonEmptyText
 
 
+class DailyReportRequest(StrictModel):
+    company: dict[str, Any]
+    report_date: NonEmptyText
+    metrics: dict[str, Any]
+    quality: dict[str, Any]
+    team: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ProviderDailyReport(StrictModel):
+    executive_summary: NonEmptyText
+    overall_verdict: str = Field(pattern="^(good|needs_improvement|poor)$")
+    volume_summary: NonEmptyText
+    quality_summary: NonEmptyText
+    opportunities: list[str]
+    priorities: list[str]
+
+
+class DailyReportResponse(ProviderDailyReport):
+    prompt_version: NonEmptyText
+    model_provider: NonEmptyText
+    model_name: NonEmptyText
+
+
 class HealthResponse(StrictModel):
     status: str
     provider: str

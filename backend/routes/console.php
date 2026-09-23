@@ -5,9 +5,12 @@ use App\Models\CompanyBusinessSetting;
 use App\Models\Pipeline;
 use App\Services\DemoBootstrapService;
 use App\Services\DemoCampaignIntelligenceService;
+use App\Services\Domain\DailyReportService;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Facades\Schema;
 
 Artisan::command('inspire', function () {
@@ -165,3 +168,75 @@ Artisan::command('leadswhats:doctor', function () {
 
     return $hasFail ? 1 : 0;
 })->purpose('Valida readiness operacional e configuração crítica do ambiente');
+
+Artisan::command('leadswhats:daily-report {--company=} {--date=} {--send-time=18:30} {--force}', function (DailyReportService $dailyReportService) {
+    $companyOption = $this->option('company');
+    $dateOption = $this->option('date');
+    $sendTime = (string) ($this->option('send-time') ?: DailyReportService::DEFAULT_SEND_TIME);
+
+    if ($companyOption !== null && $companyOption !== '') {
+        $company = Company::query()
+            ->when(
+                is_numeric($companyOption),
+                fn ($query) => $query->whereKey((int) $companyOption),
+                fn ($query) => $query->where('slug', $companyOption),
+            )
+            ->first();
+
+        if ($company === null) {
+            $this->error('Empresa não encontrada: '.$companyOption);
+
+            return 1;
+        }
+
+        $report = $dailyReportService->generateForCompany(
+            $company,
+            $dateOption ? CarbonImmutable::parse($dateOption) : null,
+            (bool) $this->option('force'),
+        );
+
+        if ($report === null) {
+            $this->warn('Relatório de '.$company->name.' já foi enviado. Use --force para reenviar.');
+
+            return 0;
+        }
+
+        $this->newLine();
+        $this->info('Relatório diário processado.');
+        $this->line('empresa: '.$company->name);
+        $this->line('data: '.$report->report_date->toDateString());
+        $this->line('status: '.$report->status);
+        $this->line('destinatários: '.count($report->recipients ?? []));
+        $this->line('veredito da IA: '.($report->overall_verdict ?? 'n/a'));
+
+        if ($report->status !== 'sent') {
+            $this->warn('Nada foi enviado (status: '.$report->status.').');
+
+            if (filled($report->error_message)) {
+                $this->line('motivo: '.$report->error_message);
+            }
+        }
+
+        $this->newLine();
+
+        // "skipped" (clínica sem e-mail cadastrado) não é erro de execução.
+        return in_array($report->status, ['sent', 'skipped'], true) ? 0 : 1;
+    }
+
+    $summary = $dailyReportService->runScheduled($sendTime);
+
+    $this->newLine();
+    $this->info('Rodada de relatórios diários concluída (horário local '.$sendTime.').');
+    $this->line('enviados: '.$summary['sent']);
+    $this->line('ignorados (fuso/horário): '.$summary['skipped']);
+    $this->line('ignorados (sem e-mail cadastrado): '.$summary['without_recipient']);
+    $this->line('falhas: '.$summary['failed']);
+    $this->newLine();
+
+    return $summary['failed'] > 0 ? 1 : 0;
+})->purpose('Gera e envia o relatório diário de IA para o e-mail cadastrado de cada empresa');
+
+Schedule::command('leadswhats:daily-report')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->timezone('UTC');

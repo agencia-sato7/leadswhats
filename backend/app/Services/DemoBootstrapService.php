@@ -101,6 +101,7 @@ class DemoBootstrapService
             ['company_id' => $company->id],
             [
                 'timezone' => 'America/Sao_Paulo',
+                'daily_report_recipient' => 'gestor@empresa.local',
                 'workday_start_time' => '08:00:00',
                 'workday_end_time' => '18:00:00',
                 'lunch_start_time' => '12:00:00',
@@ -119,6 +120,14 @@ class DemoBootstrapService
         if (blank($settings->webhook_token)) {
             $settings->forceFill([
                 'webhook_token' => 'demo_'.Str::lower(Str::random(28)),
+            ])->save();
+        }
+
+        // Destinatário do relatório diário de IA: exigido pelo cadastro da clínica
+        // na Central da Agência (sem ele o relatório fica "skipped").
+        if (blank($settings->daily_report_recipient)) {
+            $settings->forceFill([
+                'daily_report_recipient' => 'gestor@empresa.local',
             ])->save();
         }
 

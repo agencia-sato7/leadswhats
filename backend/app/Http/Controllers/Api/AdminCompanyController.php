@@ -31,6 +31,7 @@ class AdminCompanyController extends Controller
 
             'settings' => ['required', 'array'],
             'settings.timezone' => ['required', 'string', 'max:100'],
+            'settings.daily_report_recipient' => ['required', 'email', 'max:255'],
             'settings.workday_start_time' => ['required', 'date_format:H:i:s'],
             'settings.workday_end_time' => ['required', 'date_format:H:i:s'],
             'settings.lunch_start_time' => ['nullable', 'date_format:H:i:s'],
@@ -65,6 +66,7 @@ class AdminCompanyController extends Controller
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'slug' => ['sometimes', 'required', 'string', 'max:255', 'alpha_dash', Rule::unique('companies', 'slug')->ignore($companyId)],
             'active' => ['sometimes', 'required', 'boolean'],
+            'daily_report_recipient' => ['sometimes', 'required', 'email', 'max:255'],
         ]);
 
         $payload = $service->updateCompany($companyId, $validated);

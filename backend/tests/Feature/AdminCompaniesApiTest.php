@@ -22,6 +22,7 @@ class AdminCompaniesApiTest extends TestCase
         CompanyBusinessSetting::create([
             'company_id' => $company->id,
             'timezone' => 'America/Sao_Paulo',
+            'daily_report_recipient' => 'relatorios@empresa-a.com',
             'workday_start_time' => '08:00:00',
             'workday_end_time' => '18:00:00',
             'working_days' => [1, 2, 3, 4, 5],
@@ -42,7 +43,7 @@ class AdminCompaniesApiTest extends TestCase
             ->assertOk()
             ->assertJsonStructure([
                 'data' => [
-                    '*' => ['id', 'name', 'slug', 'active', 'users_count', 'pipelines_count', 'has_business_settings', 'created_at'],
+                    '*' => ['id', 'name', 'slug', 'active', 'users_count', 'pipelines_count', 'has_business_settings', 'daily_report_recipient', 'created_at'],
                 ],
             ])
             ->assertJsonFragment([
@@ -53,6 +54,7 @@ class AdminCompaniesApiTest extends TestCase
                 'users_count' => 1,
                 'pipelines_count' => 1,
                 'has_business_settings' => true,
+                'daily_report_recipient' => 'relatorios@empresa-a.com',
             ]);
     }
 
@@ -70,6 +72,12 @@ class AdminCompaniesApiTest extends TestCase
 
             $this->withHeaders(['Authorization' => 'Bearer '.$token])
                 ->postJson('/api/v1/admin/companies', $this->validPayload())
+                ->assertForbidden();
+
+            $this->withHeaders(['Authorization' => 'Bearer '.$token])
+                ->patchJson('/api/v1/admin/companies/'.$company->id, [
+                    'daily_report_recipient' => 'novo@empresa-tenant-admin-api.com',
+                ])
                 ->assertForbidden();
         }
     }
@@ -94,7 +102,8 @@ class AdminCompaniesApiTest extends TestCase
             ->assertJsonPath('data.company.slug', 'clinica-exemplo')
             ->assertJsonPath('data.admin_user.role', 'admin')
             ->assertJsonPath('data.settings.webhook_token_configured', true)
-            ->assertJsonPath('data.pipeline.columns_count', 5);
+            ->assertJsonPath('data.pipeline.columns_count', 5)
+            ->assertJsonPath('data.settings.daily_report_recipient', 'relatorios@clinica-exemplo.com');
 
         $this->assertDatabaseHas('companies', [
             'slug' => 'clinica-exemplo',
@@ -205,6 +214,61 @@ class AdminCompaniesApiTest extends TestCase
         ]);
     }
 
+    public function test_platform_admin_can_update_the_daily_report_recipient_even_without_existing_settings(): void
+    {
+        $platformAdmin = $this->createPlatformAdmin('platform.recipient@test.local');
+        $token = $this->login($platformAdmin->email);
+        $company = Company::create(['name' => 'Empresa Recip', 'slug' => 'empresa-recip']);
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->patchJson('/api/v1/admin/companies/'.$company->id, [
+                'daily_report_recipient' => 'RELATORIOS@Empresa-Recip.com',
+            ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Company updated successfully.')
+            ->assertJsonPath('data.daily_report_recipient', 'relatorios@empresa-recip.com');
+
+        // A linha de company_business_settings é criada on-the-fly com os defaults.
+        $this->assertDatabaseHas('company_business_settings', [
+            'company_id' => $company->id,
+            'daily_report_recipient' => 'relatorios@empresa-recip.com',
+        ]);
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->getJson('/api/v1/admin/companies/'.$company->id)
+            ->assertOk()
+            ->assertJsonPath('data.settings.daily_report_recipient', 'relatorios@empresa-recip.com');
+    }
+
+    public function test_daily_report_recipient_is_required_on_create_and_validated_on_patch(): void
+    {
+        $platformAdmin = $this->createPlatformAdmin('platform.recipient.validation@test.local');
+        $token = $this->login($platformAdmin->email);
+
+        $payload = $this->validPayload();
+        unset($payload['settings']['daily_report_recipient']);
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->postJson('/api/v1/admin/companies', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['settings.daily_report_recipient']);
+
+        $payload = $this->validPayload();
+        $payload['settings']['daily_report_recipient'] = 'nao-e-um-email';
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->postJson('/api/v1/admin/companies', $payload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['settings.daily_report_recipient']);
+
+        $company = Company::create(['name' => 'Empresa Patch Inv', 'slug' => 'empresa-patch-inv']);
+
+        $this->withHeaders(['Authorization' => 'Bearer '.$token])
+            ->patchJson('/api/v1/admin/companies/'.$company->id, ['daily_report_recipient' => 'invalido'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['daily_report_recipient']);
+    }
+
     private function createPlatformAdmin(string $email): User
     {
         return User::create([
@@ -254,6 +318,7 @@ class AdminCompaniesApiTest extends TestCase
             ],
             'settings' => [
                 'timezone' => 'America/Sao_Paulo',
+                'daily_report_recipient' => 'relatorios@clinica-exemplo.com',
                 'workday_start_time' => '08:00:00',
                 'workday_end_time' => '18:00:00',
                 'lunch_start_time' => '12:00:00',

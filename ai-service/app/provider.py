@@ -8,12 +8,19 @@ from app.config import Settings
 from app.models import (
     CampaignConsolidationRequest,
     CampaignEvidenceBatchRequest,
+    DailyReportRequest,
     ProviderCampaignConsolidation,
     ProviderCampaignEvidenceBatch,
+    ProviderDailyReport,
     ConversationAnalysisRequest,
     ProviderConversationAnalysis,
 )
-from app.prompts import CAMPAIGN_CONSOLIDATION_PROMPT, CAMPAIGN_EVIDENCE_PROMPT, SYSTEM_PROMPT
+from app.prompts import (
+    CAMPAIGN_CONSOLIDATION_PROMPT,
+    CAMPAIGN_EVIDENCE_PROMPT,
+    DAILY_REPORT_PROMPT,
+    SYSTEM_PROMPT,
+)
 
 
 class ProviderError(RuntimeError):
@@ -38,6 +45,9 @@ class ConversationAnalysisProvider(Protocol):
     ) -> ProviderCampaignConsolidation:
         ...
 
+    def generate_daily_report(self, payload: DailyReportRequest) -> ProviderDailyReport:
+        ...
+
 
 class OpenAIConversationAnalysisProvider:
     def __init__(self, settings: Settings) -> None:
@@ -55,6 +65,9 @@ class OpenAIConversationAnalysisProvider:
         self, payload: CampaignConsolidationRequest
     ) -> ProviderCampaignConsolidation:
         return self._parse(payload, CAMPAIGN_CONSOLIDATION_PROMPT, ProviderCampaignConsolidation)
+
+    def generate_daily_report(self, payload: DailyReportRequest) -> ProviderDailyReport:
+        return self._parse(payload, DAILY_REPORT_PROMPT, ProviderDailyReport)
 
     def _parse(self, payload, system_prompt: str, response_model):
         if not self.settings.openai_api_key.strip():

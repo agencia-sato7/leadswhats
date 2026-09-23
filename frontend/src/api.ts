@@ -2,6 +2,8 @@ import type {
   AdminCompanyCreateRequest,
   AdminCompanyCreateResponse,
   AdminCompanyListItem,
+  AdminCompanyUpdateRequest,
+  AdminCompanyUpdateResponse,
   AdminTenantViewContextResponse,
   ContactItem,
   ContactsResponse,
@@ -338,6 +340,14 @@ export async function getAdminCompanies(token: string): Promise<AdminCompanyList
 export function createAdminCompany(token: string, payload: AdminCompanyCreateRequest): Promise<AdminCompanyCreateResponse> {
   return request<AdminCompanyCreateResponse>('/admin/companies', {
     method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAdminCompany(token: string, companyId: number, payload: AdminCompanyUpdateRequest): Promise<AdminCompanyUpdateResponse> {
+  return request<AdminCompanyUpdateResponse>(`/admin/companies/${companyId}`, {
+    method: 'PATCH',
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   });

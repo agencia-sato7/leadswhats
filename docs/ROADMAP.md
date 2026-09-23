@@ -115,6 +115,39 @@ o provider pro número do gestor de uma empresa de teste (usar
 `FakeWhatsAppProvider` no teste automatizado); teste confirma que só dispara
 no minuto certo por timezone.
 
+**Entregue (versão e-mail, sem PDF):**
+- ai-service: `POST /v1/analyze/daily-report` (`DAILY_REPORT_PROMPT`,
+  `daily-report-v1`) com `DailyReportRequest`/`DailyReportResponse` e
+  `generate_daily_report` no provider.
+- backend: contrato `DailyReportAnalyzer`, `PythonDailyReportAnalyzer`,
+  `FakeDailyReportAnalyzer` (só local/testing) e binding em `AppServiceProvider`.
+- Migration/model `daily_reports`: uma linha por empresa+data (idempotente),
+  guardando métricas, rollup de qualidade, veredito, payload da IA,
+  destinatários, `status` e `sent_at`.
+- `app/Services/Domain/DailyReportService.php`: reusa
+  `DashboardMetricsService::summaryForCompany`, agrega as pontuações de
+  `conversation_quality_scores` do dia (média geral + médias por critério) e
+  concentra a decisão de enviar/reenviar.
+- Comando `leadswhats:daily-report` (`--company`, `--date`, `--send-time`,
+  `--force`) em `routes/console.php`, registrado em `Schedule::command(...)`
+  a cada 5 minutos (UTC) com `withoutOverlapping()`; o comando decide, por
+  empresa, se a hora local bate com 18:30.
+- Entrega por e-mail (`DailyReportMail` + view `emails.daily-report`) para o
+  e-mail cadastrado no cadastro da clínica (`daily_report_recipient` em
+  `company_business_settings`, preenchido na Central da Agência; sem e-mail o
+  relatório fica `skipped`, sem chamada de IA); envio pela fila padrão
+  (processada pelo `queue-worker`) e serviço `scheduler`
+  (`php artisan schedule:work`) no `docker-compose.yml`.
+- Testes: `tests/Feature/DailyReportCommandTest.php` (destinatário do cadastro,
+  clínica sem e-mail → `skipped` + geração após cadastro, idempotência
+  e `--force`, fuso local, isolamento entre empresas, conteúdo com as notas da IA)
+  e casos novos em `ai-service/tests/test_api.py`.
+
+**Ainda em aberto em relação ao escopo original:** entrega por WhatsApp exige
+coluna de telefone em `users` e um método de documento no provider; PDF exige
+adicionar uma lib (`barryvdh/laravel-dompdf` ou `spatie/laravel-pdf`) — hoje o
+relatório vai em HTML no corpo do e-mail, sem anexo.
+
 ---
 
 ## P2 — Motivação e assistência ao vendedor

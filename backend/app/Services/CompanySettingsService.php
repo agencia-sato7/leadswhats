@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Company;
+use Illuminate\Support\Str;
 
 class CompanySettingsService
 {
@@ -43,6 +44,7 @@ class CompanySettingsService
         if (!$settings) {
             return $this->cache[$companyId] = [
                 'timezone' => $company->timezone ?: self::DEFAULT_TIMEZONE,
+                'daily_report_recipient' => null,
                 'workday_start_time' => $this->normalizeTime($company->work_start, self::DEFAULT_WORKDAY_START),
                 'workday_end_time' => $this->normalizeTime($company->work_end, self::DEFAULT_WORKDAY_END),
                 'lunch_start_time' => $this->normalizeNullableTime($company->lunch_start, self::DEFAULT_LUNCH_START),
@@ -59,6 +61,7 @@ class CompanySettingsService
 
         return $this->cache[$companyId] = [
             'timezone' => $settings->timezone ?: ($company->timezone ?: self::DEFAULT_TIMEZONE),
+            'daily_report_recipient' => $this->normalizeEmail($settings->daily_report_recipient),
             'workday_start_time' => $this->normalizeTime($settings->workday_start_time, self::DEFAULT_WORKDAY_START),
             'workday_end_time' => $this->normalizeTime($settings->workday_end_time, self::DEFAULT_WORKDAY_END),
             'lunch_start_time' => $this->normalizeNullableTime($settings->lunch_start_time, self::DEFAULT_LUNCH_START),
@@ -139,12 +142,22 @@ class CompanySettingsService
     }
 
     /**
+     * E-mail único que recebe o relatório diário de IA da clínica.
+     * Nulo quando a Central da Agência ainda não cadastrou o destinatário.
+     */
+    public function dailyReportRecipient(int $companyId): ?string
+    {
+        return $this->getForCompany($companyId)['daily_report_recipient'];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function defaults(): array
     {
         return [
             'timezone' => self::DEFAULT_TIMEZONE,
+            'daily_report_recipient' => null,
             'workday_start_time' => self::DEFAULT_WORKDAY_START,
             'workday_end_time' => self::DEFAULT_WORKDAY_END,
             'lunch_start_time' => self::DEFAULT_LUNCH_START,
@@ -183,5 +196,20 @@ class CompanySettingsService
         }
 
         return $value;
+    }
+
+    /**
+     * E-mail do destinatário do relatório diário, normalizado para minúsculas.
+     * Valor vazio ou inválido vira null (sem destinatário configurado).
+     */
+    private function normalizeEmail(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $email = Str::lower(trim($value));
+
+        return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null;
     }
 }

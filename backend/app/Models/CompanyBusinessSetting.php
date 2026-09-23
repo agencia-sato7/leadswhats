@@ -13,6 +13,7 @@ class CompanyBusinessSetting extends Model
     protected $fillable = [
         'company_id',
         'timezone',
+        'daily_report_recipient',
         'workday_start_time',
         'workday_end_time',
         'lunch_start_time',

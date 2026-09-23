@@ -23,6 +23,7 @@ class PlatformCompanyService
         return Company::query()
             ->withCount(['users', 'pipelines'])
             ->withExists(['businessSetting as has_business_settings'])
+            ->with('businessSetting:id,company_id,daily_report_recipient')
             ->orderBy('id')
             ->get()
             ->map(fn (Company $company): array => [
@@ -33,6 +34,7 @@ class PlatformCompanyService
                 'users_count' => (int) $company->users_count,
                 'pipelines_count' => (int) $company->pipelines_count,
                 'has_business_settings' => (bool) $company->has_business_settings,
+                'daily_report_recipient' => Str::lower($company->businessSetting?->daily_report_recipient ?? ''),
                 'created_at' => optional($company->created_at)?->toISOString(),
             ])
             ->values()
@@ -44,7 +46,8 @@ class PlatformCompanyService
      *   company: array{name:string,slug:string},
      *   admin_user: array{name:string,email:string,password:string},
      *   settings: array{
-     *      timezone:string,workday_start_time:string,workday_end_time:string,
+     *      timezone:string,daily_report_recipient:string,
+     *      workday_start_time:string,workday_end_time:string,
      *      lunch_start_time:?string,lunch_end_time:?string,working_days:array<int,int>,
      *      repeated_lead_window_days:int,rescue_threshold_hours:int,first_response_sla_minutes:int,
      *      follow_up_sla_hours:int,stale_conversation_hours:int
@@ -76,6 +79,7 @@ class PlatformCompanyService
             $settings = CompanyBusinessSetting::query()->create([
                 'company_id' => $company->id,
                 'timezone' => $settingsPayload['timezone'],
+                'daily_report_recipient' => Str::lower(trim((string) $settingsPayload['daily_report_recipient'])),
                 'workday_start_time' => $settingsPayload['workday_start_time'],
                 'workday_end_time' => $settingsPayload['workday_end_time'],
                 'lunch_start_time' => $settingsPayload['lunch_start_time'],
@@ -131,6 +135,7 @@ class PlatformCompanyService
                 ],
                 'settings' => [
                     'timezone' => $settings->timezone,
+                    'daily_report_recipient' => $settings->daily_report_recipient,
                     'workday_start_time' => $settings->workday_start_time,
                     'workday_end_time' => $settings->workday_end_time,
                     'lunch_start_time' => $settings->lunch_start_time,
@@ -206,6 +211,7 @@ class PlatformCompanyService
             'admin_users' => $adminUsers,
             'settings' => $settings ? [
                 'timezone' => $settings->timezone,
+                'daily_report_recipient' => $settings->daily_report_recipient,
                 'workday_start_time' => $settings->workday_start_time,
                 'workday_end_time' => $settings->workday_end_time,
                 'working_days' => $settings->working_days,
@@ -226,7 +232,7 @@ class PlatformCompanyService
     }
 
     /**
-     * @param  array{name?:string,slug?:string,active?:bool}  $payload
+     * @param  array{name?:string,slug?:string,active?:bool,daily_report_recipient?:string}  $payload
      * @return array<string,mixed>
      */
     public function updateCompany(int $companyId, array $payload): array
@@ -244,11 +250,38 @@ class PlatformCompanyService
             $company->fill($updates)->save();
         }
 
+        if (array_key_exists('daily_report_recipient', $payload)) {
+            $recipient = Str::lower(trim((string) $payload['daily_report_recipient']));
+
+            // Clínicas antigas podem não ter linha em company_business_settings:
+            // criamos com os mesmos defaults do createCompany antes de gravar.
+            $settings = CompanyBusinessSetting::query()->firstOrCreate(
+                ['company_id' => $company->id],
+                [
+                    'timezone' => 'America/Sao_Paulo',
+                    'workday_start_time' => '08:00:00',
+                    'workday_end_time' => '18:00:00',
+                    'lunch_start_time' => '12:00:00',
+                    'lunch_end_time' => '13:00:00',
+                    'working_days' => [1, 2, 3, 4, 5],
+                    'repeated_lead_window_days' => 90,
+                    'rescue_threshold_hours' => 24,
+                    'first_response_sla_minutes' => 15,
+                    'follow_up_sla_hours' => 24,
+                    'stale_conversation_hours' => 48,
+                ]
+            );
+
+            $settings->fill(['daily_report_recipient' => $recipient])->save();
+            $company->unsetRelation('businessSetting');
+        }
+
         return [
             'id' => $company->id,
             'name' => $company->name,
             'slug' => $company->slug,
             'active' => (bool) $company->active,
+            'daily_report_recipient' => $company->businessSetting()->value('daily_report_recipient'),
             'created_at' => optional($company->created_at)?->toISOString(),
             'updated_at' => optional($company->updated_at)?->toISOString(),
         ];

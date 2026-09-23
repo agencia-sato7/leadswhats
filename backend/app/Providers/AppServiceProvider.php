@@ -4,10 +4,13 @@ namespace App\Providers;
 
 use App\Contracts\Intelligence\ConversationAnalyzer;
 use App\Contracts\Intelligence\CampaignAnalyzer;
+use App\Contracts\Intelligence\DailyReportAnalyzer;
 use App\Services\Intelligence\FakeCampaignAnalyzer;
 use App\Services\Intelligence\FakeConversationAnalyzer;
+use App\Services\Intelligence\FakeDailyReportAnalyzer;
 use App\Services\Intelligence\PythonCampaignAnalyzer;
 use App\Services\Intelligence\PythonConversationAnalyzer;
+use App\Services\Intelligence\PythonDailyReportAnalyzer;
 use App\Services\Intelligence\UnavailableCampaignAnalyzer;
 use App\Services\Intelligence\UnavailableConversationAnalyzer;
 use App\Services\WhatsApp\FakeWhatsAppProvider;
@@ -66,6 +69,22 @@ class AppServiceProvider extends ServiceProvider
                 'python' => app(PythonCampaignAnalyzer::class),
                 'fake' => app(FakeCampaignAnalyzer::class),
                 default => app(UnavailableCampaignAnalyzer::class),
+            };
+        });
+
+        $this->app->bind(DailyReportAnalyzer::class, function () {
+            $analyzer = (string) config('intelligence.analyzer', 'unavailable');
+
+            if ($analyzer === 'fake' && !app()->environment(['local', 'testing'])) {
+                throw new RuntimeException('CONVERSATION_ANALYZER=fake é permitido somente em local/testing.');
+            }
+
+            return match ($analyzer) {
+                'python' => app(PythonDailyReportAnalyzer::class),
+                'fake' => app(FakeDailyReportAnalyzer::class),
+                default => throw new RuntimeException(
+                    'Nenhum gerador de relatório diário disponível. Configure CONVERSATION_ANALYZER=python.',
+                ),
             };
         });
     }

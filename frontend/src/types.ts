@@ -289,6 +289,7 @@ export type AdminCompanyListItem = {
   users_count: number;
   pipelines_count: number;
   has_business_settings: boolean;
+  daily_report_recipient: string | null;
   created_at: string;
 };
 
@@ -319,6 +320,7 @@ export type AdminCompanyCreateRequest = {
   };
   settings: {
     timezone: string;
+    daily_report_recipient: string;
     workday_start_time: string;
     workday_end_time: string;
     lunch_start_time: string;
@@ -343,6 +345,26 @@ export type AdminCompanyCreateResponse = {
   };
   webhook_token_configured?: boolean;
   masked_webhook_token?: string | null;
+};
+
+export type AdminCompanyUpdateRequest = {
+  name?: string;
+  slug?: string;
+  active?: boolean;
+  daily_report_recipient?: string;
+};
+
+export type AdminCompanyUpdateResponse = {
+  message?: string;
+  data?: {
+    id: number;
+    name: string;
+    slug: string;
+    active: boolean;
+    daily_report_recipient: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+  };
 };
 
 export type InboxMessageItem = {

@@ -10,13 +10,20 @@ from app.models import (
     CampaignConsolidationRequest,
     CampaignEvidenceBatchRequest,
     ConversationAnalysisRequest,
+    DailyReportRequest,
     ProviderCampaignConsolidation,
     ProviderCampaignEvidence,
     ProviderCampaignEvidenceBatch,
     ProviderConversationAnalysis,
+    ProviderDailyReport,
 )
 from app.provider import OpenAIConversationAnalysisProvider, ProviderError
-from app.prompts import PROMPT_VERSION, SYSTEM_PROMPT
+from app.prompts import (
+    DAILY_REPORT_PROMPT,
+    DAILY_REPORT_PROMPT_VERSION,
+    PROMPT_VERSION,
+    SYSTEM_PROMPT,
+)
 
 
 VALID_REQUEST = {
@@ -140,6 +147,20 @@ class CampaignStubProvider:
             rescued_leads_summary="Os resgates tiveram retomada objetiva.",
             priorities=["Confirmar próximos passos"],
         )
+
+
+class DailyReportStubProvider:
+    def __init__(self) -> None:
+        self.received: DailyReportRequest | None = None
+
+    def generate_daily_report(self, payload: DailyReportRequest) -> ProviderDailyReport:
+        self.received = payload
+        return daily_report_result()
+
+
+class DailyReportFailingProvider:
+    def generate_daily_report(self, _payload: DailyReportRequest) -> ProviderDailyReport:
+        raise ProviderError("detalhe interno que não deve vazar")
 
 
 @pytest.fixture(autouse=True)
@@ -344,3 +365,129 @@ def test_campaign_consolidation_keeps_volume_and_quality_separate() -> None:
     assert response.status_code == 200
     assert response.json()["overall_verdict"] == "good"
     assert response.json()["prompt_version"] == "campaign-consolidation-v1"
+
+
+def daily_report_request() -> dict:
+    return {
+        "company": {"id": 7, "name": "Clínica Teste", "slug": "clinica-teste"},
+        "report_date": "2026-09-23",
+        "metrics": {
+            "new_leads_today": 6,
+            "previous_new_leads": 4,
+            "avg_first_response_seconds": 395,
+            "effectiveness_percentage": 100,
+        },
+        "quality": {
+            "analyzed_conversations": 4,
+            "average_score": 75.5,
+            "low_quality_conversations": 2,
+            "criteria_averages": {
+                "discovery": 74.3,
+                "clarity": 70.3,
+                "empathy": 72.0,
+                "objection_handling": 65.3,
+            },
+        },
+        "team": [{"name": "Marina Costa", "average_score": 56.7}],
+    }
+
+
+def daily_report_result() -> ProviderDailyReport:
+    return ProviderDailyReport.model_validate(
+        {
+            "executive_summary": "O dia registrou 6 leads novos e média de qualidade 75.5.",
+            "overall_verdict": "good",
+            "volume_summary": "O volume de novos leads cresceu em relação ao dia anterior.",
+            "quality_summary": "A qualidade foi boa, com objeções como critério mais fraco.",
+            "opportunities": ["Reforçar tratamento de objeções."],
+            "priorities": ["Acompanhar os leads sem resposta do dia."],
+        }
+    )
+
+
+def test_daily_report_returns_validated_structured_response_without_real_call() -> None:
+    provider = DailyReportStubProvider()
+    app.dependency_overrides[get_analysis_provider] = lambda: provider
+
+    response = TestClient(app).post("/v1/analyze/daily-report", json=daily_report_request())
+
+    assert response.status_code == 200
+    assert response.json()["overall_verdict"] == "good"
+    assert response.json()["prompt_version"] == "daily-report-v1"
+    assert response.json()["model_provider"] == "openai"
+    assert response.json()["model_name"] == "test-model"
+    assert provider.received is not None
+    assert provider.received.report_date == "2026-09-23"
+    assert provider.received.quality["average_score"] == 75.5
+
+
+def test_daily_report_rejects_request_without_metrics_or_quality() -> None:
+    without_metrics = {
+        key: value for key, value in daily_report_request().items() if key != "metrics"
+    }
+
+    assert (
+        TestClient(app).post("/v1/analyze/daily-report", json=without_metrics).status_code == 422
+    )
+
+    without_company = {
+        key: value for key, value in daily_report_request().items() if key != "company"
+    }
+
+    assert (
+        TestClient(app).post("/v1/analyze/daily-report", json=without_company).status_code == 422
+    )
+
+
+def test_daily_report_provider_failure_returns_controlled_error() -> None:
+    app.dependency_overrides[get_analysis_provider] = lambda: DailyReportFailingProvider()
+
+    response = TestClient(app).post("/v1/analyze/daily-report", json=daily_report_request())
+
+    assert response.status_code == 502
+    assert response.json()["detail"]["code"] == "provider_error"
+    assert "detalhe interno" not in response.text
+
+
+def test_daily_report_prompt_keeps_volume_and_quality_guardrails() -> None:
+    normalized_prompt = " ".join(DAILY_REPORT_PROMPT.split())
+    required_guidance = [
+        "Não recalcule nem invente números",
+        "volume compara novos leads com o dia anterior equivalente",
+        "sem criar média matemática entre os eixos",
+        "se não houver conversas analisadas no dia, registre isso claramente",
+    ]
+
+    for guidance in required_guidance:
+        assert guidance in normalized_prompt
+
+    assert DAILY_REPORT_PROMPT_VERSION == "daily-report-v1"
+
+
+def test_openai_provider_uses_daily_report_prompt_without_real_call(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponses:
+        def parse(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(output_parsed=daily_report_result())
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            captured["client_options"] = kwargs
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr("app.provider.OpenAI", FakeOpenAI)
+    provider = OpenAIConversationAnalysisProvider(
+        Settings(OPENAI_API_KEY="test-key", OPENAI_MODEL="test-model")
+    )
+
+    result = provider.generate_daily_report(
+        DailyReportRequest.model_validate(daily_report_request())
+    )
+
+    assert result == daily_report_result()
+    assert captured["model"] == "test-model"
+    assert captured["text_format"] is ProviderDailyReport
+    assert captured["store"] is False
+    assert captured["input"][0] == {"role": "system", "content": DAILY_REPORT_PROMPT}
