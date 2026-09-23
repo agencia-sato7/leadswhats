@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { changePassword, completeWhatsAppCoexistence, createAdminUser, disconnectWhatsApp, requestWhatsAppCoexistenceSync } from './api';
+import { ApiError, changePassword, completeWhatsAppCoexistence, createAdminUser, disconnectWhatsApp, requestWhatsAppCoexistenceSync } from './api';
 
 const coexistenceSettings = {
   provider: 'meta_cloud',
@@ -87,6 +87,36 @@ describe('Coexistência do WhatsApp (api)', () => {
     }));
     expect(result.is_coexistence).toBe(true);
     expect(result).not.toHaveProperty('access_token');
+  });
+
+  it('preserva mensagem e metadados seguros da falha OAuth', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      message: 'A Meta recusou a autorização por uma configuração de redirecionamento incompatível. Inicie uma nova conexão.',
+      meta_error: { code: 100, type: 'OAuthException', error_subcode: 36008 },
+    }), { status: 502, headers: { 'Content-Type': 'application/json' } })));
+
+    const request = completeWhatsAppCoexistence('session-token', {
+      code: 'temporary-code',
+      coexistence: {
+        type: 'WA_EMBEDDED_SIGNUP',
+        event: 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+        data: {
+          phone_number_id: 'phone-123',
+          waba_id: 'waba-456',
+          page_ids: [],
+          catalog_ids: [],
+          dataset_ids: [],
+          instagram_account_ids: [],
+        },
+      },
+    });
+
+    await expect(request).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 502,
+      metaError: { code: 100, type: 'OAuthException', error_subcode: 36008 },
+    });
+    await expect(request).rejects.toBeInstanceOf(ApiError);
   });
 
   it('desconecta usando somente a sessão e retorna o estado desconectado', async () => {

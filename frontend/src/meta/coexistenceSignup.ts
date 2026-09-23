@@ -4,6 +4,7 @@ import type {
   WhatsAppCoexistenceEvent,
   WhatsAppCoexistenceFinishEvent,
 } from '../types';
+import { ApiError } from '../api';
 
 const FACEBOOK_SDK_ID = 'facebook-jssdk';
 const FACEBOOK_SDK_URL = 'https://connect.facebook.net/pt_BR/sdk.js';
@@ -353,8 +354,11 @@ export class WhatsAppCoexistenceFlow<TResult> {
         this.clearTemporaryState();
         resolve?.(result);
       })
-      .catch(() => {
-        this.fail('backend', 'Não foi possível concluir a conexão com o WhatsApp. Tente novamente.');
+      .catch((error: unknown) => {
+        const message = error instanceof ApiError
+          ? error.message
+          : 'Não foi possível concluir a conexão com o WhatsApp. Tente novamente.';
+        this.fail('backend', message);
       });
   }
 

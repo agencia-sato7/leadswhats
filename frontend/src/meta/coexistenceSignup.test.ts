@@ -10,6 +10,7 @@ import {
   type FacebookSdk,
 } from './coexistenceSignup';
 import type { CompleteWhatsAppCoexistenceRequest } from '../types';
+import { ApiError } from '../api';
 
 const coexistenceFinishMessage = {
   type: 'WA_EMBEDDED_SIGNUP',
@@ -215,6 +216,28 @@ describe('Fluxo de Coexistência do WhatsApp', () => {
       active: false,
       hasCode: false,
       hasFinishEvent: false,
+    });
+  });
+
+  it('preserva a mensagem segura devolvida pela API', async () => {
+    const complete = vi.fn(async () => {
+      throw new ApiError(
+        'A Meta recusou a autorização por uma configuração de redirecionamento incompatível. Inicie uma nova conexão.',
+        502,
+        { code: 100, type: 'OAuthException', error_subcode: 36008 },
+      );
+    });
+    const fixture = createFlow<{ ok: boolean }>(complete);
+    activeFlows.push(fixture.flow);
+    const pending = fixture.flow.start();
+    await vi.waitFor(() => expect(fixture.getLoginCallback()).not.toBeNull());
+
+    dispatchMetaMessage(coexistenceFinishMessage);
+    fixture.getLoginCallback()?.({ authResponse: { code: 'temporary-code' } });
+
+    await expect(pending).rejects.toMatchObject({
+      reason: 'backend',
+      message: 'A Meta recusou a autorização por uma configuração de redirecionamento incompatível. Inicie uma nova conexão.',
     });
   });
 

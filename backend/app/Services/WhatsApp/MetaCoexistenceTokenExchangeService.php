@@ -19,7 +19,6 @@ class MetaCoexistenceTokenExchangeService
     {
         $appId = trim((string) config('whatsapp.meta_app_id', ''));
         $appSecret = trim((string) config('whatsapp.meta_app_secret', ''));
-        $redirectUri = trim((string) config('whatsapp.meta_redirect_uri', ''));
 
         if ($appId === '' || $appSecret === '') {
             throw new MetaCoexistenceException(
@@ -37,12 +36,6 @@ class MetaCoexistenceTokenExchangeService
             'grant_type' => 'authorization_code',
         ];
 
-        // O Embedded Signup de Coexistência troca o code sem redirect_uri, então
-        // ele só é enviado quando houver configuração explícita.
-        if ($redirectUri !== '') {
-            $payload['redirect_uri'] = $redirectUri;
-        }
-
         // Instrumentação temporária: somente metadados em allowlist, sem valores
         // de code, client_secret, resposta OAuth ou access_token.
         Log::info('Meta Coexistence OAuth request metadata.', [
@@ -50,7 +43,7 @@ class MetaCoexistenceTokenExchangeService
             'method' => 'POST',
             'content_type' => 'application/json',
             'parameter_names' => array_keys($payload),
-            'redirect_uri' => $redirectUri !== '' ? $redirectUri : null,
+            'redirect_uri' => null,
             'client_id' => $appId,
             'grant_type' => $payload['grant_type'],
             'graph_api_version' => $apiVersion,
@@ -80,8 +73,12 @@ class MetaCoexistenceTokenExchangeService
                 'error_subcode' => $errorSubcode,
             ]);
 
+            $message = (string) $errorSubcode === '36008'
+                ? 'A Meta recusou a autorização por uma configuração de redirecionamento incompatível. Inicie uma nova conexão.'
+                : 'A Meta não aceitou a conclusão da Coexistência.';
+
             throw new MetaCoexistenceException(
-                'A Meta não aceitou a conclusão da Coexistência.',
+                $message,
                 502,
                 $errorCode,
                 is_string($errorType) ? $errorType : null,
