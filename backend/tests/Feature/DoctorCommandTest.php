@@ -60,11 +60,43 @@ class DoctorCommandTest extends TestCase
             ->assertExitCode(1);
     }
 
+    public function test_doctor_rejects_legacy_redirect_uri(): void
+    {
+        config()->set('whatsapp.provider', 'meta_cloud');
+        config()->set('whatsapp.meta_app_id', 'my-meta-app');
+        config()->set('whatsapp.meta_app_secret', 'my-meta-secret');
+        config()->set('whatsapp.coexistence_config_id', 'my-coexistence-config');
+        config()->set('whatsapp.legacy_meta_redirect_uri', 'https://developers.facebook.com/temporary-callback?nonce=legacy');
+
+        $this->artisan('leadswhats:doctor')
+            ->expectsOutputToContain('[FAIL] META_REDIRECT_URI')
+            ->assertExitCode(1);
+    }
+
+    public function test_doctor_reports_missing_coexistence_credentials(): void
+    {
+        config()->set('whatsapp.provider', 'meta_cloud');
+        config()->set('whatsapp.meta_app_id', '');
+        config()->set('whatsapp.meta_app_secret', '');
+        config()->set('whatsapp.coexistence_config_id', '');
+        config()->set('whatsapp.legacy_meta_redirect_uri', '');
+
+        $this->artisan('leadswhats:doctor')
+            ->expectsOutputToContain('[FAIL] META_APP_ID')
+            ->expectsOutputToContain('[FAIL] META_APP_SECRET')
+            ->expectsOutputToContain('[FAIL] META_COEXISTENCE_CONFIG_ID')
+            ->assertExitCode(1);
+    }
+
     public function test_doctor_passes_meta_cloud_checks_when_configured(): void
     {
         config()->set('whatsapp.provider', 'meta_cloud');
         config()->set('whatsapp.cloud_webhook_verify_token', 'my-verify-token');
         config()->set('whatsapp.cloud_app_secret', 'my-app-secret');
+        config()->set('whatsapp.meta_app_id', 'my-meta-app');
+        config()->set('whatsapp.meta_app_secret', 'my-meta-secret');
+        config()->set('whatsapp.coexistence_config_id', 'my-coexistence-config');
+        config()->set('whatsapp.legacy_meta_redirect_uri', '');
         config()->set('app.debug', false);
 
         $company = Company::create([

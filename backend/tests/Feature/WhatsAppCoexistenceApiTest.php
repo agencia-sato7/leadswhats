@@ -29,7 +29,7 @@ class WhatsAppCoexistenceApiTest extends TestCase
 
         config()->set('whatsapp.meta_app_id', 'meta-app-test');
         config()->set('whatsapp.meta_app_secret', 'meta-secret-test');
-        config()->set('whatsapp.meta_redirect_uri', '');
+        config()->set('whatsapp.legacy_meta_redirect_uri', 'https://developers.facebook.com/temporary-callback?nonce=legacy');
         config()->set('whatsapp.meta_graph_api_version', 'v25.0');
         config()->set('whatsapp.coexistence_config_id', 'coexistence-config-test');
         config()->set('whatsapp.coexistence_auto_sync', true);
@@ -37,7 +37,7 @@ class WhatsAppCoexistenceApiTest extends TestCase
         Http::preventStrayRequests();
     }
 
-    public function test_token_exchange_service_uses_server_credentials_without_redirect_uri(): void
+    public function test_token_exchange_service_ignores_legacy_redirect_uri(): void
     {
         Log::spy();
 
@@ -152,10 +152,10 @@ class WhatsAppCoexistenceApiTest extends TestCase
         Http::fake([
             'https://graph.facebook.com/*/oauth/access_token' => Http::response([
                 'error' => [
-                    'message' => 'This authorization code has expired.',
+                    'message' => 'Redirect URI mismatch.',
                     'type' => 'OAuthException',
                     'code' => 100,
-                    'error_subcode' => 36007,
+                    'error_subcode' => 36008,
                 ],
             ], 400),
         ]);
@@ -163,7 +163,7 @@ class WhatsAppCoexistenceApiTest extends TestCase
         $this->withToken($this->login($admin->email))
             ->postJson(self::ENDPOINT, $this->validPayload())
             ->assertStatus(502)
-            ->assertJsonPath('message', 'A Meta não aceitou a conclusão da Coexistência.')
+            ->assertJsonPath('message', 'A Meta recusou a autorização por uma configuração de redirecionamento incompatível. Inicie uma nova conexão.')
             ->assertJsonPath('meta_error.code', 100)
             ->assertJsonPath('meta_error.type', 'OAuthException');
 

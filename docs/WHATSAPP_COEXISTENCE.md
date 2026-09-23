@@ -32,6 +32,8 @@ QUEUE_CONNECTION=database
 
 `META_APP_SECRET` é usado na troca do código; `WHATSAPP_CLOUD_APP_SECRET` deve conter o segredo do mesmo aplicativo para validar a assinatura do webhook. Nunca exponha segredos em variáveis `VITE_*`. Preserve a `APP_KEY` existente: trocar essa chave impede a leitura dos tokens criptografados já salvos.
 
+Não configure `META_REDIRECT_URI` para este fluxo. O Embedded Signup via SDK troca o código sem esse parâmetro; URLs temporárias copiadas do painel da Meta, especialmente as que contêm `nonce`, causam o erro OAuth `100/36008`.
+
 Para executar o frontend fora do Compose, copie o exemplo de ambiente do frontend e configure `VITE_META_APP_ID` e `VITE_META_COEXISTENCE_CONFIG_ID`. No Compose, as variáveis públicas vêm de `META_APP_ID` e `META_COEXISTENCE_CONFIG_ID` no ambiente da raiz. A tela também recebe configuração pública do backend.
 
 Depois de publicar as alterações, execute na raiz do projeto:

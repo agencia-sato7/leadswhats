@@ -45,6 +45,23 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://leadswhats.appsato7.com.br/api/v1';
 
+export type ApiErrorMetadata = {
+  code?: number | string | null;
+  type?: string | null;
+  error_subcode?: number | string | null;
+};
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly metaError?: ApiErrorMetadata,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 function authenticatedHeaders(token: string, tenantContext?: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
@@ -65,19 +82,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     const text = await res.text();
     let apiMessage = '';
+    let metaError: ApiErrorMetadata | undefined;
 
     try {
-      const payload = JSON.parse(text) as { message?: unknown };
+      const payload = JSON.parse(text) as { message?: unknown; meta_error?: unknown };
       if (typeof payload.message === 'string') apiMessage = payload.message;
+      if (typeof payload.meta_error === 'object' && payload.meta_error !== null) {
+        metaError = payload.meta_error as ApiErrorMetadata;
+      }
     } catch {
       apiMessage = text;
     }
 
-    throw new Error(
+    throw new ApiError(
       apiMessage
         || (res.status >= 500
           ? 'O servidor não conseguiu concluir esta solicitação. Tente novamente em instantes.'
           : `Erro HTTP ${res.status}`),
+      res.status,
+      metaError,
     );
   }
 

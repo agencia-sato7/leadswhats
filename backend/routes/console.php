@@ -76,6 +76,24 @@ Artisan::command('leadswhats:doctor', function () {
     }
 
     if ($provider === 'meta_cloud') {
+        $metaAppId = trim((string) config('whatsapp.meta_app_id'));
+        $pushCheck('META_APP_ID', $metaAppId === '' ? 'FAIL' : 'OK', $metaAppId === '' ? 'App ID da Meta ausente.' : 'configurado');
+
+        $metaAppSecret = trim((string) config('whatsapp.meta_app_secret'));
+        $pushCheck('META_APP_SECRET', $metaAppSecret === '' ? 'FAIL' : 'OK', $metaAppSecret === '' ? 'App secret da Meta ausente.' : 'configurado');
+
+        $coexistenceConfigId = trim((string) config('whatsapp.coexistence_config_id'));
+        $pushCheck('META_COEXISTENCE_CONFIG_ID', $coexistenceConfigId === '' ? 'FAIL' : 'OK', $coexistenceConfigId === '' ? 'Config ID da Coexistência ausente.' : 'configurado');
+
+        $legacyRedirectUri = trim((string) config('whatsapp.legacy_meta_redirect_uri'));
+        $pushCheck(
+            'META_REDIRECT_URI',
+            $legacyRedirectUri === '' ? 'OK' : 'FAIL',
+            $legacyRedirectUri === ''
+                ? 'ausente, como exigido pelo Embedded Signup'
+                : 'Remova esta configuração legada; ela invalida a troca do código OAuth.',
+        );
+
         $metaVerifyToken = (string) config('whatsapp.cloud_webhook_verify_token');
         if ($metaVerifyToken === '') {
             $pushCheck('WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN', 'FAIL', 'Token de verificação global do webhook da Meta ausente (WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN).');
